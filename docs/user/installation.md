@@ -159,8 +159,14 @@ Build and library dependencies:
 sudo pacman -S --needed base-devel meson just \
   wayland wayland-protocols libglvnd \
   glib2 freetype2 fontconfig cairo pango harfbuzz libxkbcommon \
-  gdk-pixbuf2 librsvg libpng libarchive xz acl \
+  gdk-pixbuf2 glycin librsvg libpng libarchive xz acl curl libxml2 \
   tomlplusplus nlohmann-json stb
+```
+
+For audio and video playback (the optional `media` build option), also install GStreamer:
+
+```sh
+sudo pacman -S --needed gstreamer gst-plugins-base gst-plugins-good gst-libav
 ```
 
 Runtime services and optional helpers:
@@ -181,8 +187,14 @@ Build and library dependencies:
 sudo dnf install gcc-c++ meson just \
   wayland-devel wayland-protocols-devel libglvnd-devel \
   glib2-devel freetype-devel fontconfig-devel cairo-devel pango-devel harfbuzz-devel libxkbcommon-devel \
-  gdk-pixbuf2-devel librsvg2-devel libpng-devel libarchive-devel xz-devel libacl-devel \
-  tomlplusplus-devel json-devel stb_image_resize2-devel
+  gdk-pixbuf2-devel glycin-devel librsvg2-devel libpng-devel libarchive-devel xz-devel libacl-devel \
+  libcurl-devel libxml2-devel tomlplusplus-devel json-devel stb_image_resize2-devel
+```
+
+For audio and video playback (the optional `media` build option), also install GStreamer:
+
+```sh
+sudo dnf install gstreamer1-devel gstreamer1-plugins-base-devel gstreamer1-plugins-good
 ```
 
 Runtime services and optional helpers:
