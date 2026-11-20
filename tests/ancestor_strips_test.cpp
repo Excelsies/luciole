@@ -440,9 +440,28 @@ namespace {
     }
     Style::setRtl(false);
   }
+
+  // The bands' outer corners follow the Corner roundness setting live: none at 0, doubled at 2, on the side away from
+  // the list.
+  void cornersFollowTheRoundnessSetting() {
+    Rig rig(3, 230);
+    const auto* background = backgroundOf(*rig.strips->area(0));
+    TEST_CHECK(background != nullptr);
+    for (const float scale : {0.0F, 2.0F, 1.0F}) {
+      Style::setCornerRadiusScale(scale);
+      const auto& radius = background->style().radius;
+      const float expected = Style::radiusSm * scale;
+      TEST_NEAR(radius.tl, expected, 0.001F);
+      TEST_NEAR(radius.bl, expected, 0.001F);
+      TEST_NEAR(radius.tr, 0.0F, 0.001F);
+      TEST_NEAR(radius.br, 0.0F, 0.001F);
+    }
+    TEST_NEAR(Style::cornerRadiusScale(), 1.0F, 0.001F);
+  }
 } // namespace
 
 int main() {
+  cornersFollowTheRoundnessSetting();
   bandsThinWithDistanceAgainstTheList();
   everyBandIsNamed();
   farLevelsFoldIntoOneBand();

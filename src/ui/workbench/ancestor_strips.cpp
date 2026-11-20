@@ -226,7 +226,7 @@ namespace luciole {
     slot.background->setPosition(0, 0);
     slot.background->setFrameSize(stripWidth, stripHeight);
     const float radius = Style::radiusSm; // rounded on the side away from the list
-    slot.background->setRadii(rtl ? Radii(0, radius, radius, 0) : Radii(radius, 0, 0, radius));
+    slot.background->setStyleRadii(rtl ? Radii(0, radius, radius, 0) : Radii(radius, 0, 0, radius));
     float top = kTopPadding;
     if (slot.count->visible()) {
       const auto size = slot.count->Node::measure(renderer, LayoutConstraints::available(stripWidth, stripHeight));
