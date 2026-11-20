@@ -1,5 +1,7 @@
 #include "fs/subtree_measure.h"
 
+#include "fs/location_within.h"
+
 #include <algorithm>
 #include <condition_variable>
 #include <exception>
@@ -37,6 +39,7 @@ namespace {
     std::mutex mutex;
     std::condition_variable wake;
     std::vector<std::shared_ptr<MeasureJob>> jobs;
+    std::vector<std::shared_ptr<MeasureJob>> walking; // the jobs a worker walks now
     std::size_t running = 0;
     bool stopping = false;
   };
@@ -90,6 +93,7 @@ namespace {
     {
       const std::scoped_lock lock(queue.mutex);
       --queue.running;
+      std::erase_if(queue.walking, [&job](const auto& walked) { return walked.get() == &job; });
     }
     store(std::move(result), true);
   }
@@ -109,6 +113,7 @@ namespace {
         job = takeNext(*queue);
         priority = job->priority;
         ++queue->running;
+        queue->walking.push_back(job);
       }
       walkJob(*job, *queue, options, priority);
     }
@@ -308,6 +313,12 @@ luciole::MeasureHandle luciole::SubtreeMeasureService::request(const Location& r
 luciole::MeasureServiceStatus luciole::SubtreeMeasureService::status() const {
   const std::scoped_lock lock(m_state->queue->mutex);
   return {.queued = m_state->queue->jobs.size(), .running = m_state->queue->running};
+}
+
+bool luciole::SubtreeMeasureService::reading(const Location& root) const {
+  const std::scoped_lock lock(m_state->queue->mutex);
+  const auto within = [&](const auto& job) { return locationWithin(job->location, root); };
+  return std::ranges::any_of(m_state->queue->walking, within) || std::ranges::any_of(m_state->queue->jobs, within);
 }
 
 void luciole::SubtreeMeasureService::setChangedCallback(std::function<void()> changed) {

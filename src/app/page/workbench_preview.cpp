@@ -2,6 +2,7 @@
 
 #include "app/page/preview_edit_controller.h"
 #include "config/settings.h"
+#include "fs/location_within.h"
 #include "ui/style.h"
 #include "ui/workbench/column_preview_view.h"
 #include "ui/workbench/list_rows.h"
@@ -323,6 +324,16 @@ namespace luciole {
         m_workers, [this] { needFrame(); }
     );
     ++m_loadsStarted;
+  }
+
+  void WorkbenchPreview::releaseLocation(const Location& root) {
+    if (reading(root)) {
+      forget();
+    }
+  }
+
+  bool WorkbenchPreview::reading(const Location& root) const {
+    return m_target && locationWithin(m_target->previewed.entry.location(), root);
   }
 
   void WorkbenchPreview::drop() {

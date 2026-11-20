@@ -416,7 +416,8 @@ void BrowserPage::leaveDrive(const luciole::Location& root) {
                 && root.uri().starts_with(location->uri() + (location->uri().ends_with('/') ? "" : "/"))));
   };
   if (affected(m_browser)
-      || std::ranges::any_of(m_miller.columns(), [&](const auto& column) { return affected(*column->browser); })) {
+      || std::ranges::any_of(m_miller.columns(), [&](const auto& column) { return affected(*column->browser); })
+      || m_workbench.inDrive(root)) {
     m_preview.clear();
     m_retiringPreview = root;
     m_previewController.hidePane();
@@ -432,11 +433,14 @@ void BrowserPage::leaveDrive(const luciole::Location& root) {
   if (m_sidebar.hasPlaces()) {
     m_sidebar.places().releaseLocation(root);
   }
+  m_workbench.releaseLocation(root);
   m_thumbnails.releaseLocation(root);
 }
 
 bool BrowserPage::driveReadersBusy(const luciole::Location& root) const {
-  return m_thumbnails.readingLocation(root) || (m_retiringPreview == root && m_preview.busy());
+  return m_thumbnails.readingLocation(root)
+      || (m_retiringPreview == root && m_preview.busy())
+      || m_workbench.readingDrive(root);
 }
 
 void BrowserPage::transfersFinished(const std::vector<luciole::TransferResult>& results) {

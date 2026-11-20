@@ -59,6 +59,11 @@ namespace luciole {
     // Stops and retires every listing.
     void clear();
     void collectRetired();
+    // The drive at `root` is being removed: stops and retires the listings of `root` and of folders below it, shown or
+    // kept. A shown one ends every column, which the next follow() plans again.
+    void releaseLocation(const Location& root);
+    // A listing of `root` or of a folder below it still loads or watches its folder.
+    bool reading(const Location& root) const;
 
     std::size_t count() const { return m_shown.size(); }
     // The folder and the listing of a shown column, below count().

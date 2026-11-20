@@ -448,6 +448,8 @@ void luciole::WorkbenchModel::setVisits(WorkbenchVisits visits) {
   state.schedule();
 }
 
+void luciole::WorkbenchModel::releaseLocation(const Location& root) { m_state->walks.release(root); }
+
 void luciole::WorkbenchModel::invalidateChild(const std::string& name) {
   auto& state = *m_state;
   if (!state.location || name.empty()) {

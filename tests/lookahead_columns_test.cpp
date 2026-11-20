@@ -356,9 +356,35 @@ namespace {
     pump.settled(columns);
     TEST_CHECK(changes >= 2); // the new column, then its listing
   }
+
+  // A drive removed under the page: its listings, shown or kept, stop and go; other folders stay.
+  void testReleasedDriveEndsItsListings() {
+    Fixture fixture;
+    Pump pump;
+    auto columns = makeColumns();
+    columns.follow({.target = fixture.folder("a")});
+    pump.settled(columns);
+    columns.follow({.target = fixture.folder("b")});
+    pump.settled(columns);
+    TEST_CHECK(columns.count() == 1 && columns.load().alive == 2); // a is kept, b is shown
+    columns.releaseLocation(fixture.at("a"));
+    TEST_CHECK(columns.count() == 1 && columns.location(0) == fixture.at("b"));
+    columns.releaseLocation(fixture.at("a"));
+    columns.collectRetired();
+    TEST_CHECK(columns.load().alive == 1);
+    const auto drive = Location::fromPath(fixture.path.native());
+    columns.follow({.target = fixture.folder("a")});
+    TEST_CHECK(columns.reading(drive) || columns.model(0).snapshot().status != DirectoryStatus::Idle);
+    columns.releaseLocation(drive);
+    TEST_CHECK(columns.count() == 0 && !columns.preview());
+    pump.until([&] { return !columns.reading(drive); });
+    columns.collectRetired();
+    TEST_CHECK(columns.load().alive == 0);
+  }
 } // namespace
 
 int main() {
+  testReleasedDriveEndsItsListings();
   testFolderTargetFillsColumnOne();
   testListingFollowsSortAndHiddenSettings();
   testChainFillsColumnsTwoAndThree();

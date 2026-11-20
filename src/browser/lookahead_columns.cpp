@@ -1,5 +1,7 @@
 #include "browser/lookahead_columns.h"
 
+#include "fs/location_within.h"
+
 #include <algorithm>
 #include <utility>
 
@@ -152,6 +154,30 @@ void luciole::LookaheadColumns::clear() {
 }
 
 void luciole::LookaheadColumns::collectRetired() { m_retired.clear(); }
+
+void luciole::LookaheadColumns::releaseLocation(const Location& root) {
+  const auto within = [&root](const Listing& listing) { return locationWithin(listing.location, root); };
+  if (std::ranges::any_of(m_shown, within)) {
+    clear();
+    return;
+  }
+  for (auto& listing : m_spare) {
+    if (within(listing)) {
+      m_retired.push_back(std::move(listing.browser));
+    }
+  }
+  std::erase_if(m_spare, [](const Listing& listing) { return listing.browser == nullptr; });
+}
+
+bool luciole::LookaheadColumns::reading(const Location& root) const {
+  const auto reads = [&root](const BrowserController& browser) {
+    const auto& location = browser.model().snapshot().location;
+    return running(browser) && location && locationWithin(*location, root);
+  };
+  return std::ranges::any_of(m_shown, [&](const Listing& listing) { return reads(*listing.browser); })
+      || std::ranges::any_of(m_spare, [&](const Listing& listing) { return reads(*listing.browser); })
+      || std::ranges::any_of(m_retired, [&](const auto& browser) { return reads(*browser); });
+}
 
 luciole::LookaheadLoad luciole::LookaheadColumns::load() const {
   LookaheadLoad result{.alive = m_shown.size() + m_spare.size() + m_retired.size()};

@@ -57,6 +57,8 @@ namespace luciole {
     // kPublishInterval; a change of the folder itself, or of more entries than that, walks the whole folder again.
     // A folder or child walked before is walked again no sooner than its WorkbenchWalks due time.
     void invalidateChild(const std::string& name);
+    // The drive at `root` is being removed: no walk of it or of a folder below it runs or starts.
+    void releaseLocation(const Location& root);
 
     // The latest picture, null before the first one. Its location says which folder it shows: after setLocation() it
     // is the previous folder's until the new folder's first measure, or its error, arrives.

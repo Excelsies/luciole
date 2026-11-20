@@ -72,6 +72,8 @@ namespace luciole {
     // A finished walk is never shared: a later request walks again.
     MeasureHandle request(const Location& root, MeasurePriority priority);
     MeasureServiceStatus status() const;
+    // A walk of `root` or of a folder below it is queued or still reading, cancelled or not.
+    bool reading(const Location& root) const;
     // Runs on the main context after new tables were published, at most once per publish interval.
     void setChangedCallback(std::function<void()> changed);
 

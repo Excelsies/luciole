@@ -1,6 +1,7 @@
 #include "browser/workbench_services.h"
 
 #include "fs/directory_watch.h"
+#include "fs/location_within.h"
 
 #include <algorithm>
 #include <filesystem>
@@ -144,6 +145,10 @@ void luciole::WorkbenchWalks::walkFolderAgain() {
     current->finished = false;
     m_cache.invalidate(current->location);
   }
+}
+
+void luciole::WorkbenchWalks::release(const Location& root) {
+  std::erase_if(m_walks, [&root](const Walk& walk) { return locationWithin(walk.location, root); });
 }
 
 void luciole::WorkbenchWalks::update() {

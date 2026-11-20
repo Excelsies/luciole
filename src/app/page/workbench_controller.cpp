@@ -11,6 +11,7 @@
 #include "config/visit_service.h"
 #include "core/input/key_modifiers.h"
 #include "core/input/key_symbols.h"
+#include "fs/location_within.h"
 #include "media/media_player.h"
 #include "platform/desktop_integration.h"
 #include "render/scene/input_dispatcher.h"
@@ -420,6 +421,36 @@ void WorkbenchController::restAt() {
     m_restDeadline.reset();
     frameNeeded();
   });
+}
+
+bool WorkbenchController::inDrive(const luciole::Location& root) const {
+  if (!m_session) {
+    return false;
+  }
+  const auto& lookahead = m_session->lookahead();
+  for (std::size_t column = 0; column < lookahead.count(); ++column) {
+    if (luciole::locationWithin(lookahead.location(column), root)) {
+      return true;
+    }
+  }
+  return m_columnPreview && m_columnPreview->reading(root);
+}
+
+void WorkbenchController::releaseLocation(const luciole::Location& root) {
+  if (!m_session) {
+    return;
+  }
+  m_session->model().releaseLocation(root);
+  m_session->lookahead().releaseLocation(root);
+  if (m_columnPreview) {
+    m_columnPreview->releaseLocation(root);
+  }
+}
+
+bool WorkbenchController::readingDrive(const luciole::Location& root) const {
+  return (m_services != nullptr && m_services->measureService().reading(root))
+      || (m_session && m_session->lookahead().reading(root))
+      || (m_columnPreview && m_columnPreview->reading(root));
 }
 
 void WorkbenchController::frameNeeded() { m_page.surface().requestUpdate(); }

@@ -111,6 +111,10 @@ namespace luciole {
     float contentTextSize() const;
     // A load waits for the dwell.
     bool waiting() const noexcept { return m_due.has_value(); }
+    // The drive at `root` is being removed: a file of it that the slot shows or loads goes now.
+    void releaseLocation(const Location& root);
+    // The slot loads or shows a file of `root` or of a folder below it.
+    bool reading(const Location& root) const;
     const ColumnPreviewLoad* load() const noexcept { return m_load.get(); }
     // Loads started since construction.
     std::uint64_t loadsStarted() const noexcept { return m_loadsStarted; }

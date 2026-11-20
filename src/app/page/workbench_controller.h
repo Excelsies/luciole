@@ -96,6 +96,14 @@ public:
   // Escape to minimize an expanded instrument while no text field of the page has focus.
   bool key(const KeyboardEvent& event);
 
+  // The Workbench shows or reads something inside the drive at `root`: a listing ahead, the previewed file, or the
+  // page's walks. The page then leaves the drive, as it does when its own folder is inside it.
+  bool inDrive(const luciole::Location& root) const;
+  // The drive at `root` is being removed: its walks, listings ahead and previewed file go.
+  void releaseLocation(const luciole::Location& root);
+  // Something of the Workbench still reads the drive at `root`: a walk of the shared service, which may outlive its
+  // cancelled lease, a listing ahead or the previewed file.
+  bool readingDrive(const luciole::Location& root) const;
   // The view hides the file pane under the expanded instrument. The pane keeps its geometry meanwhile, so the page's
   // own hit tests on it must check this first.
   bool coversFilePane() const;
