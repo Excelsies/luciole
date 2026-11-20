@@ -2,6 +2,7 @@
 #include "event_loop/glib_poll_source.h"
 #include "fs/filename.h"
 #include "operations/rename_service.h"
+#include "temp_folder.h"
 #include "test_check.h"
 
 #include <algorithm>
@@ -21,16 +22,8 @@ namespace {
   }
   luciole::Location location(const fs::path& path) { return luciole::Location::fromPath(path.native()); }
   struct Fixture {
-    fs::path root;
-    Fixture() {
-      std::string path = "/tmp/luciole-rename-XXXXXX";
-      TEST_CHECK(::mkdtemp(path.data()) != nullptr);
-      root = path;
-    }
-    ~Fixture() {
-      std::error_code error;
-      fs::remove_all(root, error);
-    }
+    luciole::test::TempFolder tempFolder{"luciole-rename"};
+    fs::path root = tempFolder.path();
   };
   class Pump {
   public:

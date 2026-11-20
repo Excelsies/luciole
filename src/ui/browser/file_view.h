@@ -48,6 +48,9 @@ namespace luciole {
     void setDetailsColumnOrder(DetailsColumnOrder order) { m_columnOrder = order; }
     void setColumnActive(bool active) { m_columnActive = active; }
     void setPathEntry(std::optional<EntryId> entry) { m_pathEntry = entry; }
+    // A row another pane points at; it looks like the path row. The owner rebinds the rows that change.
+    void setLinkedEntry(std::optional<EntryId> entry) { m_linkedEntry = entry; }
+    std::optional<EntryId> linkedEntry() const { return m_linkedEntry; }
 
   private:
     BrowserController& m_browser;
@@ -56,6 +59,7 @@ namespace luciole {
     const ViewMode m_mode;
     bool m_columnActive = true;
     std::optional<EntryId> m_pathEntry;
+    std::optional<EntryId> m_linkedEntry;
     std::function<std::uint32_t()> m_modifiers;
     std::function<bool()> m_focused;
     std::function<bool(const Location&)> m_cut;

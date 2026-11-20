@@ -3,12 +3,16 @@
 #include "core/log.h"
 #include "fs/gio_ptr.h"
 #include "fs/posix_fd.h"
+#include "thumbnails/bink2_signature.h"
+#include "thumbnails/font_facts.h"
+#include "thumbnails/font_preview.h"
 #include "thumbnails/provider_process.h"
 #include "thumbnails/thumbnail_codec.h"
 #include "thumbnails/thumbnail_store.h"
 #include "thumbnails/thumbnail_worker.h"
 
 #include <algorithm>
+#include <array>
 #include <cerrno>
 #include <charconv>
 #include <chrono>
@@ -175,9 +179,12 @@ namespace {
 
 std::expected<LoadedImageFile, std::string> luciole::renderThumbnailProvider(
     int sourceFd, const std::string& mime, int side, const ThumbnailOptions& options, GCancellable* cancellable,
-    ThumbnailPurpose purpose
+    ThumbnailPurpose purpose, std::string_view variant
 ) {
   const bool image = mime.starts_with("image/");
+  bool bink2 = false;
+  // Font sheets come from Luciole's own helper and answer in its private RGBA protocol, like images.
+  const bool font = isFontContentType(mime);
   if (side < 1 || side > (image ? kMaxPreviewImageSide : 1024)) {
     return std::unexpected("invalid preview size");
   }
@@ -217,8 +224,23 @@ std::expected<LoadedImageFile, std::string> luciole::renderThumbnailProvider(
          (directory / "result").native()},
         sourceFd, cancellable
     );
+  } else if (font) {
+    success = runProviderProcess(
+        fontPreviewArguments(side, fontByteCap(options.maxFileMiB), variant, output), sourceFd, cancellable,
+        outputLimit, 1
+    );
   } else if (mime.starts_with("video/")) {
-    return videoThumbnail(sourceFd, side, cancellable, output, purpose);
+    if (hasBink2Signature(sourceFd)) {
+      // No FFmpeg here reads Bink 2: the application's own decoder does, in a worker like the image decoders, so a
+      // damaged file never reaches it inside the process that browses. Clean frame for previews and thumbnails alike.
+      bink2 = true;
+      success = runProviderProcess(
+          {"/proc/self/exe", "--bink2-poster-worker", std::to_string(side), output.native()}, sourceFd, cancellable,
+          outputLimit, 2
+      );
+    } else {
+      return videoThumbnail(sourceFd, side, cancellable, output, purpose);
+    }
   } else if (mime.starts_with("audio/")) {
     std::vector<std::string> arguments{"ffmpeg",   "-nostdin",
                                        "-v",       "error",
@@ -239,7 +261,7 @@ std::expected<LoadedImageFile, std::string> luciole::renderThumbnailProvider(
     success = runProviderProcess(std::move(arguments), sourceFd, cancellable);
   }
   if (!success) {
-    if (image && !g_cancellable_is_cancelled(cancellable)) {
+    if ((image || font || bink2) && !g_cancellable_is_cancelled(cancellable)) {
       auto report = readThumbnailFile(output, 1024);
       if (report
           && report->size() > 4
@@ -256,7 +278,7 @@ std::expected<LoadedImageFile, std::string> luciole::renderThumbnailProvider(
   if (!encoded) {
     return std::unexpected("thumbnail provider exceeded output limits");
   }
-  if (mime.starts_with("image/")) {
+  if (image || font || bink2) {
     return readThumbnailWorkerResult(std::move(*encoded), side);
   }
   auto decoded = readThumbnailPng(*encoded, side);

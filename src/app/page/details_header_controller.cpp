@@ -17,6 +17,7 @@
 #include "ui/palette.h"
 #include "wayland/toplevel_surface.h"
 #include "wayland/wayland_seat.h"
+#include "workbench/column_plan.h"
 
 #include <algorithm>
 #include <cmath>
@@ -204,7 +205,7 @@ void DetailsHeaderController::attach(Node& root) {
 }
 
 void DetailsHeaderController::focusChanged(InputArea* focused) {
-  if (m_nameHeader == nullptr || m_page.viewMode() != luciole::ViewMode::List) {
+  if (m_nameHeader == nullptr || !luciole::showsDetailsRows(m_page.viewMode())) {
     return;
   }
   for (std::size_t index = 0; index < m_columnWidths.size(); ++index) {
@@ -230,7 +231,7 @@ void DetailsHeaderController::sync(const luciole::SortOptions& sort) {
     header->glyph()->setParticipatesInLayout(active);
   }
   // An empty list shows only the empty-state notice; headers there would sort nothing.
-  const bool shown = m_page.viewMode() == luciole::ViewMode::List && !m_page.browser().model().rows().empty();
+  const bool shown = luciole::showsDetailsRows(m_page.viewMode()) && !m_page.browser().model().rows().empty();
   m_listHeader->setVisible(shown);
   m_listHeader->setParticipatesInLayout(shown);
 }
@@ -384,7 +385,7 @@ void DetailsHeaderController::setDetailsColumnWidths(luciole::DetailsColumnWidth
 }
 
 void DetailsHeaderController::scrollDetails(float offset) {
-  if (m_page.viewMode() != luciole::ViewMode::List || m_columnResize || m_columnDrag) {
+  if (!luciole::showsDetailsRows(m_page.viewMode()) || m_columnResize || m_columnDrag) {
     return;
   }
   const float maximum = std::max(0.0F, m_detailsColumns.contentWidth - m_detailsHeaderViewport->width());
@@ -404,12 +405,14 @@ bool DetailsHeaderController::layoutColumns(bool miller) {
     m_detailsScrollHost->setParticipatesInLayout(false);
     return false;
   }
-  const bool list = m_page.viewMode() == luciole::ViewMode::List;
+  const bool list = luciole::showsDetailsRows(m_page.viewMode());
   auto* fileList = m_page.fileList();
   // The header remains laid out when the file grid is hidden for an empty
   // folder or an error. Do not derive its width from that stale grid.
   const float viewport = list ? m_detailsHeaderViewport->width() : fileList->scrollView().contentViewportWidth(true);
-  const auto columns = luciole::DetailsColumns::forWidth(viewport, m_columnVisibility, m_columnWidths);
+  // Workbench leaves out the columns that do not fit whole; the choices for List view stay as they are.
+  const auto fit = luciole::workbench::listHeader(m_page.viewMode(), viewport, m_columnVisibility, m_columnWidths);
+  const auto& columns = fit.columns;
   const bool columnsChanged = columns != m_detailsColumns;
   m_detailsColumns = columns;
   m_viewport = viewport;
@@ -418,13 +421,13 @@ bool DetailsHeaderController::layoutColumns(bool miller) {
   m_detailsScrollHost->setParticipatesInLayout(overflow);
   for (std::size_t index = 0; index < m_columnWidths.size(); ++index) {
     auto* header = widthHeader(index);
-    const bool visible =
-        index == 0 || luciole::detailsColumnVisible(m_columnVisibility, static_cast<luciole::DetailsColumn>(index - 1));
+    const bool visible = index == 0 || columns.visible(static_cast<luciole::DetailsColumn>(index - 1));
     header->setVisible(visible);
     header->setParticipatesInLayout(visible);
     const float allocation = index == 0 ? columns.nameWidth : static_cast<float>(m_columnWidths[index]);
     header->setMinWidth(allocation);
     header->setMaxWidth(allocation);
+    m_columnResizeHandles[index]->setHitTestVisible(fit.resizable);
     if (!visible && m_page.dispatcher().focusedArea() == header->inputArea()) {
       m_page.dispatcher().setFocus(m_nameHeader->inputArea());
     }
@@ -439,7 +442,7 @@ bool DetailsHeaderController::layoutColumns(bool miller) {
 }
 
 void DetailsHeaderController::layoutHeader(Renderer& renderer) {
-  const bool list = m_page.viewMode() == luciole::ViewMode::List;
+  const bool list = luciole::showsDetailsRows(m_page.viewMode());
   const float viewport = m_viewport;
   const auto& columns = m_detailsColumns;
   m_detailsHeaderRow->arrange(

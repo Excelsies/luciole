@@ -1,6 +1,7 @@
 #pragma once
 
 #include "render/scene/node.h"
+#include "ui/browser/status_pill.h"
 
 #include <cstdint>
 #include <memory>
@@ -39,10 +40,9 @@ public:
 
   // BrowserPage::syncBrowser(): status text, free space and the notice for an empty list.
   void sync(bool miller);
-  // Layout hook in BrowserPage::prepareFrame(): free space shows only in a pane at least that wide.
-  void layout(float paneWidth);
-  // Places the pill at the bottom-right of the page body (`width` x `height`, body coordinates).
-  void arrange(Renderer& renderer, float width, float height);
+  // Places the pill inside `area` of the page body, in body coordinates, by arrangeStatusPill(). Free space shows
+  // only in an area at least kMinimumFreeSpacePaneWidth wide, unless the Always show status bar setting is on.
+  void arrange(Renderer& renderer, const LayoutRect& area);
   // True while the notice replaces the file list.
   bool noticeShown() const;
   // Scene rectangle of the status text, where the input method places its candidates.
@@ -57,9 +57,7 @@ private:
   std::uint64_t m_statusContext = 0;
   bool m_contextLoaded = false;
   std::optional<std::uint64_t> m_freeBytes;
-  Flex* m_pill = nullptr;
-  Label* m_status = nullptr;
-  Label* m_freeSpace = nullptr;
+  StatusPill m_pill;
   bool m_freeSpaceAvailable = false;
   bool m_needed = false;
   Glyph* m_noticeGlyph = nullptr;

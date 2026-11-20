@@ -1,5 +1,6 @@
 #include "config/state_store.h"
 #include "fs/gio_ptr.h"
+#include "temp_folder.h"
 #include "test_check.h"
 
 #include <cstdlib>
@@ -19,18 +20,8 @@ namespace {
   using luciole::StateStore;
 
   struct Fixture {
-    fs::path directory;
-    Fixture() {
-      const luciole::GString name(g_dir_make_tmp("luciole-state-test-XXXXXX", nullptr));
-      TEST_CHECK(name != nullptr);
-      directory = name.get();
-    }
-    ~Fixture() {
-      std::error_code ignored;
-      fs::remove_all(directory, ignored);
-    }
-    Fixture(const Fixture&) = delete;
-    Fixture& operator=(const Fixture&) = delete;
+    luciole::test::TempFolder tempFolder{"luciole-state-test"};
+    fs::path directory = tempFolder.path();
     fs::path path() const { return directory / "state.toml"; }
   };
 

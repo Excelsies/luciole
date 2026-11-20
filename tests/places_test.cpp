@@ -1,6 +1,7 @@
 #include "browser/places.h"
 #include "event_loop/glib_poll_source.h"
 #include "fs/gio_interop.h"
+#include "temp_folder.h"
 #include "test_check.h"
 
 #include <algorithm>
@@ -13,11 +14,9 @@
 namespace {
   namespace fs = std::filesystem;
   struct Fixture {
-    fs::path root;
+    luciole::test::TempFolder tempFolder{"luciole-places"};
+    fs::path root = tempFolder.path();
     Fixture() {
-      const luciole::GString path(g_dir_make_tmp("luciole-places-XXXXXX", nullptr));
-      TEST_CHECK(path != nullptr);
-      root = path.get();
       fs::create_directories(root / "home");
       fs::create_directories(root / "config");
       g_setenv("HOME", (root / "home").c_str(), TRUE);
@@ -30,7 +29,6 @@ namespace {
           << (root / "outside downloads").native()
           << "\"\n";
     }
-    ~Fixture() { fs::remove_all(root); }
     luciole::Location location(const std::string& name) const {
       return luciole::Location::fromPath((root / name).native());
     }

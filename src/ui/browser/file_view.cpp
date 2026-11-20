@@ -413,8 +413,8 @@ void luciole::FileViewAdapter::bindTile(Node& tile, std::size_t index, bool, boo
     } else {
       static_cast<FileRow&>(tile).bind(
           *entry, model.typeLabel(id), selected, ring, hovered, m_columns, m_columnOrder,
-          m_cut && m_cut(entry->location()), m_pathEntry == id && !m_columnActive, m_presentation, readOnly,
-          m_mode == ViewMode::List ? m_browser.treeRow(id) : TreeRowInfo{}
+          m_cut && m_cut(entry->location()), (m_pathEntry == id && !m_columnActive) || m_linkedEntry == id,
+          m_presentation, readOnly, m_mode == ViewMode::List ? m_browser.treeRow(id) : TreeRowInfo{}
       );
     }
   }

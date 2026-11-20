@@ -14,11 +14,11 @@ class SettingsDialog final : public Flex {
 public:
   SettingsDialog(
       std::function<void(luciole::OverrideEdit)> change, std::function<void()> reset, std::function<void()> close,
-      std::function<void()> clearThumbnails
+      std::function<void()> clearThumbnails, std::function<void()> clearVisits
   );
   void sync(
       const luciole::BrowserSettings& settings, const luciole::BrowserSettings& inherited, bool busy,
-      const std::string& error, bool clearingThumbnails = false
+      const std::string& error, bool clearingThumbnails = false, bool clearingVisits = false
   );
   void reveal(const Node* node);
   void setCompact(bool compact);
@@ -36,6 +36,8 @@ private:
       luciole::PreferenceKey<T> key, const std::string& title, const Choices<T>& choices, std::string subtitle = {}
   );
   void addTerminal();
+  // The Workbench card on the Views page: its choices, the sound visualizer, Record visits and Clear visit history.
+  void addWorkbenchCard(std::function<void()> clearVisits);
   void addBool(luciole::PreferenceKey<bool> key, const std::string& title);
   void addNumber(
       luciole::PreferenceKey<int> key, const std::string& title, const std::vector<int>& values,
@@ -63,6 +65,7 @@ private:
   ScrollView* m_body = nullptr;
   Label* m_status = nullptr;
   Button* m_clearThumbnails = nullptr;
+  Button* m_clearVisits = nullptr;
   Flex* m_navigation = nullptr;
   ScrollView* m_navigationScroll = nullptr;
   Flex* m_section = nullptr;

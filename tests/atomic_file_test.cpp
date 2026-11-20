@@ -1,4 +1,5 @@
 #include "fs/atomic_file.h"
+#include "temp_folder.h"
 #include "test_check.h"
 
 #include <csignal>
@@ -19,19 +20,8 @@ namespace {
   using luciole::AtomicWriteState;
 
   struct Fixture {
-    fs::path directory;
-    Fixture() {
-      auto pattern = (fs::temp_directory_path() / "luciole-atomic-test-XXXXXX").native();
-      const char* created = ::mkdtemp(pattern.data());
-      TEST_CHECK(created != nullptr);
-      directory = created;
-    }
-    ~Fixture() {
-      std::error_code ignored;
-      fs::remove_all(directory, ignored);
-    }
-    Fixture(const Fixture&) = delete;
-    Fixture& operator=(const Fixture&) = delete;
+    luciole::test::TempFolder tempFolder{"luciole-atomic-test"};
+    fs::path directory = tempFolder.path();
   };
 
   std::string read(const fs::path& path) {

@@ -5,6 +5,7 @@
 #include "operations/move_receipt.h"
 #include "operations/transfer_service.h"
 #include "operations/transfer_staging.h"
+#include "temp_folder.h"
 #include "test_check.h"
 
 #include <algorithm>
@@ -48,25 +49,13 @@ namespace {
     }
   }
   struct Fixture {
-    fs::path root;
-    explicit Fixture(const std::string& parent = "/tmp") {
-      std::string name = parent + "/luciole-transfer-XXXXXX";
-      TEST_CHECK(::mkdtemp(name.data()) != nullptr);
-      root = name;
+    luciole::test::TempFolder tempFolder;
+    fs::path root = tempFolder.path();
+    explicit Fixture(const std::string& parent = "/tmp") : tempFolder("luciole-transfer", parent) {
       fs::create_directory(root / "source");
       fs::create_directory(root / "destination");
     }
-    ~Fixture() {
-      drainHistoryCleanup();
-      std::error_code error;
-      for (const auto& item :
-           fs::recursive_directory_iterator(root, fs::directory_options::skip_permission_denied, error)) {
-        if (item.is_directory() && !item.is_symlink()) {
-          fs::permissions(item.path(), fs::perms::owner_all, fs::perm_options::add, error);
-        }
-      }
-      fs::remove_all(root, error);
-    }
+    ~Fixture() { drainHistoryCleanup(); }
     fs::path source(const std::string& name) const { return root / "source" / name; }
     fs::path destination(const std::string& name) const { return root / "destination" / name; }
     void clean() const {
@@ -2170,6 +2159,13 @@ namespace {
       (void)luciole::CopyReceipt::takeCleanupErrors();
     }
   }
+  // Whether the reversal reported a destination it kept for inspection; each one is reported again as a cleanup error
+  // when its history is dropped, wherever the cancel landed.
+  bool retainedForInspection(const std::vector<luciole::TransferResult>& results) {
+    return std::ranges::any_of(results, [](const luciole::TransferResult& item) {
+      return item.error && item.error->message.contains("Inspect retained");
+    });
+  }
   void testMoveAncestorCancellation(Pump& pump) {
     Fixture f;
     luciole::TransferService service;
@@ -2207,11 +2203,12 @@ namespace {
       }
       TEST_CHECK(count == 1);
     }
-    const bool retired = result.retireHistory;
+    const bool retained = retainedForInspection(result.results);
     result.receipt.reset();
     receipt.reset();
     dropTransferHistory(pump, service);
-    TEST_CHECK(luciole::CopyReceipt::takeCleanupErrors().empty() == !retired);
+    const auto leftovers = luciole::CopyReceipt::takeCleanupErrors();
+    TEST_CHECK(leftovers.empty() == !retained);
   }
 
   void testMoveAncestorReplacement(Pump& pump) {
@@ -2468,11 +2465,12 @@ namespace {
       }
       TEST_CHECK(count == 1);
     }
-    const bool retired = result.retireHistory;
+    const bool retained = retainedForInspection(result.results);
     result.receipt.reset();
     receipt.reset();
     dropTransferHistory(pump, service);
-    TEST_CHECK(luciole::CopyReceipt::takeCleanupErrors().empty() == !retired);
+    const auto leftovers = luciole::CopyReceipt::takeCleanupErrors();
+    TEST_CHECK(leftovers.empty() == !retained);
   }
 
   void testOverlappingMoveProofBudget(Pump& pump) {

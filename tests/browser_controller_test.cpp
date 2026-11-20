@@ -2,6 +2,7 @@
 #include "browser/location_presentation.h"
 #include "event_loop/glib_poll_source.h"
 #include "fs/gio_interop.h"
+#include "temp_folder.h"
 #include "test_check.h"
 
 #include <algorithm>
@@ -20,21 +21,15 @@ namespace {
   using luciole::Location;
 
   struct Fixture {
-    fs::path path;
+    luciole::test::TempFolder tempFolder{"luciole-browser-test"};
+    fs::path path = tempFolder.path();
     Fixture() {
-      const luciole::GString name(g_dir_make_tmp("luciole-browser-test-XXXXXX", nullptr));
-      TEST_CHECK(name != nullptr);
-      path = name.get();
       fs::create_directory(path / "child");
       fs::create_directory(path / "other");
       std::ofstream(path / "file") << "fixture";
       std::ofstream(path / "child" / "inside") << "child fixture";
       std::ofstream(path / ".hidden") << "hidden";
       fs::create_symlink("child", path / "folder-link");
-    }
-    ~Fixture() {
-      std::error_code ignored;
-      fs::remove_all(path, ignored);
     }
     Fixture(const Fixture&) = delete;
     Fixture& operator=(const Fixture&) = delete;

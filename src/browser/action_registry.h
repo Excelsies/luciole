@@ -26,6 +26,7 @@ namespace luciole {
     Grid,
     List,
     Miller,
+    Workbench,
     ShowHidden,
     ShowSidebar,
     ShowPreview,

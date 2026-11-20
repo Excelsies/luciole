@@ -100,6 +100,7 @@ _files kind:
         "__pycache__",
         "node_modules",
         "result",
+        "subprojects",
     }
 
     EXTENSIONS = {

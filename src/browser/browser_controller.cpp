@@ -60,7 +60,10 @@ luciole::BrowserController::BrowserController(SortOptions sort, bool showHidden,
       }
     }
   });
-  m_session.setChangedCallback([this] { sessionChanged(); });
+  m_session.setChangedCallback([this] {
+    reportEntry();
+    sessionChanged();
+  });
   m_search.setChangedCallback([this] {
     if (!m_switchingSources && m_searchActive && !m_query.empty()) {
       publish(m_search.snapshot());
@@ -106,6 +109,23 @@ void luciole::BrowserController::advanceContext() {
 void luciole::BrowserController::setChangedCallback(std::function<void()> callback) { m_changed = std::move(callback); }
 void luciole::BrowserController::setFileActivatedCallback(std::function<void(const Location&)> callback) {
   m_fileActivated = std::move(callback);
+}
+void luciole::BrowserController::setEnteredCallback(std::function<void(const Location&)> callback) {
+  m_entered = std::move(callback);
+}
+void luciole::BrowserController::reportEntry() {
+  const auto& snapshot = m_session.snapshot();
+  if (!m_entryPending
+      || snapshot.status != DirectoryStatus::Ready
+      || snapshot.location != m_history[m_historyIndex].location) {
+    return;
+  }
+  m_entryPending = false;
+  const auto location = *snapshot.location;
+  const auto callback = m_entered;
+  if (callback) {
+    callback(location);
+  }
 }
 
 void luciole::BrowserController::setCaptureViewport(std::function<BrowseViewport()> callback) {
@@ -199,6 +219,7 @@ void luciole::BrowserController::open(const Location& location) {
     m_history.erase(m_history.begin());
   }
   m_historyIndex = m_history.size() - 1;
+  m_entryPending = true;
   loadVisit();
 }
 
@@ -234,6 +255,7 @@ bool luciole::BrowserController::back() {
   }
   saveVisit();
   --m_historyIndex;
+  m_entryPending = true;
   loadVisit();
   return true;
 }
@@ -246,6 +268,7 @@ bool luciole::BrowserController::forward() {
   }
   saveVisit();
   ++m_historyIndex;
+  m_entryPending = true;
   loadVisit();
   return true;
 }
@@ -750,6 +773,7 @@ void luciole::BrowserController::duplicateFrom(BrowserController& source) {
   m_searchRecursive = source.m_searchRecursive;
   m_history = source.m_history;
   m_historyIndex = source.m_historyIndex;
+  m_entryPending = false;
   m_publishing = true;
   m_model.setSort(source.m_model.sort());
   m_model.setFilter({source.m_model.filter().showHidden, {}, source.m_model.filter().showBackups});

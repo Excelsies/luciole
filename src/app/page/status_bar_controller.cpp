@@ -6,9 +6,11 @@
 #include "app/workspace_layout.h"
 #include "browser/browser_controller.h"
 #include "browser/places.h"
+#include "browser/selection_size_note.h"
 #include "fs/gio_ptr.h"
 #include "ui/builders.h"
 #include "ui/palette.h"
+#include "workbench/format.h"
 
 #include <algorithm>
 #include <format>
@@ -19,37 +21,7 @@ StatusBarController::StatusBarController(
 )
     : m_page(page), m_pins(pins), m_settings(settings), m_keys(keys) {}
 
-std::unique_ptr<Flex> StatusBarController::build() {
-  auto pill = ui::row(
-      {.out = &m_pill,
-       .align = FlexAlign::Center,
-       .gap = Style::spaceMd,
-       .paddingV = Style::spaceXs,
-       .paddingH = Style::spaceMd,
-       .fill = colorSpecFromRole(ColorRole::SurfaceContainerHigh),
-       .radius = Style::radiusXl,
-       .border = colorSpecFromRole(ColorRole::OutlineVariant),
-       .minHeight = Style::controlHeightSm,
-       .visible = false,
-       .participatesInLayout = false},
-      ui::label(
-          {.out = &m_status,
-           .fontSize = Style::fontSizeCaption,
-           .maxLines = 1,
-           .configure = [](Label& label) { label.setUseMarkup(false); }}
-      ),
-      ui::label(
-          {.out = &m_freeSpace,
-           .fontSize = Style::fontSizeCaption,
-           .color = colorSpecFromRole(ColorRole::OnSurfaceVariant),
-           .maxWidth = 160.0F,
-           .maxLines = 1,
-           .textAlign = TextAlign::End}
-      )
-  );
-  pill->setZIndex(5);
-  return pill;
-}
+std::unique_ptr<Flex> StatusBarController::build() { return buildStatusPill(m_pill); }
 
 std::unique_ptr<Flex> StatusBarController::buildNotice() {
   return ui::column(
@@ -117,14 +89,17 @@ void StatusBarController::sync(bool miller) {
       status = snapshot.error->message;
     } else if (!m_page.browser().searchQuery().empty()) {
       status = std::format(
-          "{}{} results",
+          "{}{}",
           loading                                                      ? "Searching… · "
               : snapshot.status == luciole::DirectoryStatus::Cancelled ? "Search stopped · "
                                                                        : "",
-          model.rows().size()
+          luciole::workbench::countedText(static_cast<double>(model.rows().size()), "result")
       );
       if (m_page.browser().skippedSearchFolders() != 0) {
-        status += std::format(" · {} folders could not be searched", m_page.browser().skippedSearchFolders());
+        const auto skipped = m_page.browser().skippedSearchFolders();
+        status += std::format(
+            " · {} could not be searched", luciole::workbench::countedText(static_cast<double>(skipped), "folder")
+        );
       }
     } else if (loading) {
       status = "Loading folder…";
@@ -138,18 +113,21 @@ void StatusBarController::sync(bool miller) {
           hidden += snapshot.entries.brief(i).hidden;
         }
       }
-      status = std::format("{} items", model.rows().size());
+      status = luciole::workbench::itemsText(static_cast<double>(model.rows().size()));
       if (hidden > 0) {
-        status += std::format(" · {} hidden", hidden);
+        status += std::format(" · {} hidden", luciole::workbench::countText(static_cast<double>(hidden)));
       }
     }
   }
   if (snapshot.location && snapshot.location->isTrash() && !snapshot.error && !refreshing) {
     status += " · Refresh to update";
   }
+  std::string sizeNote; // why the selection's size is not the whole of it, when the status says so
   if (!model.selection().selected.empty()) {
     needed = true;
-    status += std::format(" · {} selected", model.selection().selected.size());
+    status += std::format(
+        " · {} selected", luciole::workbench::countText(static_cast<double>(model.selection().selected.size()))
+    );
     const auto summary = model.selectionSummary();
     if (summary.pendingSizes != 0) {
       status += " · reading file sizes…";
@@ -157,7 +135,9 @@ void StatusBarController::sync(bool miller) {
       status += " · file size exceeds limit";
     } else if (summary.files != 0 && summary.unknownSizes == summary.files) {
       status += " · file size unknown";
+      sizeNote = luciole::selectionSizeNote(summary);
     } else if (summary.files != 0) {
+      sizeNote = luciole::selectionSizeNote(summary);
       const luciole::GString size(g_format_size_full(summary.bytes, G_FORMAT_SIZE_IEC_UNITS));
       status += std::format(
           " · {}{}{}", summary.unknownSizes == 0 ? "" : "at least ", size.get(),
@@ -165,11 +145,16 @@ void StatusBarController::sync(bool miller) {
       );
     }
   }
+  if (sizeNote.empty()) {
+    m_pill.status->clearTooltip();
+  } else {
+    m_pill.status->setTooltip(sizeNote);
+  }
   if (const auto typed = m_keys.typeaheadText(); !typed.empty()) {
     needed = true;
     status = "Select: " + typed + " · " + status;
   }
-  m_status->setText(status);
+  m_pill.status->setText(status);
   m_needed = needed;
   auto freeBytes = snapshot.metadata.filesystem.freeBytes;
   if (freeBytes) {
@@ -183,9 +168,9 @@ void StatusBarController::sync(bool miller) {
       freeBytes && !snapshot.filesystemError && !snapshot.error && snapshot.location && !snapshot.location->isTrash();
   if (m_freeSpaceAvailable) {
     const luciole::GString size(g_format_size_full(*freeBytes, G_FORMAT_SIZE_IEC_UNITS));
-    m_freeSpace->setText(std::format("{} free", size.get()));
+    m_pill.freeSpace->setText(std::format("{} free", size.get()));
   }
-  m_pill->setVisible(m_needed);
+  m_pill.pill->setVisible(m_needed);
   // Empty list: a glyph, a short title and, when useful, one explanatory sentence.
   struct Notice {
     const char* glyph;
@@ -222,31 +207,14 @@ void StatusBarController::sync(bool miller) {
   m_noticeArea->setParticipatesInLayout(empty && !miller);
 }
 
-void StatusBarController::layout(float paneWidth) {
-  const bool showFreeSpace =
-      m_freeSpaceAvailable && (paneWidth >= kMinimumFreeSpacePaneWidth || m_page.settings().alwaysShowStatusBar);
-  m_freeSpace->setVisible(showFreeSpace);
-  m_freeSpace->setParticipatesInLayout(showFreeSpace);
-}
-
-void StatusBarController::arrange(Renderer& renderer, float width, float height) {
-  if (!m_pill->visible()) {
-    return;
-  }
-  // Floats over the bottom-right corner of the file card, clear of the vertical scrollbar.
-  const float inset = Style::spaceSm;
-  const float trailing = inset + Style::scrollbarWidth + Style::scrollbarGap;
-  const float maximum = std::max(1.0F, width - inset - trailing);
-  LayoutConstraints constraints;
-  constraints.setMaxWidth(maximum);
-  const auto size = m_pill->measure(renderer, constraints);
-  const float pillWidth = std::min(size.width, maximum);
-  m_pill->arrange(
-      renderer,
-      {Style::rtl() ? trailing : width - trailing - pillWidth, height - inset - size.height, pillWidth, size.height}
-  );
+void StatusBarController::arrange(Renderer& renderer, const LayoutRect& area) {
+  const bool freeSpace =
+      m_freeSpaceAvailable && (area.width >= kMinimumFreeSpacePaneWidth || m_page.settings().alwaysShowStatusBar);
+  arrangeStatusPill(renderer, m_pill, area, freeSpace);
 }
 
 bool StatusBarController::noticeShown() const { return m_notice != nullptr && m_noticeArea->visible(); }
 
-LayoutRect StatusBarController::statusRect() const { return m_status ? sceneRect(*m_status) : LayoutRect{}; }
+LayoutRect StatusBarController::statusRect() const {
+  return m_pill.status != nullptr ? sceneRect(*m_pill.status) : LayoutRect{};
+}

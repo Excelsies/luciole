@@ -42,7 +42,7 @@ meson compile -C build-package
 DESTDIR="$PWD/pkgroot" meson install --no-rebuild -C build-package
 ```
 
-`just` is a development convenience, not a build dependency. Source archives must include `lib/`, its assets/protocols and the application's `assets/`. Builds do not fetch or sync a sibling Noctalia checkout.
+`just` is a development convenience, not a build dependency. Source archives must include `lib/`, its assets/protocols, the application's `assets/` and `subprojects/` (the pinned Bink 2 decoder). Builds do not fetch or sync a sibling Noctalia checkout.
 
 ### Meson options
 
@@ -52,6 +52,7 @@ DESTDIR="$PWD/pkgroot" meson install --no-rebuild -C build-package
 | `native_optimizations` | `false` | Keep false for portable packages; true enables CPU-local code generation. |
 | `build_revision` | `unknown` | Optional explicit revision metadata supplied by the packager. |
 | `benchmarks` | `false` | Leave disabled for ordinary packages. |
+| `media` | `auto` | Video and audio playback through GStreamer, with Bink 2 video decoded in the process by the pinned `subprojects/libbink2`. Auto builds it when GStreamer is found; `enabled` requires it; `disabled` builds a player that reports playback is not available. |
 
 Standard Meson prefix, directory, LTO and sanitizer options apply. GNU LTO needs compiler-aware archive tools such as `gcc-ar` and `gcc-ranlib`. Use a fresh build directory when changing toolchains.
 
@@ -81,6 +82,8 @@ These are pkg-config modules or header paths. Install the corresponding developm
 | `nlohmann_json` | JSON library |
 | `stb/stb_image_resize2.h` | System stb resize2 header; the older resize header is insufficient |
 | Threads | System thread support |
+| `libbink2` | Bink 2 decoder, LGPL-2.1-or-later; a pinned copy in `subprojects/libbink2`, built into Luciole with playback and linked statically, so nothing to install; that folder holds the corresponding sources, and its license installs with Luciole |
+| `gstreamer-1.0`, `gstreamer-app-1.0`, `gstreamer-audio-1.0`, `gstreamer-video-1.0` | 1.22+; optional, for playback (`media` option) |
 
 Use compatible GdkPixbuf, Glycin and loader packages. Installed Glycin loaders determine format coverage; AVIF/HEIF may need additional loader dependencies such as libheif. The Nix recipe selects a compatible GdkPixbuf variant and builds librsvg against it; native distributions should use their own compatible package set.
 
@@ -102,6 +105,7 @@ In addition to linked-library runtime packages, ship or recommend the following 
 | `glib-networking` | Supply GIO TLS support for secure WebDAV. |
 | `ffmpeg`, `ffprobe` | Media thumbnails and metadata. |
 | `ffmpegthumbnailer` | Recommended for shared video-thumbnail filmstrips; executable/runtime closure only, no development headers. |
+| GStreamer plugins | With playback built: gst-plugins-base for `playbin`, `parsebin`, `videoconvertscale`, `appsink` and `capsfilter`, plus the demuxers and decoders for the formats the package supports and an audio output (PipeWire or PulseAudio). A file whose plugins are missing ends in the player's error state. |
 | `pdftoppm`, `pdfinfo` | PDF support, usually from Poppler utilities. |
 | `7zz`, `7z` or `7za` | Encrypted 7z input; searched in that order. `LUCIOLE_7Z` can select an absolute executable path. |
 | `xdg-terminal-exec` | Recommended for automatic terminal selection; configured commands and supported terminals can also be used directly. |
@@ -135,9 +139,10 @@ With relative `datadir=share`, Meson installs:
 <prefix>/share/zsh/site-functions/_luciole
 <prefix>/share/fish/vendor_completions.d/luciole.fish
 <prefix>/share/licenses/luciole/LICENSE
+<prefix>/share/licenses/luciole/third-party-notices.md
 ```
 
-Ship the fonts directory and its license together. The palette template is an integration resource, not per-user configuration. No AppStream/metainfo file, manual page or systemd unit is currently installed.
+Ship the fonts directory and its license together. Ship [docs/third-party-notices.md](docs/third-party-notices.md) beside `LICENSE`, since it carries the MIT notice of the program the sound visuals derive from. The palette template is an integration resource, not per-user configuration. No AppStream/metainfo file, manual page or systemd unit is currently installed.
 
 ### Asset lookup and staging
 

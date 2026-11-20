@@ -317,7 +317,7 @@ bool FileKeyboardController::folderKey(const KeyboardEvent& event) {
   auto& model = m_page.browser().model();
   const auto focused = model.selection().focused;
   if (event.modifiers == 0
-      && m_page.viewMode() == luciole::ViewMode::List
+      && luciole::showsDetailsRows(m_page.viewMode())
       && (KeySymbol::isLeft(event.sym) || KeySymbol::isRight(event.sym))) {
     if (KeySymbol::isRight(event.sym) != Style::rtl()) {
       if (!event.repeat) {

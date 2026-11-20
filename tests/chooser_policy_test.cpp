@@ -1,4 +1,5 @@
 #include "browser/chooser_policy.h"
+#include "temp_folder.h"
 #include "test_check.h"
 
 #include <exception>
@@ -83,7 +84,8 @@ namespace {
 
   void testSymlinks() {
     namespace fs = std::filesystem;
-    const auto root = fs::temp_directory_path() / ("luciole-chooser-links-" + std::to_string(::getpid()));
+    const luciole::test::TempFolder scratch("luciole-chooser-links");
+    const fs::path& root = scratch.path();
     fs::create_directories(root / "dir");
     std::ofstream(root / "file") << "x";
     fs::create_directory_symlink(root / "dir", root / "dir-link");
@@ -108,7 +110,6 @@ namespace {
     TEST_CHECK(luciole::chooserDecision({}, folder, fileLink).kind == Kind::Accept);
     TEST_CHECK(luciole::chooserDecision({}, folder, dangling).kind == Kind::Unavailable);
     TEST_CHECK(luciole::chooserDecision({.directory = true, .multiple = false}, folder, dirLink).kind == Kind::Accept);
-    fs::remove_all(root);
   }
 
   void testSelection() {

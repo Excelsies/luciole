@@ -2,6 +2,7 @@
 #include "fs/folder_totals.h"
 #include "fs/folder_totals_walk.h"
 #include "fs/gio_interop.h"
+#include "temp_folder.h"
 #include "test_check.h"
 
 #include <chrono>
@@ -187,13 +188,11 @@ namespace {
 } // namespace
 
 int main() {
-  const luciole::GString temporary(g_dir_make_tmp("luciole-folder-totals-XXXXXX", nullptr));
-  TEST_CHECK(temporary);
-  const fs::path root(temporary.get());
+  const luciole::test::TempFolder temporary("luciole-folder-totals");
+  const fs::path& root = temporary.path();
   basic(root);
   progressAndRaces(root);
   unreadable(root);
   lifecycle(root);
-  fs::remove_all(root);
   std::println("folder totals checks passed");
 }

@@ -1,5 +1,6 @@
 #include "fs/gio_interop.h"
 #include "platform/extraction_launcher.h"
+#include "temp_folder.h"
 #include "test_check.h"
 
 #include <filesystem>
@@ -24,13 +25,8 @@ namespace {
     luciole::GioPtr<GDBusConnection> connection(g_bus_get_sync(G_BUS_TYPE_SESSION, nullptr, nullptr));
     TEST_CHECK(connection);
     const ExtractionOffer offer{g_dbus_connection_get_unique_name(connection.get()), "/source"};
-    const luciole::GString tmp(g_dir_make_tmp("luciole-extraction-test-XXXXXX", nullptr));
-    TEST_CHECK(tmp);
-    const fs::path root(tmp.get());
-    struct Cleanup {
-      fs::path path;
-      ~Cleanup() { fs::remove_all(path); }
-    } cleanup{root};
+    const luciole::test::TempFolder tmp("luciole-extraction-test");
+    const fs::path& root = tmp.path();
     fs::create_directory(root / "space café");
     const auto destination = luciole::Location::fromPath((root / "space café").native());
     const char* xml = "<node><interface name='org.kde.ark.DndExtract'><method name='extractSelectedFilesTo'>"

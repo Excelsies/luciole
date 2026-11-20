@@ -57,7 +57,7 @@ All keys below belong in `[browser]`. Dimensions are logical pixels unless state
 
 | Key | Default | Accepted values / meaning |
 | --- | --- | --- |
-| `view_mode` | `"list"` | `"list"`, `"grid"`, `"miller"` |
+| `view_mode` | `"list"` | `"list"`, `"grid"`, `"miller"`, `"workbench"`. File picker windows open `"miller"` and `"workbench"` as `"list"` |
 | `grid_icon_size` | `48` | `32`, `48`, `64`, `80`, `96`, `128`, `160`, `192`, `256` |
 | `density` | `"compact"` | `"compact"`, `"comfortable"` |
 | `filename_truncation` | `"middle"` | `"middle"` keeps both ends of long filenames; `"end"` keeps the beginning. Applies to List and Columns. |
@@ -77,6 +77,7 @@ All keys below belong in `[browser]`. Dimensions are logical pixels unless state
 | `switch_to_new_tab` | `true` | Switch when opening a folder in a new tab; disable to keep browsing the current tab |
 | `restore_last_window` | `false` | Reopen tabs from the last closed window once in a new window, or at startup without a requested location |
 | `terminal_command` | `""` | Terminal command and optional arguments, for example `"foot"`; empty uses `$TERMINAL`, then automatic discovery |
+| `record_visits` | `true` | Count how often and how recently folders are entered and files are opened, for the Workbench visits measure. Off, nothing is recorded or written and every visit count reads as zero; counts already saved stay on disk. File picker windows never record |
 | `sort_by` | `"name"` | `"name"`, `"type"`, `"size"`, `"modified"`, `"accessed"`, `"created"`, `"owner"`, `"group"`, `"permissions"`, `"location"` |
 | `sort_descending` | `false` | Reverse sort direction |
 | `directories_first` | `true` | Group folders before files |
@@ -118,6 +119,44 @@ Width keys and defaults:
 
 Name accepts `0` for automatic sizing or an integer from `160` through `16384`. Other column widths accept integers from `64` through `2048`.
 
+### Workbench
+
+| Key | Default | Accepted values / meaning |
+| --- | --- | --- |
+| `workbench_instrument` | `"nest"` | `"nest"`, `"iris"`, `"atlas"`: the part above Jump ahead in the left column |
+| `workbench_ribbon` | `"flame"` | `"flame"`, `"flow"`, `"ladder"`: the part above the list |
+| `workbench_strips` | `true` | Ancestor strips beside the list |
+| `workbench_size_by` | `"size"` | What sizes shapes and orders entries: `"size"` (bytes), `"files"` (files below), `"items"` (direct entries), `"modified"` (recent changes weigh more), `"visits"`, `"equal"` |
+| `workbench_color_by` | `"type"` | `"type"`, `"size"`, `"visits"`, `"modified"` (the newest change is at the top of the ramp) |
+| `workbench_emphasis` | `0.5` | Number from `0` to `1`; every weight is raised to this power, so `0` makes all entries equal and `1` keeps true proportion |
+| `workbench_audio_visualizer` | `true` | A sound file in the preview shows a visual while it plays |
+| `workbench_preview_place` | `"jump_ahead_when_narrow"` | Where a file's preview is shown. `"jump_ahead_when_narrow"`: in its column, and in the place of Jump ahead when no column has room for it, as in a small window or at a high output scale. `"jump_ahead_always"`: in the place of Jump ahead at every window size, with no preview column. `"hidden_when_narrow"`: in its column, and not shown when no column has room |
+| `workbench_media_loop` | `false` | A video or sound file in the preview plays again from the start when it ends |
+| `workbench_audio_visual` | `"cosmic-peanut"` | `"cosmic-peanut"`, `"pulsar"`, `"bars"`, `"orbit"`, `"halo"`, `"radar"`, `"eclipse"`, `"dark-sun"`, `"stargate"`: the visual it shows |
+
+Settings → Views → Workbench sets these keys as Instrument, Ribbon, Ancestor strips, Size by, Color by, Emphasis, Preview placement (Replace Jump ahead when it does not fit, Always replace Jump ahead, or Hide when it does not fit), Audio visualizer and Visual, and `record_visits` as Record visits. Its Clear visit history button forgets every saved and unsaved visit count; a visit file that cannot be rewritten keeps its counts. When clearing ends, a problem the clear met, if there is one, is shown at the top of Settings; a clear that succeeds shows none.
+
+Pane sizes are logical pixels including the pane header. A size of `0` follows the window; a saved size that does not fit the window is reduced when the panes are laid out, and the saved value is kept.
+
+Workbench writes these keys itself: a size when you let go of its divider, a collapsed flag when the pane collapses or opens, and all of them when you press Reset layout. Its header switches write `workbench_instrument` and `workbench_ribbon`, the size controls of its preview write `workbench_preview_size`, which Reset layout leaves as it is, the visualizer and visual buttons of a sound file write `workbench_audio_visualizer` and `workbench_audio_visual`, and the loop button of a video or sound file writes `workbench_media_loop`. Whether the instrument covers the view is not saved.
+
+| Key | Default | Accepted values / meaning |
+| --- | --- | --- |
+| `workbench_left_width` | `0` | `0` (automatic) or an integer from `1` through `100000` |
+| `workbench_instrument_height` | `0` | `0` (automatic) or an integer from `1` through `100000` |
+| `workbench_flame_height` | `0` | `0` (the ribbon's preferred height) or an integer from `1` through `100000` |
+| `workbench_flow_height` | `0` | Same as `workbench_flame_height`; each ribbon keeps its own height |
+| `workbench_ladder_height` | `0` | Same as `workbench_flame_height` |
+| `workbench_instrument_collapsed` | `false` | Collapse the instrument |
+| `workbench_jump_collapsed` | `false` | Collapse Jump ahead |
+| `workbench_ribbon_collapsed` | `false` | Collapse the ribbon |
+| `workbench_first_column_width` | `260` | Integer `140` through `640` |
+| `workbench_second_column_width` | `190` | Integer `140` through `640` |
+| `workbench_third_column_width` | `140` | Integer `140` through `640` |
+| `workbench_list_width` | `0` | `0` (none) or an integer `320` through `469`: the narrower list width a second column ahead may leave, below the default `470` |
+| `workbench_strips_width` | `0` | `0` (the default, `153`) or an integer `70` through `321`: the width of the ancestor strips pane |
+| `workbench_preview_size` | `100` | `70`, `80`, `90`, `100`, `110`, `125`, `150`, `175`, `200`, `250` or `300`: the size in percent of every preview's content |
+
 ### Thumbnails
 
 | Key | Default | Accepted values |
@@ -135,6 +174,8 @@ The Image/PDF size limit applies to image and PDF sources. Video stills and embe
 User bookmarks live in `$XDG_CONFIG_HOME/gtk-3.0/bookmarks`, defaulting to `~/.config/gtk-3.0/bookmarks`, shared with Nemo, Nautilus and GTK file choosers. Each line contains a URI and an optional label separated by a space. The older `~/.gtk-bookmarks` is read as a fallback when the modern file has not been found; edits go to the modern path. Read-only or symlink-managed files can be displayed, but Luciole refuses edits that would replace a read-only or linked file. Old Luciole pins are not migrated.
 
 Built-in Places layout and optional last-window tab state remain in `$XDG_STATE_HOME/luciole/state.toml`, defaulting to `~/.local/state/luciole/state.toml`. Cached user rows there preserve their placement among built-ins; their contents always come from the shared bookmark file. Deleting a shared user bookmark removes it from Luciole even when an old cache row remains. Tab restoration is controlled by `browser.restore_last_window`.
+
+Visit counts live in `$XDG_STATE_HOME/luciole/visits/`, defaulting to `~/.local/state/luciole/visits/`, as private files readable only by you. Each location keeps how many times it was entered or opened and when last. A folder counts once it has loaded; a folder that fails to open, a refresh, a duplicated tab or split pane, a new tab or window showing the current folder, and the tabs restored by `restore_last_window` do not count. Locations are spread over 32 files of at most 625 locations each, so at most 20,000 are kept; when a file is full, its least recently visited locations are forgotten. Locations with passwords, queries or fragments are never recorded. A damaged visit file is reported as a warning and its counts start again from zero. A visit file in a format this version of Luciole does not read is left for the version that wrote it, and its locations are not counted here. A visit file larger than 256 KiB or replaced by a link is reported as a warning on every write and left as it is until you remove it while Luciole is closed. Set `browser.record_visits = false` to stop recording; delete the folder while Luciole is closed to forget every count.
 
 Thumbnails use the shared `$XDG_CACHE_HOME/thumbnails/` cache plus a Luciole ownership ledger under `$XDG_CACHE_HOME/luciole/`. The default cache root is `~/.cache`. Custom actions live in the [Scripts directory](scripts.md).
 

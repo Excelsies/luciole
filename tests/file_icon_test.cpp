@@ -2,6 +2,7 @@
 #include "fs/gio_interop.h"
 #include "imaging/pixbuf_image_decoder.h"
 #include "system/icon_resolver.h"
+#include "temp_folder.h"
 #include "test_check.h"
 #include "thumbnails/file_icon_cache.h"
 
@@ -16,11 +17,9 @@
 namespace {
   namespace fs = std::filesystem;
   struct Fixture {
-    fs::path root;
+    luciole::test::TempFolder tempFolder{"luciole-icons"};
+    fs::path root = tempFolder.path();
     Fixture() {
-      const luciole::GString path(g_dir_make_tmp("luciole-icons-XXXXXX", nullptr));
-      TEST_CHECK(path != nullptr);
-      root = path.get();
       fs::create_directories(root / "config/gtk-3.0");
       fs::create_directories(root / "data/icons/Test/scalable/apps");
       fs::create_directories(root / "data/icons/Test/16x16/apps");
@@ -66,7 +65,6 @@ namespace {
       g_setenv("GSETTINGS_BACKEND", "memory", TRUE);
       g_setenv("GSETTINGS_SCHEMA_DIR", (root / "empty").c_str(), TRUE);
     }
-    ~Fixture() { fs::remove_all(root); }
   };
   class Pump {
   public:
@@ -85,6 +83,23 @@ namespace {
   private:
     GlibPollSource m_source;
   };
+  // A cache that goes away leaves no worker running: every lookup of a started job is done when the destructor returns.
+  void destroyingTheCacheWaitsForItsJobs() {
+    constexpr int kNames = 1500;
+    luciole::FileIconSource source;
+    for (int index = 0; index < kNames; ++index) {
+      source.names.push_back("absent-" + std::to_string(index));
+    }
+    const auto before = IconResolver::lookupCount();
+    {
+      luciole::FileIconCache cache;
+      // Two jobs run at once; the third waits in the queue and is dropped with the cache.
+      for (const int size : {20, 21, 22}) {
+        cache.request(source, size);
+      }
+    }
+    TEST_CHECK(IconResolver::lookupCount() - before == 2U * kNames);
+  }
   void testIcons() {
     Fixture fixture;
     Pump pump;
@@ -132,6 +147,7 @@ namespace {
     const auto abandoned = dying->request(source, 32);
     pump.until([&] { return destroyed; });
     TEST_CHECK(abandoned->ready);
+    destroyingTheCacheWaitsForItsJobs();
   }
 } // namespace
 

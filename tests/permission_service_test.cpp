@@ -3,6 +3,7 @@
 #include "fs/gio_interop.h"
 #include "operations/permission_jobs.h"
 #include "operations/permission_service.h"
+#include "temp_folder.h"
 #include "test_check.h"
 
 #include <acl/libacl.h>
@@ -28,16 +29,8 @@ namespace {
   using P = luciole::PermissionPhase;
   unsigned supportedSpecialBits = 0;
   struct Fixture {
-    fs::path root;
-    Fixture() {
-      std::string path = "/tmp/luciole-permissions-XXXXXX";
-      TEST_CHECK(::mkdtemp(path.data()));
-      root = path;
-    }
-    ~Fixture() {
-      std::error_code error;
-      fs::remove_all(root, error);
-    }
+    luciole::test::TempFolder tempFolder{"luciole-permissions"};
+    fs::path root = tempFolder.path();
   };
   void write(const fs::path& path) { std::ofstream(path) << "payload"; }
   struct stat metadata(const fs::path& path) {

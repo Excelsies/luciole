@@ -1,4 +1,5 @@
 #include "fs/gio_interop.h"
+#include "temp_folder.h"
 #include "test_check.h"
 #include "thumbnails/metadata_probe.h"
 #include "thumbnails/preview_metadata.h"
@@ -425,9 +426,8 @@ int main(int argc, char** argv) {
   if (!args.empty() && args.front() == "--thumbnail-worker") {
     return luciole::runThumbnailWorker(std::span(args).subspan(1));
   }
-  const luciole::GString temporary(g_dir_make_tmp("luciole-metadata-test-XXXXXX", nullptr));
-  TEST_CHECK(temporary != nullptr);
-  const fs::path root(temporary.get());
+  const luciole::test::TempFolder temporary("luciole-metadata-test");
+  const fs::path& root = temporary.path();
   ::setenv("XDG_CACHE_HOME", (root / "cache").c_str(), 1);
   parserChecks();
   imageChecks(root);
@@ -435,6 +435,5 @@ int main(int argc, char** argv) {
   nativeFactsChecks(root);
   mediaChecks(root);
   lifecycleChecks(root);
-  fs::remove_all(root);
   std::println("preview metadata checks passed");
 }

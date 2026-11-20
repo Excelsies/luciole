@@ -2,6 +2,7 @@
 #include "fs/filename.h"
 #include "fs/gio_interop.h"
 #include "operations/batch_rename_service.h"
+#include "temp_folder.h"
 #include "test_check.h"
 
 #include <algorithm>
@@ -23,16 +24,8 @@ namespace {
   using P = luciole::BatchRenamePhase;
   using O = luciole::BatchRenameOutcome;
   struct Fixture {
-    fs::path root;
-    Fixture() {
-      std::string path = "/tmp/luciole-batch-XXXXXX";
-      TEST_CHECK(::mkdtemp(path.data()));
-      root = path;
-    }
-    ~Fixture() {
-      std::error_code error;
-      fs::remove_all(root, error);
-    }
+    luciole::test::TempFolder tempFolder{"luciole-batch"};
+    fs::path root = tempFolder.path();
   };
   void write(const fs::path& path, const std::string& value) { std::ofstream(path) << value; }
   std::string read(const fs::path& path) {

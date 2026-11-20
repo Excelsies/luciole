@@ -284,6 +284,15 @@ void luciole::WindowSurface::setParent(std::string handle, bool modal) {
   m_parent->modal = modal;
 }
 
+void luciole::WindowSurface::setCloseGuard(std::function<bool()> mayClose) {
+  // close() stops the window before its callback runs, so a refused close starts it again.
+  setClosedCallback([this, mayClose = std::move(mayClose)] {
+    if (mayClose && !mayClose()) {
+      setRunning(true);
+    }
+  });
+}
+
 void luciole::WindowSurface::setFrameCallbacks(std::function<void()> rendered, std::function<void()> frameDone) {
   m_rendered = std::move(rendered);
   m_frameDone = std::move(frameDone);

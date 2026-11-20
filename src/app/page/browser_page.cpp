@@ -1,5 +1,6 @@
 #include "app/page/browser_page.h"
 
+#include "app/page/preview_edit_keys.h"
 #include "app/startup_trace.h"
 #include "browser/action_registry.h"
 #include "browser/browser_controller.h"
@@ -64,7 +65,9 @@
 #include <cmath>
 #include <cstdlib>
 #include <format>
+#include <functional>
 #include <memory>
+#include <stdexcept>
 #include <string>
 #include <unordered_set>
 #include <utility>
@@ -77,6 +80,18 @@ namespace {
   constexpr float kDialogMargin = 32.0F;
   // The lib's default popup shadow, as on its context menus.
   constexpr ShadowStyle kDialogShadow{};
+  // Toolbar view switch segments in order; file picker windows show only the first two.
+  constexpr auto kViewSegments = std::to_array<std::pair<luciole::ViewMode, luciole::BrowserAction>>(
+      {{luciole::ViewMode::Grid, luciole::BrowserAction::Grid},
+       {luciole::ViewMode::List, luciole::BrowserAction::List},
+       {luciole::ViewMode::Miller, luciole::BrowserAction::Miller},
+       {luciole::ViewMode::Workbench, luciole::BrowserAction::Workbench}}
+  );
+  std::size_t viewSegment(luciole::ViewMode mode) {
+    return static_cast<std::size_t>(
+        std::ranges::find(kViewSegments, mode, &decltype(kViewSegments)::value_type::first) - kViewSegments.begin()
+    );
+  }
 } // namespace
 
 BrowserPage::BrowserPage(
@@ -84,7 +99,7 @@ BrowserPage::BrowserPage(
     const luciole::BrowserSettings& settings, luciole::WaylandTextClipboard& clipboard, luciole::WindowSurface& surface,
     InputDispatcher& dispatcher, AnimationManager& animations, luciole::PinService& pins, luciole::DriveMonitor& drives,
     luciole::FileIconCache& icons, luciole::ThumbnailService& thumbnails, luciole::ViewPreferenceWriter& preferences,
-    OperationHub& hub, luciole::TabId id
+    luciole::VisitService& visits, OperationHub& hub, luciole::TabId id
 )
     : m_connection(connection), m_renderer(renderer), m_textInput(textInput), m_animations(animations),
       m_surface(&surface), m_dispatcher(&dispatcher),
@@ -99,8 +114,15 @@ BrowserPage::BrowserPage(
           [this] { return m_connection.keyboardModifiers(); },
           [this] { return m_fileKeys.keyboardFocus() && m_list != nullptr && m_list->focusArea()->focused(); }
       ),
-      m_preferences(preferences), m_savedSettings(settings), m_pins(pins), m_drives(drives), m_hub(hub),
-      m_jobs(hub, id), m_viewMode(settings.viewMode), m_clipboard(clipboard), m_workspaceId(id) {
+      m_preferences(preferences), m_savedSettings(settings), m_pins(pins), m_visits(visits), m_drives(drives),
+      m_hub(hub), m_jobs(hub, id), m_viewMode(settings.viewMode), m_clipboard(clipboard), m_workspaceId(id),
+      m_viewChange(
+          {.current = [this] { return m_viewMode; },
+           .segmentOf = viewSegment,
+           .leave = [this](std::function<void()> resume) { return leave(std::move(resume)); },
+           .unsaved = [this] { return unsaved(); },
+           .apply = [this](luciole::ViewMode mode) { takeViewMode(mode); }}
+      ) {
   if (m_preferences.settings()) {
     m_savedSettings = m_preferences.settings()->browser;
   }
@@ -128,11 +150,12 @@ BrowserPage::BrowserPage(
     }
     return viewport;
   });
-  m_browser.setExpandableFolders(settings.expandableFolders && settings.viewMode == luciole::ViewMode::List);
+  m_browser.setExpandableFolders(settings.expandableFolders && luciole::showsDetailsRows(settings.viewMode));
   m_terminal.setCommand(settings.terminalCommand);
   m_launcher.setTerminalCommand(settings.terminalCommand);
   m_sidebar.load(settings);
   m_detailsHeader.load(settings);
+  m_workbench.load(settings);
   m_activationMode = settings.activationMode;
   m_fileKeys.setTypingMode(settings.typingMode);
   m_browser.setSearchRecursive(settings.typingMode != luciole::TypingMode::Filter);
@@ -143,13 +166,14 @@ BrowserPage::BrowserPage(
     }
     m_surface->requestUpdate();
   });
-  m_browser.setFileActivatedCallback([this](const luciole::Location& location) { m_launcher.open(location); });
+  m_browser.setFileActivatedCallback([this](const luciole::Location& location) { launch(location); });
+  m_browser.setEnteredCallback([this](const luciole::Location& location) { recordVisit(location); });
   m_miller.defaultWidth = settings.millerColumnWidth;
   m_miller.setChangedCallback([this] {
     m_browserDirty = true;
     m_surface->requestUpdate();
   });
-  m_miller.setFileActivatedCallback([this](const luciole::Location& target) { m_launcher.open(target); });
+  m_miller.setFileActivatedCallback([this](const luciole::Location& target) { launch(target); });
   m_launcher.setActivationProvider([this](const std::string& appId, luciole::FileLauncher::ActivationReply reply) {
     m_connection.extension<luciole::DesktopIntegration>().requestActivation(
         m_surface->wlSurface(), m_connection.lastInputSerial(), appId, std::move(reply)
@@ -180,6 +204,7 @@ BrowserPage::BrowserPage(
     );
   }
   m_hub.attach(m_workspaceId, *this);
+  setEditing(pageEditing(m_workbench.editor()));
 }
 
 luciole::BrowserController& BrowserPage::browser() { return m_miller.enabled() ? m_miller.active() : m_browser; }
@@ -220,11 +245,14 @@ BrowserPage::~BrowserPage() {
   m_miller.setChangedCallback({});
   m_miller.setFileActivatedCallback({});
   m_browser.setFileActivatedCallback({});
+  m_browser.setEnteredCallback({});
   m_launcher.setChangedCallback({});
   m_preview.setChangedCallback({});
   m_preview.clear();
   closePopup();
   m_archiveController.close();
+  m_workbench.close();
+  m_viewChange.setSegment(nullptr);
   unmount();
   m_root = nullptr;
   m_detachedRoot.reset();
@@ -257,7 +285,26 @@ bool BrowserPage::busy() const {
       || m_launcher.busy()
       || m_programs.busy()
       || m_transferController.pastePending()
-      || m_transferController.extractionPending();
+      || m_transferController.extractionPending()
+      || (m_editing && m_editing->saving());
+}
+
+bool BrowserPage::editorFocused() const { return m_editing && m_editing->textFocused(); }
+
+bool BrowserPage::unsaved() const { return m_editing && m_editing->unsaved(); }
+
+bool BrowserPage::leave(std::function<void()> resume) { return !m_editing || m_editing->leave(std::move(resume)); }
+
+void BrowserPage::setEditing(PageEditing editing) {
+  if (!editing.textFocused
+      || !editing.key
+      || !editing.unsaved
+      || !editing.saving
+      || !editing.leave
+      || !editing.keepQuestion) {
+    throw std::invalid_argument("A page editor needs every PageEditing callback.");
+  }
+  m_editing = std::move(editing);
 }
 
 void BrowserPage::shutdown() {
@@ -311,6 +358,14 @@ void BrowserPage::thumbnailsChanged() {
   }
   m_preview.thumbnailsChanged();
   m_surface->requestLayout();
+}
+
+void BrowserPage::visitsChanged() {
+  m_settingsController.visitsChanged();
+  m_workbench.visitsChanged();
+  if (m_settingsController.open()) {
+    m_surface->requestUpdate();
+  }
 }
 
 void BrowserPage::transfersFinished(const std::vector<luciole::TransferResult>& results) {
@@ -446,6 +501,10 @@ void BrowserPage::setWorkspaceRequest(
   m_workspaceRequest = std::move(callback);
 }
 
+void BrowserPage::setOperationRequest(std::function<void(luciole::JobId, bool)> callback) {
+  m_operationRequest = std::move(callback);
+}
+
 void BrowserPage::reviewOperation(luciole::JobId id, bool retry) {
   m_pendingOperation = std::pair(id, retry);
   requestSync();
@@ -479,6 +538,23 @@ void BrowserPage::configurationChanged() {
 
 void BrowserPage::setHasOther(std::function<bool()> callback) { m_hasOther = std::move(callback); }
 
+void BrowserPage::setVisitRecorder(std::function<void(const luciole::Location&)> record) {
+  m_recordVisit = std::move(record);
+}
+
+void BrowserPage::setWorkbenchServices(luciole::WorkbenchServices& services) { m_workbench.setServices(services); }
+
+void BrowserPage::recordVisit(const luciole::Location& location) const {
+  if (m_recordVisit) {
+    m_recordVisit(location);
+  }
+}
+
+void BrowserPage::launch(const luciole::Location& location) {
+  recordVisit(location);
+  m_launcher.open(location);
+}
+
 void BrowserPage::setPopupAvailable(std::function<bool()> callback) { m_popupAvailable = std::move(callback); }
 
 void BrowserPage::setForeignDrop(
@@ -508,7 +584,7 @@ bool BrowserPage::previewEnabled() const {
   return choosing() ? m_savedSettings.chooserShowPreview : m_savedSettings.showPreview;
 }
 
-bool BrowserPage::previewVisible() const { return previewEnabled() && !overlay(); }
+bool BrowserPage::previewVisible() const { return previewEnabled() && !overlay() && !m_workbench.hidesDockedPreview(); }
 
 void BrowserPage::togglePreview() {
   const bool shown = !previewEnabled();
@@ -599,6 +675,7 @@ void BrowserPage::prepare(LayoutRect bounds, bool active, bool roundCorner) {
   } else if (!active && m_active) {
     deactivate();
   }
+  m_workbench.placePreview();
   m_previewController.sync();
   m_previewController.layoutPane(active && previewVisible());
 }
@@ -615,6 +692,9 @@ void BrowserPage::deactivate() {
   }
   m_active = false;
   m_transferController.keepConflict();
+  if (m_editing && m_activePopup.kind() == ActivePopup::Kind::SaveChanges) {
+    m_editing->keepQuestion();
+  }
   closePopup();
   m_fileKeys.clearTypeahead();
   m_dragDrop.cancelDrag();
@@ -622,6 +702,7 @@ void BrowserPage::deactivate() {
 
 void BrowserPage::hide() {
   deactivate();
+  m_workbench.hide();
   if (m_visible && m_list) {
     m_inactiveViewport = luciole::BrowseViewport{
         m_viewMode,
@@ -768,6 +849,9 @@ void BrowserPage::pointer(const PointerEvent& event) {
   }
   m_pointerX = x;
   m_pointerY = y;
+  if (page) {
+    m_workbench.pointer(event, x, y);
+  }
   if (page && millerPointer(event, x, y)) {
     return;
   }
@@ -786,7 +870,9 @@ void BrowserPage::pointer(const PointerEvent& event) {
       m_surface->requestUpdate();
     }
   }
-  if (page && (m_detailsHeader.release(event, x, y) || m_detailsHeader.contextPress(event, x, y))) {
+  if (page
+      && (m_detailsHeader.release(event, x, y)
+          || (!m_workbench.coversFilePane() && m_detailsHeader.contextPress(event, x, y)))) {
     return;
   }
   if (page
@@ -794,6 +880,7 @@ void BrowserPage::pointer(const PointerEvent& event) {
       && event.pressed
       && event.button == BTN_RIGHT
       && m_statusBar.noticeShown()
+      && !m_workbench.coversFilePane()
       && m_filePane->containsScenePoint(x, y)
       && !m_detailsHeader.headerContains(x, y)) {
     m_menuController.openFileMenu(std::nullopt, x, y);
@@ -833,8 +920,10 @@ void BrowserPage::pointer(const PointerEvent& event) {
   }
 }
 
+void BrowserPage::pointerLeft() { m_workbench.pointerLeft(); }
+
 std::optional<luciole::FileTooltipTarget> BrowserPage::fileTooltipAt(float x, float y) const {
-  if (!m_visible || overlay()) {
+  if (!m_visible || overlay() || m_workbench.coversFilePane()) {
     return std::nullopt;
   }
   const luciole::BrowserController* controller = &browser();
@@ -881,7 +970,7 @@ bool BrowserPage::openInNewTab(float x, float y) {
   const auto command = (m_connection.keyboardModifiers() & KeyMod::Shift) != 0
       ? (m_savedSettings.switchToNewTab ? WorkspaceCommand::NewBackgroundTab : WorkspaceCommand::NewTab)
       : WorkspaceCommand::OpenTab;
-  if (m_list && m_list->containsScenePoint(x, y)) {
+  if (m_list && !m_workbench.coversFilePane() && m_list->containsScenePoint(x, y)) {
     if (auto index = m_list->itemAtScene(x, y); index && *index < browser().model().rows().size()) {
       const auto* entry = browser().model().entry(browser().model().rows()[*index]);
       if (entry && entry->type == luciole::FileType::Directory) {
@@ -985,14 +1074,15 @@ void BrowserPage::dispatchPointer(InputDispatcher& input, const PointerEvent& ev
       m_submenus.menuScrolled();
     }
     if (page
-        && m_viewMode == luciole::ViewMode::List
+        && luciole::showsDetailsRows(m_viewMode)
+        && !m_workbench.coversFilePane()
         && m_filePane->containsScenePoint(x, y)
         && (event.axis == WL_POINTER_AXIS_HORIZONTAL_SCROLL
             || (event.axis == WL_POINTER_AXIS_VERTICAL_SCROLL && m_connection.keyboardModifiers() == KeyMod::Shift))) {
       m_detailsHeader.scrollWheel(event);
       break;
     }
-    if (page && zoomFromScroll(event)) {
+    if (page && (m_workbench.previewWheel(event, x, y) || zoomFromScroll(event))) {
       break;
     }
     input.pointerAxis(
@@ -1040,6 +1130,9 @@ void BrowserPage::keyboard(const KeyboardEvent& event) {
     m_menuController.key(event);
     return;
   }
+  if (editorFocused() && m_editing->key(event)) {
+    return;
+  }
   if (m_archiveController.key(event)) {
     return;
   }
@@ -1063,6 +1156,9 @@ void BrowserPage::keyboard(const KeyboardEvent& event) {
     m_chooser.open({});
     return;
   }
+  if (m_workbench.key(event)) {
+    return;
+  }
   if (event.pressed && !event.preedit && shortcutKey(event)) {
     return;
   }
@@ -1073,7 +1169,7 @@ void BrowserPage::keyboard(const KeyboardEvent& event) {
 }
 
 bool BrowserPage::escapeGesture(const KeyboardEvent& event) {
-  if ((m_detailsHeader.gestureActive() || (m_millerView && m_millerView->resizing()))
+  if ((m_detailsHeader.gestureActive() || (m_millerView && m_millerView->resizing()) || m_workbench.resizing())
       && KeySymbol::isEscape(event.sym)) {
     dispatcher().cancelPointerCapture();
     return true;
@@ -1101,7 +1197,8 @@ bool BrowserPage::shortcutKey(const KeyboardEvent& event) {
   if (!event.repeat && dispatchShortcut(event, {Action::Terminal})) {
     return true;
   }
-  const bool editing = m_locationBar.textFocused();
+  // The editor keeps its keys; the shortcuts that leave its file go on to the page.
+  const bool editing = luciole::textHasKey(m_locationBar.textFocused(), editorFocused(), event.sym, event.modifiers);
   if (!editing
       && !event.repeat
       && dispatchShortcut(
@@ -1144,7 +1241,8 @@ bool BrowserPage::shortcutKey(const KeyboardEvent& event) {
   if (!editing && (m_detailsHeader.menuKey(event) || m_fileKeys.commandKey(event))) {
     return true;
   }
-  if (!editing && dispatchShortcut(event, {Action::Grid, Action::List, Action::Miller, Action::ShowHidden})) {
+  if (!editing
+      && dispatchShortcut(event, {Action::Grid, Action::List, Action::Miller, Action::Workbench, Action::ShowHidden})) {
     return true;
   }
   if (m_list != nullptr
@@ -1368,9 +1466,12 @@ void BrowserPage::runAction(
       {Action::Stop, [](BrowserPage& page, const Call&) { page.browser().stop(); }},
       {Action::EditLocation, [](BrowserPage& page, const Call&) { page.m_locationBar.beginLocationEdit(); }},
       {Action::Search, [](BrowserPage& page, const Call&) { page.m_locationBar.openFilter(); }},
-      {Action::Grid, [](BrowserPage& page, const Call&) { page.setViewMode(luciole::ViewMode::Grid); }},
-      {Action::List, [](BrowserPage& page, const Call&) { page.setViewMode(luciole::ViewMode::List); }},
-      {Action::Miller, [](BrowserPage& page, const Call&) { page.setViewMode(luciole::ViewMode::Miller); }},
+      {Action::Grid, [](BrowserPage& page, const Call&) { page.m_viewChange.request(luciole::ViewMode::Grid); }},
+      {Action::List, [](BrowserPage& page, const Call&) { page.m_viewChange.request(luciole::ViewMode::List); }},
+      {Action::Miller,
+       [](BrowserPage& page, const Call&) { page.m_viewChange.request(luciole::ViewMode::Miller); }},
+      {Action::Workbench,
+       [](BrowserPage& page, const Call&) { page.m_viewChange.request(luciole::ViewMode::Workbench); }},
       {Action::ShowHidden, [](BrowserPage& page, const Call&) { page.toggleHidden(); }},
       {Action::ShowSidebar, [](BrowserPage& page, const Call&) { page.m_sidebar.setVisible(!page.m_sidebar.visible()); }},
       {Action::ShowPreview, [](BrowserPage& page, const Call&) { page.togglePreview(); }},
@@ -1576,6 +1677,9 @@ void BrowserPage::openTargets(const std::vector<luciole::DirectoryEntry>& target
       }
     }
     if (!files.empty()) {
+      for (const auto& file : files) {
+        recordVisit(file);
+      }
       m_launcher.open(files);
     }
   }
@@ -1671,6 +1775,8 @@ Node& BrowserPage::upButton() { return *m_up; }
 VirtualGridView* BrowserPage::fileList() { return m_list; }
 
 Flex& BrowserPage::filePane() { return *m_filePane; }
+
+bool BrowserPage::filePaneCovered() const { return m_workbench.coversFilePane(); }
 
 MillerView& BrowserPage::millerView() { return *m_millerView; }
 
@@ -1794,6 +1900,7 @@ void BrowserPage::applySettings(const luciole::BrowserSettings& settings, bool f
     m_body->setFill(colorSpecFromRole(ColorRole::Surface, static_cast<float>(settings.backgroundOpacity)));
   }
   m_sidebar.applySettings(before, settings, force);
+  m_workbench.applySettings(before, settings, force);
   if (m_settingsController.open()) {
     m_detailsHeader.applySettings(before, settings, force);
   }
@@ -1836,10 +1943,7 @@ void BrowserPage::changeSort(luciole::SortOptions options) {
   dispatcher().setFocus(m_list->focusArea());
 }
 
-void BrowserPage::setViewMode(luciole::ViewMode mode) {
-  if (mode == m_viewMode) {
-    return;
-  }
+void BrowserPage::takeViewMode(luciole::ViewMode mode) {
   m_viewAnchor.reset();
   if (m_list != nullptr) {
     captureViewAnchor();
@@ -1968,7 +2072,7 @@ void BrowserPage::syncBrowser() {
   if (m_visitSerial != browser().visitSerial()) {
     m_visitSerial = browser().visitSerial();
     const auto& viewport = browser().viewport();
-    m_viewMode = m_miller.enabled() ? luciole::ViewMode::Miller : viewport.mode;
+    m_viewMode = luciole::viewModeAfterVisit(m_viewMode, m_miller.enabled(), viewport.mode);
     m_gridZoom = static_cast<std::size_t>(
         std::ranges::find(luciole::kGridIconSizes, viewport.iconSize) - luciole::kGridIconSizes.begin()
     );
@@ -1977,7 +2081,7 @@ void BrowserPage::syncBrowser() {
   }
   m_fileKeys.applyPendingCursor();
   m_browser.setExpandableFolders(
-      m_savedSettings.expandableFolders && m_viewMode == luciole::ViewMode::List && !m_miller.enabled()
+      m_savedSettings.expandableFolders && luciole::showsDetailsRows(m_viewMode) && !m_miller.enabled()
   );
   const auto& model = browser().model();
   const auto& snapshot = model.snapshot();
@@ -2012,8 +2116,7 @@ void BrowserPage::syncBrowser() {
   m_menuButton->setTooltip(
       std::format("View options: {}, {}{}", field, direction, sort.directoriesFirst ? " · Folders first" : "")
   );
-  const bool grid = m_viewMode == luciole::ViewMode::Grid;
-  m_viewSwitch->setSelectedIndex(grid ? 0 : m_viewMode == luciole::ViewMode::List ? 1 : 2);
+  m_viewChange.show(m_viewMode);
   const auto request = actionRequest(false);
   for (const auto& [button, action] : std::array{
            std::pair{m_back, Action::Back}, std::pair{m_forward, Action::Forward}, std::pair{m_up, Action::Up}
@@ -2185,6 +2288,9 @@ void BrowserPage::prepareFrame(bool, bool layout) {
   m_propertiesController.onFrame();
   m_batchRename.onFrame();
   m_renameController.onFrame();
+  m_workbench.onFrame();
+  m_workbench.editor().onFrame();
+  m_workbench.editor().watch(browser().model());
   if (m_browserDirty) {
     m_browserDirty = false;
     m_renameController.syncPlaceRename();
@@ -2201,7 +2307,6 @@ void BrowserPage::prepareFrame(bool, bool layout) {
 
 void BrowserPage::layoutFrame(Renderer& renderer) {
   UiPhaseScope phase(UiPhase::Layout);
-  m_statusBar.layout(m_pageBounds.width);
   auto placesFocus = m_sidebar.invalidate();
   m_dragDrop.applyScroll();
   m_sidebar.layout();
@@ -2233,7 +2338,7 @@ void BrowserPage::layoutFrame(Renderer& renderer) {
   const bool columnOrderChanged = m_detailsHeader.applyOrder();
   m_titlebar->setVisible(clientHeader);
   m_titlebar->setParticipatesInLayout(clientHeader);
-  const bool details = m_viewMode == luciole::ViewMode::List;
+  const bool details = luciole::showsDetailsRows(m_viewMode);
   // List headers own their vertical insets so their labels and resize
   // markers are centered between the pane edge and the header rule.
   m_paneContentFrame->setPadding(
@@ -2251,7 +2356,9 @@ void BrowserPage::layoutFrame(Renderer& renderer) {
     m_body->arrange(renderer, m_pageBounds);
     m_detailsHeader.layoutHeader(renderer);
   }
-  m_statusBar.arrange(renderer, m_pageBounds.width, m_pageBounds.height);
+  m_statusBar.arrange(
+      renderer, m_workbench.listArea(*m_body).value_or(LayoutRect{0, 0, m_pageBounds.width, m_pageBounds.height})
+  );
   const bool columnHoverDirty = m_detailsHeader.takeHoverDirty();
   if (columnOrderChanged || columnHoverDirty) {
     dispatcher().syncPointerHover();
@@ -2416,29 +2523,37 @@ std::unique_ptr<Flex> BrowserPage::buildToolbar() {
                .onClick = [this] { m_menuController.openSortMenu(sceneRect(*m_sortButton)); }}
           ),
           ui::segmented(
-              {.out = &m_viewSwitch,
-               .options =
+              {.options =
                    [this] {
                      std::vector<ui::SegmentedOption> views{
                          {.label = "", .glyph = "layout-grid", .tooltip = "Grid view (Ctrl+1)"},
                          {.label = "", .glyph = "list", .tooltip = "List view (Ctrl+2)"}
                      };
-                     // Column view is unavailable while choosing files.
+                     // Column view and Workbench are unavailable while choosing files.
                      if (!choosing()) {
                        views.push_back({.label = "", .glyph = "columns-3", .tooltip = "Column view (Ctrl+3)"});
+                       views.push_back(
+                           {.label = "", .glyph = "layout-dashboard", .tooltip = "Workbench view (Ctrl+4)"}
+                       );
                      }
                      return views;
                    }(),
-               .selectedIndex = m_viewMode == luciole::ViewMode::Grid ? 0U
-                   : m_viewMode == luciole::ViewMode::List            ? 1U
-                                                                      : 2U,
+               .selectedIndex = viewSegment(m_viewMode),
                .compact = true,
                .onChange =
                    [this](std::size_t index) {
-                     dispatchAction(index == 0 ? Action::Grid : index == 1 ? Action::List : Action::Miller);
+                     m_viewChange.changed(index, [this](std::size_t picked) {
+                       if (picked < kViewSegments.size()) {
+                         dispatchAction(kViewSegments[picked].second);
+                       }
+                     });
                    },
-               // Same pill colour as the address and search fields; the default track is the chrome colour.
-               .configure = [](Segmented& view) { view.setSurfaceRole(ColorRole::SurfaceContainerHigh); }}
+               // Same pill color as the address and search fields; the default track is the chrome color.
+               .configure =
+                   [this](Segmented& view) {
+                     view.setSurfaceRole(ColorRole::SurfaceContainerHigh);
+                     m_viewChange.setSegment(&view);
+                   }}
           ),
           m_operations.buildButton(),
           ui::button(

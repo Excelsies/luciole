@@ -2,6 +2,7 @@
 #include "platform/program_launcher.h"
 #include "platform/terminal_command.h"
 #include "platform/terminal_launcher.h"
+#include "temp_folder.h"
 #include "test_check.h"
 
 #include <algorithm>
@@ -317,12 +318,11 @@ namespace {
 } // namespace
 
 int main() {
-  char temporary[] = "/tmp/luciole-program-test-XXXXXX";
-  TEST_CHECK(mkdtemp(temporary));
-  const fs::path root(temporary);
+  const luciole::test::TempFolder temporary("luciole-program-test");
+  const fs::path& root = temporary.path();
   const luciole::GString python(g_find_program_in_path("python3"));
   TEST_CHECK(python);
-  g_setenv("HOME", temporary, true);
+  g_setenv("HOME", root.c_str(), true);
   g_setenv("XDG_DATA_HOME", (root / "data").c_str(), true);
   g_setenv("XDG_CONFIG_HOME", (root / "config").c_str(), true);
   g_setenv("DBUS_SESSION_BUS_ADDRESS", "unix:path=/luciole-program-test-missing-bus", true);
@@ -342,11 +342,9 @@ int main() {
     testRefusals(fixture);
     testDesktop(fixture);
     testScripts(fixture);
-    fs::remove_all(root);
     std::println("program launcher checks passed");
   } catch (const std::exception& error) {
     std::println(stderr, "{}", error.what());
-    fs::remove_all(root);
     return 1;
   }
 }

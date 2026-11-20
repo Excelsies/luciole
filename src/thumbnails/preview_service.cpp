@@ -2,6 +2,8 @@
 
 #include "fs/entry_access.h"
 #include "fs/gio_interop.h"
+#include "model/private_key.h"
+#include "thumbnails/font_preview.h"
 
 #include <algorithm>
 #include <array>
@@ -114,6 +116,10 @@ namespace {
         || stamp(before) != stamp(named)) {
       return {{}, "The file changed while reading the preview.", true};
     }
+    // Checks only the bytes read above.
+    if (containsPrivateKey(bytes)) {
+      return {{}, "This file looks like it contains a private key. Its text is not shown."};
+    }
     bool truncated = static_cast<std::uint64_t>(before.st_size) > bytes.size();
     if (bytes.starts_with("\xEF\xBB\xBF")) {
       bytes.erase(0, 3);
@@ -165,6 +171,7 @@ struct luciole::PreviewService::State : std::enable_shared_from_this<State> {
   std::uint64_t serial = 0;
   int pixels = 0;
   ThumbnailOptions options;
+  std::string colors; // fontSheetVariant of the shown entry
   bool running = false, pending = false, alive = true;
   void resetSelection() {
     ++serial;
@@ -278,7 +285,12 @@ void luciole::PreviewService::show(
     return;
   }
   const auto& options = m_state->thumbnails.options();
-  const bool unchanged = m_state->view.entry && sameSource(*entry, *m_state->view.entry) && options == m_state->options;
+  // A font sheet is drawn in the theme's colors.
+  auto colors = fontSheetVariant(entry->contentType.value_or(""));
+  const bool unchanged = m_state->view.entry
+      && sameSource(*entry, *m_state->view.entry)
+      && options == m_state->options
+      && colors == m_state->colors;
   if (unchanged
       && (pixels == m_state->pixels
           || (pixels < m_state->pixels && !m_state->view.imageUpgradeFailed)
@@ -298,6 +310,7 @@ void luciole::PreviewService::show(
   auto& state = *m_state;
   state.pixels = pixels;
   state.options = options;
+  state.colors = std::move(colors);
   state.view.entry = *entry;
   state.metadata.show(*entry, options);
   state.view.metadata = state.metadata.fields();

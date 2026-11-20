@@ -10,6 +10,7 @@
 #include "app/page/details_header_controller.h"
 #include "app/page/drag_drop_controller.h"
 #include "app/page/file_keyboard_controller.h"
+#include "app/page/held_view_change.h"
 #include "app/page/location_bar_controller.h"
 #include "app/page/menu_controller.h"
 #include "app/page/mount_controller.h"
@@ -26,6 +27,7 @@
 #include "app/page/submenu_controller.h"
 #include "app/page/transfer_controller.h"
 #include "app/page/trash_controller.h"
+#include "app/page/workbench_controller.h"
 #include "app/workspace_command.h"
 #include "app/workspace_layout.h"
 #include "browser/action_registry.h"
@@ -36,6 +38,7 @@
 #include "clipboard/text_clipboard.h"
 #include "config/settings.h"
 #include "config/view_preference_writer.h"
+#include "config/visit_service.h"
 #include "core/timer_manager.h"
 #include "model/details_columns.h"
 #include "operations/template_catalog.h"
@@ -70,6 +73,7 @@
 #include <cstdlib>
 #include <initializer_list>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 
@@ -84,8 +88,8 @@ public:
       const luciole::BrowserSettings& settings, luciole::WaylandTextClipboard& clipboard,
       luciole::WindowSurface& surface, InputDispatcher& dispatcher, AnimationManager& animations,
       luciole::PinService& pins, luciole::DriveMonitor& drives, luciole::FileIconCache& icons,
-      luciole::ThumbnailService& thumbnails, luciole::ViewPreferenceWriter& preferences, OperationHub& hub,
-      luciole::TabId id
+      luciole::ThumbnailService& thumbnails, luciole::ViewPreferenceWriter& preferences, luciole::VisitService& visits,
+      OperationHub& hub, luciole::TabId id
   );
 
   luciole::BrowserController& browser() override;
@@ -101,27 +105,32 @@ public:
   bool choosing() const override;
 
   ~BrowserPage();
-
   void iconThemeChanged();
-
   bool initialize(const std::optional<std::string>& initialLocation);
-
   // Select `items` once the current folder finishes loading; optionally open their Properties.
   void revealItems(std::vector<luciole::Location> items, bool properties);
 
-  // True while page-local work that outlives the window runs: launching, saving places or preferences, a paste.
+  // True while page-local work that outlives the window runs: launching, saving places or preferences, a paste, a
+  // save of an edited file.
   bool busy() const;
   void shutdown();
+  // The page's editor has the keyboard; then the workspace leaves Tab to the page.
+  bool editorFocused() const;
+  // The page's editor holds changes not saved yet.
+  bool unsaved() const;
+  // Asks before the page goes away (see PageEditing::leave): true when it may go now, otherwise `resume` follows the
+  // user's answer.
+  bool leave(std::function<void()> resume);
   // OperationHub::Owner: hands the job to the controller of its kind.
   void jobChanged(OperationJob& job) override;
   void activityChanged() override { m_operations.markDirty(); }
-  void setOperationRequest(std::function<void(luciole::JobId, bool)> callback) {
-    m_operationRequest = std::move(callback);
-  }
+  void setOperationRequest(std::function<void(luciole::JobId, bool)> callback);
   void reviewOperation(luciole::JobId id, bool retry);
   void transfersFinished(const std::vector<luciole::TransferResult>& results) override;
   // The shared thumbnail service changed.
   void thumbnailsChanged();
+  // The shared visit service changed.
+  void visitsChanged();
 
   luciole::BrowserSettings options() const;
   std::optional<luciole::Location> location() const;
@@ -149,6 +158,10 @@ public:
   void setWorkspaceRequest(std::function<void(WorkspaceCommand, std::optional<luciole::Location>)> callback);
   void configurationChanged();
   void setHasOther(std::function<bool()> callback);
+  // Receives each folder this page's browser enters and each file it opens; unset, nothing is recorded.
+  void setVisitRecorder(std::function<void(const luciole::Location&)> record);
+  // The application's folder measures, which the Workbench mode reads.
+  void setWorkbenchServices(luciole::WorkbenchServices& services);
   void setPopupAvailable(std::function<bool()> callback);
   void setForeignDrop(std::function<std::optional<std::pair<luciole::Location, LayoutRect>>(float, float)> callback);
   bool popupOwns(wl_surface* surface) const;
@@ -188,9 +201,10 @@ public:
   std::optional<std::pair<luciole::Location, LayoutRect>> foreignTarget(float x, float y) const;
 
   void outputChanged(wl_output* output);
-
   void pointer(const PointerEvent& event);
-
+  // The pointer went to another page or the tab strip. The dispatcher they share sees that itself; the page's own
+  // hover hooks do not.
+  void pointerLeft();
   void keyboard(const KeyboardEvent& event);
 
 private:
@@ -255,6 +269,7 @@ private:
   float pointerY() const override;
   VirtualGridView* fileList() override;
   Flex& filePane() override;
+  bool filePaneCovered() const override;
   MillerView& millerView() override;
   luciole::ViewMode viewMode() const override;
   float gridIconSize() const override;
@@ -262,18 +277,16 @@ private:
   void resetFileView() override;
 
   void operationProgressTick();
-
   void showContaining(const luciole::Location& location);
 
   void applySettings(const luciole::BrowserSettings& settings, bool force) override;
-
   void
   showDialog(std::unique_ptr<Flex> root, DialogWidth width, PopupDismiss dismiss = PopupDismiss::Explicit) override;
   float dialogWidth(DialogWidth width) const override;
 
   void cancelDrag() override;
 
-  void setViewMode(luciole::ViewMode mode);
+  void takeViewMode(luciole::ViewMode mode);
   void applyViewMode();
   float gridHeight() const;
   void changeSort(luciole::SortOptions options);
@@ -324,6 +337,7 @@ private:
   ContextMenuControl* contextMenu() override;
   std::uint32_t popupSerial() override;
   float popupMaxHeight() const override;
+  void setEditing(PageEditing editing) override;
   luciole::WaylandTextClipboard& clipboard() override;
   luciole::WindowSurface& surface() override;
   InputDispatcher& dispatcher() override;
@@ -365,6 +379,7 @@ private:
   std::optional<std::pair<int, int>> m_dialogPosition;
   bool m_dialogResizePending = false;
   luciole::PinService& m_pins;
+  luciole::VisitService& m_visits;
   luciole::DriveMonitor& m_drives;
   luciole::FileLauncher m_launcher;
   std::vector<luciole::Location> m_revealTargets;
@@ -405,9 +420,9 @@ private:
       m_locationBar,
       m_programs
   };
-  SettingsController m_settingsController{*this,        m_preferences, m_thumbnails,
-                                          m_connection, m_renderer,    [this] {
-        m_thumbnails.clearCache(); }};
+  SettingsController m_settingsController{
+      *this, m_preferences, m_thumbnails, m_visits, m_connection, m_renderer, [this] { m_thumbnails.clearCache(); }
+  };
   AboutController m_aboutController{*this, m_launcher};
   ShortcutsController m_shortcutsController{*this};
   ApplicationChooserController m_applicationChooser{*this, m_launcher, m_icons};
@@ -420,6 +435,18 @@ private:
                                 m_icons, m_miller,     m_sidebar, m_locationBar};
   FileKeyboardController m_fileKeys{*this, m_textInput, m_miller, m_menuController, m_locationBar, m_statusBar};
   StatusBarController m_statusBar{*this, m_pins, m_settingsController, m_fileKeys};
+  WorkbenchController m_workbench{
+      *this,
+      m_menuController,
+      m_previewController,
+      m_listAdapter,
+      m_icons,
+      m_visits,
+      m_preferences,
+      {.launch = [this](const luciole::Location& location) { launch(location); },
+       .modifiers = [this] { return m_connection.keyboardModifiers(); },
+       .editing = [this] { return m_locationBar.textFocused() || editorFocused(); }}
+  };
   std::size_t m_gridZoom = 1;
   double m_zoomScroll = 0;
   luciole::ViewMode m_viewMode;
@@ -445,6 +472,9 @@ private:
   luciole::TabId m_workspaceId;
   std::uint64_t m_nextFocusKey = 0;
   std::function<bool()> m_popupAvailable, m_hasOther;
+  std::function<void(const luciole::Location&)> m_recordVisit;
+  void recordVisit(const luciole::Location& location) const;
+  void launch(const luciole::Location& location);
   std::optional<luciole::ActionRequest> m_pendingWorkspaceRequest;
   std::function<void(luciole::JobId, bool)> m_operationRequest;
   std::optional<std::pair<luciole::JobId, bool>> m_pendingOperation;
@@ -453,7 +483,6 @@ private:
   Flex* m_titlebar = nullptr;
   Flex* m_paneContentFrame = nullptr;
   VirtualGridView* m_list = nullptr;
-  Segmented* m_viewSwitch = nullptr;
   Button* m_menuButton = nullptr;
   Button* m_back = nullptr;
   Button* m_forward = nullptr;
@@ -464,5 +493,8 @@ private:
   PopupDismiss m_popupDismiss = PopupDismiss::OutsideClick;
   ActivePopup m_activePopup;
   InputDispatcher m_popupDispatcher;
+  // Destroyed after m_viewChange, whose hooks call into it.
+  std::optional<PageEditing> m_editing;
+  luciole::HeldViewChange m_viewChange;
   std::shared_ptr<int> m_lifetime = std::make_shared<int>(0);
 };

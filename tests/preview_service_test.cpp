@@ -1,16 +1,22 @@
 #include "core/log.h"
+#include "font_fixture.h"
 #include "fs/gio_interop.h"
+#include "temp_folder.h"
 #include "test_check.h"
+#include "thumbnails/font_preview.h"
 #include "thumbnails/preview_service.h"
 #include "thumbnails/thumbnail_worker.h"
 #include "ui/browser/preview_layout.h"
+#include "ui/palette.h"
 
 #include <chrono>
 #include <filesystem>
+#include <format>
 #include <fstream>
 #include <gdk-pixbuf/gdk-pixbuf.h>
 #include <print>
 #include <stdexcept>
+#include <string_view>
 #include <sys/stat.h>
 #include <thread>
 #include <tuple>
@@ -101,6 +107,114 @@ namespace {
     wait([&] { return !preview.busy(); });
     TEST_CHECK(preview.snapshot().status == luciole::PreviewStatus::Unavailable && preview.snapshot().text.empty());
     preview.clear();
+  }
+  void privateKeyChecks(const std::filesystem::path& root) {
+    luciole::ThumbnailService thumbnails;
+    luciole::PreviewService preview(thumbnails);
+    // Made-up key bodies in the shape of each format.
+    const std::string body = "b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZWQyNTUx\n";
+    const std::string certificate = "-----BEGIN CERTIFICATE-----\nMIIBfakecertificatebody\n-----END CERTIFICATE-----\n";
+    std::string filler;
+    while (filler.size() < 60U * 1024U) {
+      filler += "an ordinary line of text before the key\n";
+    }
+    std::string longBody;
+    while (longBody.size() < 8U * 1024U) {
+      longBody += body;
+    }
+    const auto pem = [](std::string_view label, std::string_view content, std::string_view newline = "\n") {
+      return std::format("-----BEGIN {0}-----{2}{1}-----END {0}-----{2}", label, content, newline);
+    };
+    for (const auto& [name, mime, text] :
+         {std::tuple<std::string, std::string, std::string>{
+              "id_ed25519", "text/x-ssh-private-key", pem("OPENSSH PRIVATE KEY", body)
+          },
+          {"bundle.pem", "application/x-pem-file", std::format("{}{}", certificate, pem("PRIVATE KEY", body))},
+          {"windows.key", "text/plain", std::format("\xEF\xBB\xBF  {}", pem("RSA PRIVATE KEY", body, "\r\n"))},
+          {"late.txt", "text/plain", std::format("{}{}", filler, pem("EC PRIVATE KEY", longBody))},
+          {"keys.txt", "text/plain", "# public key: age1fakepublickey\nAGE-SECRET-KEY-1QQQQQQQQQQQQQQQQQQQQ\n"},
+          {"config", "application/yaml",
+           "users:\n- name: default\n  user:\n    client-key-data: "
+           "LS0tLS1CRUdJTiBFQyBQUklWQVRFIEtFWS0tLS0tCk1IY0NBUUVFSWZha2Vib2R5ZmFrZWJvZHlmYWtlYm9keWZha2Vib2R5Ci0tLS0tRU5"
+           "E"
+           "IEVDIFBSSVZBVEUgS0VZLS0tLS0K\n"},
+          {"wg0.conf", "text/plain",
+           "[Interface]\nAddress = 10.0.0.2/32\nPrivateKey = yAnzfakeWireGuardKeyForTestsOnlyAAAAAAAAAAA=\n"}}) {
+      const auto path = root / name;
+      write(path, text);
+      preview.show(entry(path, mime), 512);
+      wait([&] { return !preview.busy(); });
+      TEST_CHECK(preview.snapshot().status == luciole::PreviewStatus::Unavailable);
+      TEST_CHECK(preview.snapshot().text.empty());
+      TEST_CHECK(
+          preview.snapshot().message == "This file looks like it contains a private key. Its text is not shown."
+      );
+    }
+    for (const auto& [name, mime, text] :
+         {std::tuple<std::string, std::string, std::string>{"cert.pem", "application/x-pem-file", certificate},
+          {"public.pem", "application/x-pem-file",
+           "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAfake\n-----END PUBLIC KEY-----\n"},
+          {"id_ed25519.pub", "text/x-ssh-public-key", "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIfake throwaway\n"}}) {
+      const auto path = root / name;
+      write(path, text);
+      preview.show(entry(path, mime), 512);
+      wait([&] { return !preview.busy(); });
+      TEST_CHECK(preview.snapshot().status == luciole::PreviewStatus::Ready);
+      TEST_CHECK(preview.snapshot().text == text);
+    }
+    preview.clear();
+  }
+  // A font sheet is drawn in the theme's colors, so showing the same font after a theme change draws it again.
+  void fontThemeChecks(const std::filesystem::path& root) {
+    const Palette original = palette;
+    const auto theme = [&](std::uint32_t surface, std::uint32_t text) {
+      Palette themed = original;
+      themed.surface = rgbaHex((surface << 8U) | 0xFFU);
+      themed.onSurface = rgbaHex((text << 8U) | 0xFFU);
+      setPalette(themed);
+    };
+    luciole::ThumbnailService thumbnails;
+    luciole::PreviewService preview(thumbnails);
+    thumbnails.setChangedCallback([&] { preview.thumbnailsChanged(); });
+
+    // Not a font: the sheet fails, yet only a theme change asks for it again.
+    const auto broken = root / "broken.ttf";
+    write(broken, "not a font");
+    theme(0x102030, 0xF0E0D0);
+    preview.show(entry(broken, "font/ttf"), 400);
+    wait([&] { return !preview.busy(); });
+    preview.show(entry(broken, "font/ttf"), 400);
+    TEST_CHECK(!preview.busy());
+    theme(0x304050, 0xD0C0B0);
+    preview.show(entry(broken, "font/ttf"), 400);
+    TEST_CHECK(preview.busy() && preview.snapshot().status == luciole::PreviewStatus::Loading);
+    wait([&] { return !preview.busy(); });
+    preview.clear();
+
+    const auto fonts = luciole::test::fonts::findFonts("preview-service");
+    const auto truetype = fonts.find("TrueType");
+    if (truetype == fonts.end()) {
+      std::println("preview-service: skipped the font sheet colors: no TrueType font");
+      setPalette(original);
+      return;
+    }
+    const auto font = root / "Sheet font.ttf";
+    std::filesystem::copy_file(truetype->second, font);
+    const auto surfaceOf = [&] {
+      wait([&] { return !preview.busy(); });
+      const auto& image = preview.snapshot().image;
+      TEST_CHECK(image && image->pixels && image->pixels->rgba.size() >= 4);
+      const auto& rgba = image->pixels->rgba;
+      return (std::uint32_t{rgba[0]} << 16U) | (std::uint32_t{rgba[1]} << 8U) | rgba[2];
+    };
+    theme(0x1A334D, 0xE6D2B4);
+    preview.show(entry(font, "font/ttf"), 400);
+    TEST_CHECK(surfaceOf() == 0x1A334DU);
+    theme(0xF4F0E8, 0x202428);
+    preview.show(entry(font, "font/ttf"), 400);
+    TEST_CHECK(surfaceOf() == 0xF4F0E8U);
+    preview.clear();
+    setPalette(original);
   }
   void checks(const std::filesystem::path& root) {
     const auto portraitLayout = luciole::previewImageLayout(1000, 3000, 320, 1300, 1);
@@ -279,23 +393,24 @@ int main(int argc, char** argv) {
   if (!arguments.empty() && arguments.front() == "--preview-metadata-worker") {
     return luciole::runPreviewMetadataWorker(std::span(arguments).subspan(1));
   }
-  initLogLevelFromEnvironment();
-  const luciole::GString directory(g_dir_make_tmp("luciole-preview-test-XXXXXX", nullptr));
-  if (!directory) {
-    return 1;
+  if (!arguments.empty() && arguments.front() == "--font-preview-worker") {
+    return luciole::runFontPreviewWorker(std::span(arguments).subspan(1));
   }
-  const std::filesystem::path root(directory.get());
+  initLogLevelFromEnvironment();
+  const luciole::test::TempFolder directory("luciole-preview-test");
+  const std::filesystem::path& root = directory.path();
   g_setenv("XDG_CACHE_HOME", (root / "cache").c_str(), true);
   int status = 0;
   try {
     checks(root);
     svgChecks(root);
     inheritedTextChecks(root);
+    privateKeyChecks(root);
+    fontThemeChecks(root);
     std::println("preview checks passed");
   } catch (const std::exception& error) {
     std::println(stderr, "preview: {}", error.what());
     status = 1;
   }
-  std::filesystem::remove_all(root);
   return status;
 }

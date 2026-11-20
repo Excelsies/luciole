@@ -7,6 +7,7 @@
 #include "operations/archive_sevenzip.h"
 #include "operations/archive_work.h"
 #include "operations/archive_xz_input.h"
+#include "temp_folder.h"
 #include "test_check.h"
 
 #include <algorithm>
@@ -31,18 +32,11 @@ namespace {
   namespace fs = std::filesystem;
   using namespace std::chrono_literals;
   struct Fixture {
-    fs::path root;
+    luciole::test::TempFolder tempFolder{"luciole-archive-test", "/tmp"}; // TMPDIR points into a fixture
+    fs::path root = tempFolder.path();
     Fixture() {
-      std::string pattern = "/tmp/luciole-archive-test-XXXXXX";
-      const char* path = ::mkdtemp(pattern.data());
-      TEST_CHECK(path);
-      root = path;
       fs::create_directory(root / "tmp");
       ::setenv("TMPDIR", (root / "tmp").c_str(), 1);
-    }
-    ~Fixture() {
-      std::error_code ignored;
-      fs::remove_all(root, ignored);
     }
   };
   class Pump {

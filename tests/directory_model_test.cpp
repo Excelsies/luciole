@@ -4,6 +4,7 @@
 #include "event_loop/glib_poll_source.h"
 #include "fs/gio_interop.h"
 #include "model/details_columns.h"
+#include "temp_folder.h"
 #include "test_check.h"
 
 #include <algorithm>
@@ -757,18 +758,8 @@ namespace {
   }
 
   struct Fixture {
-    std::filesystem::path path;
-    Fixture() {
-      const luciole::GString directory(g_dir_make_tmp("luciole-model-test-XXXXXX", nullptr));
-      TEST_CHECK(directory != nullptr);
-      path = directory.get();
-    }
-    ~Fixture() {
-      std::error_code ignored;
-      std::filesystem::remove_all(path, ignored);
-    }
-    Fixture(const Fixture&) = delete;
-    Fixture& operator=(const Fixture&) = delete;
+    luciole::test::TempFolder tempFolder{"luciole-model-test"};
+    std::filesystem::path path = tempFolder.path();
     void write(const std::string& name) const {
       std::ofstream file(path / name);
       file << "fixture";

@@ -1,6 +1,7 @@
 #include "event_loop/glib_poll_source.h"
 #include "fs/gio_interop.h"
 #include "operations/restore_service.h"
+#include "temp_folder.h"
 #include "test_check.h"
 
 #include <algorithm>
@@ -20,16 +21,8 @@ namespace {
     return {std::istreambuf_iterator<char>(stream), {}};
   }
   struct Fixture {
-    fs::path root;
-    Fixture() {
-      const luciole::GString path(g_dir_make_tmp("luciole-restore-XXXXXX", nullptr));
-      TEST_CHECK(path != nullptr);
-      root = path.get();
-    }
-    ~Fixture() {
-      std::error_code error;
-      fs::remove_all(root, error);
-    }
+    luciole::test::TempFolder tempFolder{"luciole-restore"};
+    fs::path root = tempFolder.path();
   };
   class Pump {
   public:

@@ -2,9 +2,11 @@
 
 #include "config/diagnostic.h"
 #include "fs/atomic_file.h"
+#include "model/audio_visual_kind.h"
 #include "model/directory_options.h"
 #include "model/thumbnail_options.h"
 
+#include <array>
 #include <concepts>
 #include <cstdint>
 #include <expected>
@@ -15,6 +17,36 @@
 #include <vector>
 
 namespace luciole {
+  // The sizes a preview's content is shown at, in percent, smallest first.
+  inline constexpr std::array<int, 11> kPreviewSizes{70, 80, 90, 100, 110, 125, 150, 175, 200, 250, 300};
+  inline constexpr int kDefaultPreviewSize = 100;
+
+  struct WorkbenchSettings {
+    WorkbenchInstrument instrument = WorkbenchInstrument::Nest;
+    WorkbenchRibbon ribbon = WorkbenchRibbon::Flame;
+    bool strips = true; // ancestor strips beside the list
+    WorkbenchMeasure sizeBy = WorkbenchMeasure::Bytes;
+    WorkbenchColor colorBy = WorkbenchColor::Type;
+    double emphasis = 0.5; // 0 makes every entry equal, 1 is true proportion
+    // Pane sizes in pixels, headers included; 0 follows the view.
+    int leftWidth = 0;
+    int instrumentHeight = 0;
+    std::array<int, kWorkbenchRibbonCount> ribbonHeights{}; // indexed by WorkbenchRibbon
+    bool instrumentCollapsed = false;
+    bool jumpCollapsed = false;
+    bool ribbonCollapsed = false;
+    std::array<int, kWorkbenchColumnCount> columnWidths = kDefaultWorkbenchColumnWidths;
+    int listWidth = 0;                     // the narrower list width the user chose, or 0 for none
+    int stripsWidth = 0;                   // the ancestor strips pane's width, or 0 for the default
+    int previewSize = kDefaultPreviewSize; // one of kPreviewSizes, for every preview
+    bool audioVisualizer = true;           // a sound file shows a visual while it plays
+    AudioVisualKind audioVisual = AudioVisualKind::CosmicPeanut;
+    bool mediaLoop = false; // a video or sound file plays again from the start when it ends
+    WorkbenchPreviewPlace previewPlace =
+        WorkbenchPreviewPlace::JumpAheadWhenNarrow; // where a preview goes with no room
+    bool operator==(const WorkbenchSettings&) const = default;
+  };
+
   struct BrowserSettings {
     SortOptions sort;
     ActivationMode activationMode = ActivationMode::DoubleClick;
@@ -46,6 +78,8 @@ namespace luciole {
     DetailsColumnWidths columnWidths = kDefaultDetailsColumnWidths;
     ThumbnailOptions thumbnails;
     std::string terminalCommand;
+    bool recordVisits = true; // count folder entries and file opens for the visits measure
+    WorkbenchSettings workbench;
     bool operator==(const BrowserSettings&) const = default;
   };
 
@@ -119,6 +153,31 @@ namespace luciole {
     ThumbnailMaxFileMib,
     ThumbnailCacheMib,
     TerminalCommand,
+    RecordVisits,
+    WorkbenchInstrument,
+    WorkbenchRibbon,
+    WorkbenchStrips,
+    WorkbenchSizeBy,
+    WorkbenchColorBy,
+    WorkbenchEmphasis,
+    WorkbenchLeftWidth,
+    WorkbenchInstrumentHeight,
+    WorkbenchFlameHeight,
+    WorkbenchFlowHeight,
+    WorkbenchLadderHeight,
+    WorkbenchInstrumentCollapsed,
+    WorkbenchJumpCollapsed,
+    WorkbenchRibbonCollapsed,
+    WorkbenchFirstColumnWidth,
+    WorkbenchSecondColumnWidth,
+    WorkbenchThirdColumnWidth,
+    WorkbenchListWidth,
+    WorkbenchStripsWidth,
+    WorkbenchPreviewSize,
+    WorkbenchAudioVisualizer,
+    WorkbenchAudioVisual,
+    WorkbenchMediaLoop,
+    WorkbenchPreviewPlace,
     Count
   };
 
@@ -196,6 +255,31 @@ namespace luciole {
     static constexpr PreferenceKey<luciole::ThumbnailPolicy> ThumbnailPolicy{Id::ThumbnailPolicy};
     static constexpr PreferenceKey<int> ThumbnailMaxFileMib{Id::ThumbnailMaxFileMib};
     static constexpr PreferenceKey<int> ThumbnailCacheMib{Id::ThumbnailCacheMib};
+    static constexpr PreferenceKey<bool> RecordVisits{Id::RecordVisits};
+    static constexpr PreferenceKey<luciole::WorkbenchInstrument> WorkbenchInstrument{Id::WorkbenchInstrument};
+    static constexpr PreferenceKey<luciole::WorkbenchRibbon> WorkbenchRibbon{Id::WorkbenchRibbon};
+    static constexpr PreferenceKey<bool> WorkbenchStrips{Id::WorkbenchStrips};
+    static constexpr PreferenceKey<luciole::WorkbenchMeasure> WorkbenchSizeBy{Id::WorkbenchSizeBy};
+    static constexpr PreferenceKey<luciole::WorkbenchColor> WorkbenchColorBy{Id::WorkbenchColorBy};
+    static constexpr PreferenceKey<double> WorkbenchEmphasis{Id::WorkbenchEmphasis};
+    static constexpr PreferenceKey<int> WorkbenchLeftWidth{Id::WorkbenchLeftWidth};
+    static constexpr PreferenceKey<int> WorkbenchInstrumentHeight{Id::WorkbenchInstrumentHeight};
+    static constexpr PreferenceKey<int> WorkbenchFlameHeight{Id::WorkbenchFlameHeight};
+    static constexpr PreferenceKey<int> WorkbenchFlowHeight{Id::WorkbenchFlowHeight};
+    static constexpr PreferenceKey<int> WorkbenchLadderHeight{Id::WorkbenchLadderHeight};
+    static constexpr PreferenceKey<bool> WorkbenchInstrumentCollapsed{Id::WorkbenchInstrumentCollapsed};
+    static constexpr PreferenceKey<bool> WorkbenchJumpCollapsed{Id::WorkbenchJumpCollapsed};
+    static constexpr PreferenceKey<bool> WorkbenchRibbonCollapsed{Id::WorkbenchRibbonCollapsed};
+    static constexpr PreferenceKey<int> WorkbenchFirstColumnWidth{Id::WorkbenchFirstColumnWidth};
+    static constexpr PreferenceKey<int> WorkbenchSecondColumnWidth{Id::WorkbenchSecondColumnWidth};
+    static constexpr PreferenceKey<int> WorkbenchThirdColumnWidth{Id::WorkbenchThirdColumnWidth};
+    static constexpr PreferenceKey<int> WorkbenchListWidth{Id::WorkbenchListWidth};
+    static constexpr PreferenceKey<int> WorkbenchStripsWidth{Id::WorkbenchStripsWidth};
+    static constexpr PreferenceKey<int> WorkbenchPreviewSize{Id::WorkbenchPreviewSize};
+    static constexpr PreferenceKey<bool> WorkbenchAudioVisualizer{Id::WorkbenchAudioVisualizer};
+    static constexpr PreferenceKey<luciole::AudioVisualKind> WorkbenchAudioVisual{Id::WorkbenchAudioVisual};
+    static constexpr PreferenceKey<bool> WorkbenchMediaLoop{Id::WorkbenchMediaLoop};
+    static constexpr PreferenceKey<luciole::WorkbenchPreviewPlace> WorkbenchPreviewPlace{Id::WorkbenchPreviewPlace};
   };
 
   // The BrowserSettings field a preference reads and writes.
@@ -221,7 +305,8 @@ namespace luciole {
     BrowserPreferenceId m_preference;
     std::variant<
         std::monostate, bool, int, double, SortField, ViewMode, ViewDensity, FilenameTruncation, DetailsColumnOrder,
-        ActivationMode, TypingMode, ThumbnailPolicy, std::string>
+        ActivationMode, TypingMode, ThumbnailPolicy, WorkbenchInstrument, WorkbenchRibbon, WorkbenchMeasure,
+        WorkbenchColor, AudioVisualKind, WorkbenchPreviewPlace, std::string>
         m_value;
   };
 

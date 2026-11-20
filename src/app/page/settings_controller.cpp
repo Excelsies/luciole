@@ -3,6 +3,7 @@
 #include "app/page/active_popup.h"
 #include "app/page/page_context.h"
 #include "config/view_preference_writer.h"
+#include "config/visit_service.h"
 #include "platform/desktop_integration.h"
 #include "render/scene/input_area.h"
 #include "render/scene/input_dispatcher.h"
@@ -18,12 +19,29 @@
 
 SettingsController::SettingsController(
     PageContext& page, luciole::ViewPreferenceWriter& preferences, luciole::ThumbnailService& thumbnails,
-    WaylandConnection& connection, RenderContext& renderer, std::function<void()> clearThumbnails
+    luciole::VisitService& visits, WaylandConnection& connection, RenderContext& renderer,
+    std::function<void()> clearThumbnails
 )
-    : m_page(page), m_preferences(preferences), m_thumbnails(thumbnails), m_connection(connection),
+    : m_page(page), m_preferences(preferences), m_thumbnails(thumbnails), m_visits(visits), m_connection(connection),
       m_renderer(renderer), m_clearThumbnails(std::move(clearThumbnails)) {}
 
 SettingsController::~SettingsController() = default;
+
+void SettingsController::visitsChanged() {
+  if (!m_clearingVisits || m_visits.busy()) {
+    return;
+  }
+  m_clearingVisits = false;
+  m_visitWarning = m_visits.warning();
+  m_dirty = true;
+}
+
+void SettingsController::clearVisits() {
+  m_clearingVisits = true;
+  m_visitWarning.clear();
+  m_dirty = true;
+  m_visits.clear();
+}
 
 void SettingsController::preferencesChanged(const std::string& error) {
   m_error = error;
@@ -58,10 +76,12 @@ void SettingsController::layoutDialog(float width) {
 
 void SettingsController::sync() {
   const auto& inherited = m_preferences.inheritedSettings();
+  const auto& error = !m_error.empty() ? m_error
+      : !m_thumbnails.error().empty()  ? m_thumbnails.error()
+                                       : m_visitWarning;
   m_view->sync(
       m_page.settings(), inherited ? inherited->browser : luciole::BrowserSettings{},
-      m_preferences.busy() || m_thumbnails.clearing(), m_error.empty() ? m_thumbnails.error() : m_error,
-      m_thumbnails.clearing()
+      m_preferences.busy() || m_thumbnails.clearing(), error, m_thumbnails.clearing(), m_clearingVisits
   );
 }
 
@@ -81,6 +101,7 @@ void SettingsController::toggle() {
     return;
   }
   m_viewLifetime = std::make_shared<int>(0);
+  m_visitWarning.clear();
   auto root = std::make_unique<SettingsDialog>(
       [this](luciole::OverrideEdit edit) {
         m_preferences.submit({std::move(edit)});
@@ -88,7 +109,8 @@ void SettingsController::toggle() {
           surface->requestLayout();
         }
       },
-      [this] { m_preferences.resetAll(); }, [this] { m_page.dismissPopup(); }, [this] { m_clearThumbnails(); }
+      [this] { m_preferences.resetAll(); }, [this] { m_page.dismissPopup(); }, [this] { m_clearThumbnails(); },
+      [this] { clearVisits(); }
   );
   root->setPopupContext(this);
   m_view = root.get();

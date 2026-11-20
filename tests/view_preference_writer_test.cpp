@@ -1,6 +1,7 @@
 #include "config/view_preference_writer.h"
 #include "event_loop/glib_poll_source.h"
 #include "fs/gio_ptr.h"
+#include "temp_folder.h"
 #include "test_check.h"
 
 #include <algorithm>
@@ -13,13 +14,8 @@
 namespace {
   void testSaving() {
     namespace fs = std::filesystem;
-    const luciole::GString temporary(g_dir_make_tmp("luciole-view-writer-XXXXXX", nullptr));
-    TEST_CHECK(temporary != nullptr);
-    const fs::path root(temporary.get());
-    struct Cleanup {
-      fs::path root;
-      ~Cleanup() { fs::remove_all(root); }
-    } cleanup{root};
+    const luciole::test::TempFolder temporary("luciole-view-writer");
+    const fs::path& root = temporary.path();
     const luciole::ConfigPaths paths{root / "config.toml", root / "settings.toml"};
     std::ofstream(paths.base) << "[browser]\nshow_hidden = true\nview_mode = 'list'\n";
     GlibPollSource source;
@@ -185,17 +181,8 @@ namespace {
   void testWatchingAndReset() {
     namespace fs = std::filesystem;
     using P = luciole::BrowserPreference;
-    const luciole::GString temporary(g_dir_make_tmp("luciole-settings-watch-XXXXXX", nullptr));
-    TEST_CHECK(temporary != nullptr);
-    const fs::path root(temporary.get());
-    struct Cleanup {
-      fs::path root;
-      ~Cleanup() {
-        std::error_code ignored;
-        fs::permissions(root / "declarative.toml", fs::perms::owner_all, ignored);
-        fs::remove_all(root, ignored);
-      }
-    } cleanup{root};
+    const luciole::test::TempFolder temporary("luciole-settings-watch");
+    const fs::path& root = temporary.path();
     const luciole::ConfigPaths paths{root / "config/luciole/config.toml", root / "config/luciole/settings.toml"};
     GlibPollSource source;
     auto writer = std::make_unique<luciole::ViewPreferenceWriter>(paths);
@@ -295,12 +282,70 @@ namespace {
     until([&] { return std::chrono::steady_clock::now() >= afterDestruction; });
   }
 
+  // Divider releases arrive faster than saves finish; only the last size of each pane is written, and the page hears
+  // about it once.
+  void testWorkbenchLayoutSaving() {
+    namespace fs = std::filesystem;
+    using P = luciole::BrowserPreference;
+    const luciole::test::TempFolder temporary("luciole-workbench-writer");
+    const fs::path& root = temporary.path();
+    const luciole::ConfigPaths paths{root / "config.toml", root / "settings.toml"};
+    GlibPollSource source;
+    luciole::ViewPreferenceWriter writer(paths);
+    std::string error;
+    int changes = 0;
+    writer.setChangedCallback([&](const std::string& message) {
+      error = message;
+      ++changes;
+    });
+    const auto wait = [&] {
+      const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+      while (writer.busy()) {
+        TEST_CHECK(std::chrono::steady_clock::now() < deadline);
+        std::vector<pollfd> fds;
+        const auto start = source.addPollFds(fds);
+        const int timeout = source.pollTimeoutMs();
+        TEST_CHECK(::poll(fds.data(), fds.size(), timeout < 0 ? 20 : std::min(timeout, 20)) >= 0);
+        source.dispatch(fds, start);
+      }
+    };
+    for (int width = 300; width <= 400; width += 10) {
+      writer.submit({{P::WorkbenchLeftWidth, width}, {P::WorkbenchFlowHeight, width - 100}});
+      writer.submit({{P::WorkbenchFirstColumnWidth, width - 100}, {P::WorkbenchListWidth, width}});
+    }
+    writer.submit(
+        {{P::WorkbenchRibbonCollapsed, true},
+         {P::WorkbenchInstrument, luciole::WorkbenchInstrument::Atlas},
+         {P::WorkbenchEmphasis, 0.8}}
+    );
+    writer.submit({{P::WorkbenchRibbonCollapsed, false}, {P::WorkbenchEmphasis, 0.3}});
+    wait();
+    TEST_CHECK(error.empty() && changes == 1);
+    const auto loaded = luciole::loadSettings(paths);
+    TEST_CHECK(loaded.has_value());
+    const auto& workbench = loaded->browser.workbench;
+    TEST_CHECK(workbench.leftWidth == 400 && workbench.ribbonHeights[1] == 300);
+    TEST_CHECK(workbench.columnWidths[0] == 300 && workbench.listWidth == 400);
+    TEST_CHECK(!workbench.ribbonCollapsed && workbench.instrument == luciole::WorkbenchInstrument::Atlas);
+    TEST_NEAR(workbench.emphasis, 0.3, 0.0);
+    TEST_CHECK(writer.settings() && writer.settings()->browser.workbench == workbench);
+
+    std::ifstream before(paths.overrides);
+    const std::string saved((std::istreambuf_iterator<char>(before)), {});
+    writer.submit({{P::WorkbenchLeftWidth, 410}, {P::WorkbenchListWidth, 470}});
+    wait();
+    TEST_CHECK(!error.empty() && changes == 2);
+    std::ifstream after(paths.overrides);
+    TEST_CHECK(std::string((std::istreambuf_iterator<char>(after)), {}) == saved);
+  }
+
 } // namespace
 
 int main() {
   try {
     testSaving();
     testWatchingAndReset();
+    testWorkbenchLayoutSaving();
     std::println("view preference writer checks passed");
     return 0;
   } catch (const std::exception& error) {

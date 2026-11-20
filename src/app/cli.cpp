@@ -4,7 +4,11 @@
 #include "config/settings.h"
 #include "luciole_build_info.h"
 #include "luciole_completions.h"
+#include "media/bink2_poster.h"
+#include "thumbnails/font_preview.h"
+#include "thumbnails/mesh_preview.h"
 #include "thumbnails/preview_metadata.h"
+#include "thumbnails/sheet_preview.h"
 #include "thumbnails/thumbnail_worker.h"
 
 #include <cstdio>
@@ -48,6 +52,21 @@ int luciole::runCli(std::span<const std::string_view> args) {
   }
   if (!args.empty() && args.front() == "--thumbnail-worker") {
     return runThumbnailWorker(args.subspan(1));
+  }
+  if (!args.empty() && args.front() == "--font-preview-worker") {
+    return runFontPreviewWorker(args.subspan(1));
+  }
+  if (!args.empty() && args.front() == "--bink2-facts-worker") {
+    return media::runBink2FactsWorker(args.subspan(1));
+  }
+  if (!args.empty() && args.front() == "--bink2-poster-worker") {
+    return media::runBink2PosterWorker(args.subspan(1));
+  }
+  if (!args.empty() && args.front() == "--mesh-preview-worker") {
+    return runMeshPreviewWorker(args.subspan(1));
+  }
+  if (!args.empty() && args.front() == "--sheet-preview-worker") {
+    return runSheetPreviewWorker(args.subspan(1));
   }
   if (args.size() == 1 && args.front() == "--file-manager-service") {
     return runApplication(std::nullopt, StartupMode::FileManagerActivation);

@@ -31,6 +31,7 @@
 #include "ui/style.h"
 #include "wayland/popup_surface.h"
 #include "wayland/wayland_seat.h"
+#include "workbench/column_plan.h"
 
 #include <algorithm>
 #include <cstdint>
@@ -623,9 +624,15 @@ void MenuController::openColumnsMenu(const LayoutRect& anchor, std::optional<luc
       {.label = "Name", .enabled = false, .checkmark = true, .toggleState = 1}
   };
   for (const auto candidate : m_columns.columnOrder()) {
+    // a column that is chosen but does not fit is shown as chosen and cannot be changed here
+    const bool leftOut = luciole::workbench::columnLeftOut(
+        m_page.viewMode(), m_columns.shownColumns(), m_columns.columnVisibility(), candidate
+    );
+    const auto label = std::string(luciole::detailsColumnLabel(candidate));
     entries.push_back(
         {.id = static_cast<int>(candidate) + 1,
-         .label = std::string(luciole::detailsColumnLabel(candidate)),
+         .label = leftOut ? label + " (does not fit)" : label,
+         .enabled = !leftOut,
          .checkmark = true,
          .toggleState = luciole::detailsColumnVisible(m_columns.columnVisibility(), candidate) ? 1 : 0}
     );
@@ -764,7 +771,7 @@ void MenuController::openMenu() {
   entries.push_back(actionEntry(Action::Redo, request));
   addSeparator(entries);
   entries.push_back(actionEntry(Action::Search, request));
-  for (const auto action : {Action::Grid, Action::List, Action::Miller}) {
+  for (const auto action : {Action::Grid, Action::List, Action::Miller, Action::Workbench}) {
     entries.push_back(actionEntry(action, request, true));
   }
   entries.push_back({.label = "", .separator = true});

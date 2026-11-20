@@ -7,6 +7,7 @@
 #include "render/scene/node.h"
 
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
@@ -20,6 +21,7 @@ namespace luciole {
   struct DirectoryEntry;
 } // namespace luciole
 
+struct KeyboardEvent;
 class ActivePopup;
 class ContextMenuControl;
 class Flex;
@@ -36,6 +38,24 @@ enum class PopupDismiss : std::uint8_t { Explicit, OutsideClick };
 // Dialog width tiers: Small for one-field prompts and confirmations, Medium for forms and inspectors, Large for
 // multi-pane editors. A dialog is never wider than the window minus the dialog margin on each side.
 enum class DialogWidth : std::uint8_t { Small, Medium, Large };
+
+// What the page's editor tells the page and the workspace; registered with PageContext::setEditing. All are required.
+struct PageEditing {
+  // An editor or a cell field has the keyboard: the page offers it every key first and its shortcuts stand down.
+  std::function<bool()> textFocused;
+  // A key offered to the editor before the page handles it; true when consumed.
+  std::function<bool(const KeyboardEvent&)> key;
+  // Changes not written to their file yet.
+  std::function<bool()> unsaved;
+  // A save is running; the process waits for it.
+  std::function<bool()> saving;
+  // Asks before the page goes away: true when it may go now. Otherwise its question is open (a popup bound as
+  // ActivePopup::Kind::SaveChanges) and it calls `resume` once the user answered No, or Save and the save succeeded.
+  std::function<bool(std::function<void()> resume)> leave;
+  // The page is deactivated while its question is open: the popup closes, which is no answer, and the question is
+  // shown again once the page is active.
+  std::function<void()> keepQuestion;
+};
 
 // The part of BrowserPage that feature controllers use. BrowserPage implements it.
 //
@@ -141,6 +161,8 @@ public:
   virtual VirtualGridView* fileList() = 0;
   // The pane that holds the file grid or the Miller columns.
   virtual Flex& filePane() = 0;
+  // True while a view hides the file pane, which keeps its geometry: hit tests on the pane and the list must not act.
+  virtual bool filePaneCovered() const = 0;
   virtual MillerView& millerView() = 0;
   virtual luciole::ViewMode viewMode() const = 0;
   virtual float gridIconSize() const = 0;
@@ -178,6 +200,10 @@ public:
   // Tallest a context menu popup may be: the height of the window's output, or of the window while that is unknown,
   // less a margin. Popups may extend past the window.
   virtual float popupMaxHeight() const = 0;
+
+  // Registers the page's editor; with none the page has nothing unsaved. Throws std::invalid_argument when a
+  // callback is empty.
+  virtual void setEditing(PageEditing editing) = 0;
 
 protected:
   PageContext() = default;

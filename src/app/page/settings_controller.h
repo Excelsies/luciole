@@ -11,6 +11,7 @@
 namespace luciole {
   class ThumbnailService;
   class ViewPreferenceWriter;
+  class VisitService;
 } // namespace luciole
 
 struct KeyboardEvent;
@@ -27,7 +28,8 @@ class SettingsController final : public SelectPopupContext {
 public:
   SettingsController(
       PageContext& page, luciole::ViewPreferenceWriter& preferences, luciole::ThumbnailService& thumbnails,
-      WaylandConnection& connection, RenderContext& renderer, std::function<void()> clearThumbnails
+      luciole::VisitService& visits, WaylandConnection& connection, RenderContext& renderer,
+      std::function<void()> clearThumbnails
   );
   ~SettingsController() override;
 
@@ -39,6 +41,8 @@ public:
   void preferencesChanged(const std::string& error);
   // Thumbnail cache state changed: sync on the next frame.
   void markDirty() { m_dirty = true; }
+  // The visit service changed. A clear started from the dialog ends once the service is idle, showing its warning.
+  void visitsChanged();
   // The last preference load or save error; empty when there is none.
   const std::string& error() const { return m_error; }
   // Frame slot in BrowserPage::prepareFrame().
@@ -60,10 +64,14 @@ private:
   void sync();
   // Dialog close: drops the dropdown before its parent popup and forgets the view.
   void teardown();
+  void clearVisits();
 
   PageContext& m_page;
   luciole::ViewPreferenceWriter& m_preferences;
   luciole::ThumbnailService& m_thumbnails;
+  luciole::VisitService& m_visits;
+  bool m_clearingVisits = false;
+  std::string m_visitWarning;
   WaylandConnection& m_connection;
   RenderContext& m_renderer;
   std::function<void()> m_clearThumbnails;

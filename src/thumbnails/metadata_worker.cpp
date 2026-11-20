@@ -2,6 +2,7 @@
 #include "imaging/image_limits.h"
 #include "imaging/svg_rasterizer.h"
 #include "render/core/image_orientation.h"
+#include "thumbnails/font_facts.h"
 #include "thumbnails/preview_metadata.h"
 
 #include <algorithm>
@@ -77,7 +78,8 @@ namespace {
 } // namespace
 
 int luciole::runPreviewMetadataWorker(std::span<const std::string_view> args) {
-  if (args.size() != 2 || !args[0].starts_with("image/")) {
+  const bool font = args.size() == 2 && isFontContentType(args[0]);
+  if (args.size() != 2 || (!args[0].starts_with("image/") && !font)) {
     return 2;
   }
   std::uint64_t maximum = 0;
@@ -85,7 +87,7 @@ int luciole::runPreviewMetadataWorker(std::span<const std::string_view> args) {
   if (parsed.ec != std::errc{}
       || parsed.ptr != args[1].data() + args[1].size()
       || maximum == 0
-      || maximum > kMaxEncodedImageBytes) {
+      || maximum > (font ? kMaxFontFileBytes : kMaxEncodedImageBytes)) {
     return 2;
   }
   struct stat info{};
@@ -105,7 +107,12 @@ int luciole::runPreviewMetadataWorker(std::span<const std::string_view> args) {
       }
       offset += static_cast<std::size_t>(read);
     }
-    const auto fields = imageInfo(bytes, args[0]);
+    MetadataFields fields;
+    if (!font) {
+      fields = imageInfo(bytes, args[0]);
+    } else if (const auto facts = readFontFacts(bytes)) {
+      fields = fontFactFields(*facts);
+    }
     if (fields.empty()) {
       return 1;
     }

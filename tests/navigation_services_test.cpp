@@ -5,6 +5,7 @@
 #include "fs/gio_interop.h"
 #include "fs/location_mount.h"
 #include "platform/terminal_launcher.h"
+#include "temp_folder.h"
 #include "test_check.h"
 
 #include <algorithm>
@@ -18,21 +19,15 @@
 namespace {
   namespace fs = std::filesystem;
   struct Fixture {
-    fs::path path;
+    luciole::test::TempFolder tempFolder{"luciole-navigation"};
+    fs::path path = tempFolder.path();
     Fixture() {
-      const luciole::GString temp(g_dir_make_tmp("luciole-navigation-XXXXXX", nullptr));
-      TEST_CHECK(temp != nullptr);
-      path = temp.get();
       fs::create_directory(path / "Alpha");
       fs::create_directory(path / "A space <literal> café");
       fs::create_directory(path / ".hidden");
       fs::create_directory(path / ("raw-" + std::string(1, static_cast<char>(0xff))));
       fs::create_directory_symlink("Alpha", path / "Alias");
       std::ofstream(path / "A file") << "not a folder";
-    }
-    ~Fixture() {
-      std::error_code ignored;
-      fs::remove_all(path, ignored);
     }
     Fixture(const Fixture&) = delete;
     Fixture& operator=(const Fixture&) = delete;

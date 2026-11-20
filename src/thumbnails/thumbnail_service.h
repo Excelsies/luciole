@@ -1,10 +1,19 @@
 #pragma once
 
 #include "fs/directory_session.h"
+#include "fs/interned_text.h"
 #include "model/thumbnail_options.h"
 #include "thumbnails/file_icon_cache.h"
 
+#include <optional>
+#include <string>
+
 namespace luciole {
+  // The type thumbnails go by: the system's; but where that is only "some bytes" or nothing, a name the app's own table
+  // knows as video (bik and bk2 on a system whose MIME database has no globs for them) counts as a video, so the same
+  // file gets the poster the preview kind already treats it as playable for.
+  InternedText thumbnailContentType(const DirectoryEntry& source);
+
   // Adapted from Noctalia's ThumbnailService acquire/release and worker publication model.
   // One process-wide cache for browsing thumbnails and preview images: one memory budget, one decoder pool.
   // Cells borrow immutable prepared pixels; the shared texture cache owns upload and residency.

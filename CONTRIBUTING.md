@@ -60,22 +60,26 @@ Comments explain what the current code does and any non-obvious constraint a rea
 
 ### Module layering
 
-Each directory under `src/` builds as one static library in `meson.build` (`ui/browser`, `ui/controls`, and `ui/dialogs` together form `ui`), and its dependencies list only the modules it may include. A module includes only these:
+Each directory under `src/` builds as one static library in `meson.build` (`ui/browser`, `ui/controls`, `ui/dialogs`, and `ui/workbench` together form `ui`), and its dependencies list only the modules it may include. A module includes only these:
 
 - `model`: plain option and enum types; nothing from `src/` or `lib/`.
+- `workbench`: the measured tree and the Workbench layout math (weights, shares, colors, geometry); `model` and the standard library only.
+- `formats`: file format readers, parsers and printers for previews; `model` and the standard library only.
+- `editing`: the editor's text, table and save-question models; `formats` and the standard library only.
 - `fs`: GIO file access, locations, atomic writes, transfer result types; no other module.
 - `event_loop`: poll sources for the main loop; `lib/core`.
 - `config`: settings and state; `model`, `fs`.
-- `browser`: directory models and controllers without view code; `model`, `fs`, `config`, `lib/core`. Never `lib/render`, `lib/ui`, `lib/wayland`, or `src/ui`.
+- `browser`: directory models and controllers without view code; `model`, `fs`, `config`, `workbench`, `lib/core`. Never `lib/render`, `lib/ui`, `lib/wayland`, or `src/ui`.
 - `operations`: file jobs; `fs`, `model`.
-- `imaging`: image decoders and the shared `image_limits.h`; `fs`, `lib`.
+- `imaging`: image decoders, the shared `image_limits.h` and styled-text tiles; `fs`, `formats`, `model`, `lib`.
 - `system`: icon themes and desktop entries; `lib`.
-- `thumbnails`: thumbnail cache, workers, previews, and the file icon cache; `imaging`, `system`, `fs`, `model`, `lib`.
+- `thumbnails`: thumbnail cache, workers, previews, and the file icon cache; `imaging`, `system`, `fs`, `model`, `formats`, `lib`.
 - `clipboard` (Wayland clipboard and drag and drop payloads) and `platform` (launchers, desktop integration): `fs`, `lib`.
+- `media`: video and audio playback; the standard library, GStreamer and the Bink 2 decoder in `subprojects/libbink2` only. That folder is a pinned third-party copy: it is not formatted, linted or edited like our code, and every change to it is listed in its README and noted at the top of the file changed. Its public header `media/media_player.h` names no GStreamer type. The `media` build option picks the sources: the GStreamer player when GStreamer is found, otherwise a player that reports playback is not available, so callers build the same either way.
 - `ui`: views and controls; any module above. `ui/controls` may include `browser/`, never the reverse.
-- `app`: everything. Its internal `app-jobs` static library contains OperationHub and the activity snapshot adapter, depending only on `browser` and `operations`, so lifecycle tests can link it without window orchestration.
+- `app`: everything. Its internal `app-jobs` static library contains OperationHub and the activity snapshot adapter, depending only on `browser` and `operations`, so lifecycle tests can link it without window orchestration. Its internal `app-workbench` static library contains the Workbench session a page mounts, depending only on `ui` and `browser`, so its tests can link it without a window. Its internal `app-close` static library contains CloseGate, which asks pages with unsaved changes before a close, depending on nothing, so its test links without a window.
 
-All modules share the `src/` include root, so Meson cannot reject an include of a forbidden `src/` module; review catches those. `model`, `fs`, `config`, `browser`, and `operations` do not depend on `noctalia_ui_dep`, so any `lib/` include there fails to compile; give `browser` that dependency only once it needs `lib/core`.
+All modules share the `src/` include root, so Meson cannot reject an include of a forbidden `src/` module; review catches those. `model`, `fs`, `config`, `browser`, `operations`, `workbench`, `formats`, `editing`, and `media` do not depend on `noctalia_ui_dep`, so any `lib/` include there fails to compile; give `browser` that dependency only once it needs `lib/core`.
 
 GIO file types stay behind `fs/`: public headers outside `fs/`, `thumbnails/`, and `imaging/` never mention `GFile`, `GFileInfo`, `GFileType`, or `GCancellable`. `browser`, `config`, `ui`, and `app` use the typed `fs/` API (`Location`, `FileType`, `CancelToken`, `runJob`, `fs/file_query.h`). Modules that drive GIO themselves (`operations`, `thumbnails`, `imaging`, `platform`, `clipboard`) reach it through `fs/gio_interop.h` in their `.cpp` files.
 

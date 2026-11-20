@@ -4,6 +4,8 @@
 #include "fs/gio_interop.h"
 #include "fs/posix_fd.h"
 #include "imaging/image_limits.h"
+#include "thumbnails/bink2_signature.h"
+#include "thumbnails/font_facts.h"
 #include "thumbnails/provider_process.h"
 #include "thumbnails/thumbnail_store.h"
 
@@ -174,6 +176,7 @@ luciole::probePreviewMetadata(const DirectoryEntry& entry, ThumbnailOptions opti
   const std::string mime(entry.contentType.value_or(""));
   const bool image = mime.starts_with("image/"), media = mime.starts_with("video/") || mime.starts_with("audio/");
   const bool launcher = g_content_type_is_a(mime.c_str(), "application/x-desktop");
+  const bool font = isFontContentType(mime);
   if (!path || g_cancellable_is_cancelled(cancel)) {
     return {};
   }
@@ -194,7 +197,7 @@ luciole::probePreviewMetadata(const DirectoryEntry& entry, ThumbnailOptions opti
   if (entry.type != FileType::Regular
       || entry.symlink
       || entryAccess(entry).read == false
-      || (!image && !media && !launcher && mime != "application/pdf")) {
+      || (!image && !media && !launcher && !font && mime != "application/pdf")) {
     return fields;
   }
   const GioPtr<GFileInfo> filesystem(
@@ -249,14 +252,20 @@ luciole::probePreviewMetadata(const DirectoryEntry& entry, ThumbnailOptions opti
   }
   std::vector<std::string> args;
   std::uint64_t fileLimit = 65536;
-  if (image) {
-    const auto maximum =
-        std::min(kMaxEncodedImageBytes, static_cast<std::size_t>(std::max(1, options.maxFileMiB)) * 1024U * 1024U);
+  if (image || font) {
+    const std::uint64_t maximum = font
+        ? fontByteCap(options.maxFileMiB)
+        : std::min(kMaxEncodedImageBytes, static_cast<std::size_t>(std::max(1, options.maxFileMiB)) * 1024U * 1024U);
     if (static_cast<std::uint64_t>(before.st_size) > maximum) {
       return fields;
     }
     args = {"/proc/self/exe", "--preview-metadata-worker", mime, std::to_string(maximum)};
-    fileLimit = std::max<std::uint64_t>(maximum, kProviderMemoryBytes);
+    // Font facts write only their JSON rows.
+    fileLimit = font ? fileLimit : std::max<std::uint64_t>(maximum, kProviderMemoryBytes);
+  } else if (media && hasBink2Signature(input.get())) {
+    // No FFmpeg here reads Bink 2: a worker of the application reads the header, with the playback checks, and
+    // answers in the rows' own JSON, so a damaged header gives the rows an unreadable video gets.
+    args = {"/proc/self/exe", "--bink2-facts-worker"};
   } else if (media) {
     args = {
         "ffprobe",
@@ -302,7 +311,7 @@ luciole::probePreviewMetadata(const DirectoryEntry& entry, ThumbnailOptions opti
     return fields;
   }
   const std::string_view data(reinterpret_cast<const char*>(bytes->data()), bytes->size());
-  auto extra = image ? imageFields(data) : media ? parseMediaMetadata(data) : parsePdfMetadata(data);
+  auto extra = image || font ? imageFields(data) : media ? parseMediaMetadata(data) : parsePdfMetadata(data);
   extra.insert(extra.end(), std::make_move_iterator(fields.begin()), std::make_move_iterator(fields.end()));
   return extra;
 }

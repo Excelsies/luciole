@@ -1,7 +1,10 @@
 #include "browser/directory_model.h"
 #include "config/settings.h"
 #include "fs/gio_ptr.h"
+#include "temp_folder.h"
 #include "test_check.h"
+#include "workbench/column_plan.h"
+#include "workbench/pane_layout.h"
 
 #include <algorithm>
 #include <array>
@@ -9,26 +12,19 @@
 #include <format>
 #include <fstream>
 #include <iterator>
+#include <limits>
 #include <print>
+#include <span>
 #include <stdexcept>
 #include <sys/stat.h>
 #include <toml++/toml.hpp>
 #include <unistd.h>
+#include <utility>
 
 namespace {
   struct Fixture {
-    std::filesystem::path directory;
-    Fixture() {
-      const luciole::GString name(g_dir_make_tmp("luciole-settings-test-XXXXXX", nullptr));
-      TEST_CHECK(name != nullptr);
-      directory = name.get();
-    }
-    ~Fixture() {
-      std::error_code ignored;
-      std::filesystem::remove_all(directory, ignored);
-    }
-    Fixture(const Fixture&) = delete;
-    Fixture& operator=(const Fixture&) = delete;
+    luciole::test::TempFolder tempFolder{"luciole-settings-test"};
+    std::filesystem::path directory = tempFolder.path();
 
     void write(const std::string& name, const std::string& text) const {
       std::ofstream file(directory / name, std::ios::binary);
@@ -1143,6 +1139,370 @@ namespace {
         && read(invalidBase.paths().overrides) == before
     );
   }
+
+  void testWorkbenchViewMode() {
+    using P = luciole::BrowserPreference;
+    using State = luciole::AtomicWriteState;
+    Fixture fixture;
+    fixture.write("config.toml", "[browser]\nview_mode = 'workbench'\n");
+    TEST_CHECK(luciole::validateConfigFile(fixture.paths().base).empty());
+    luciole::ConfigService service(fixture.paths());
+    TEST_CHECK(service.reload() && service.settings().browser.viewMode == luciole::ViewMode::Workbench);
+
+    fixture.write("config.toml", "");
+    TEST_CHECK(service.reload() && service.settings().browser.viewMode == luciole::ViewMode::List);
+    TEST_CHECK(
+        service.saveOverrides(std::array{luciole::OverrideEdit{P::ViewMode, luciole::ViewMode::Workbench}})
+        == State::Durable
+    );
+    TEST_CHECK(read(fixture.paths().overrides).contains("view_mode = \"workbench\""));
+    luciole::ConfigService restored(fixture.paths());
+    TEST_CHECK(restored.reload() && restored.settings().browser.viewMode == luciole::ViewMode::Workbench);
+
+    fixture.write("config.toml", "[browser]\nview_mode = 'workbenches'\n");
+    const auto issues = luciole::validateConfigFile(fixture.paths().base);
+    TEST_CHECK(issues.size() == 1);
+    TEST_CHECK(issues.front().key == "browser.view_mode");
+    TEST_CHECK(issues.front().message == "expected 'list', 'grid', 'miller', or 'workbench'");
+  }
+
+  void testWorkbenchChoices() {
+    using P = luciole::BrowserPreference;
+    using State = luciole::AtomicWriteState;
+    using Instrument = luciole::WorkbenchInstrument;
+    using Ribbon = luciole::WorkbenchRibbon;
+    using Measure = luciole::WorkbenchMeasure;
+    using Color = luciole::WorkbenchColor;
+    Fixture fixture;
+    luciole::ConfigService service(fixture.paths());
+    TEST_CHECK(service.reload());
+    const auto defaults = service.settings().browser.workbench;
+    TEST_CHECK(defaults.instrument == Instrument::Nest && defaults.ribbon == Ribbon::Flame && defaults.strips);
+    TEST_CHECK(defaults.sizeBy == Measure::Bytes && defaults.colorBy == Color::Type);
+    TEST_NEAR(defaults.emphasis, 0.5, 0.0);
+
+    fixture.write(
+        "config.toml",
+        "[browser]\nworkbench_instrument = 'iris'\nworkbench_ribbon = 'ladder'\nworkbench_strips = false\n"
+        "workbench_size_by = 'visits'\nworkbench_color_by = 'modified'\nworkbench_emphasis = 1\n"
+    );
+    TEST_CHECK(service.reload());
+    const auto base = service.settings().browser.workbench;
+    TEST_CHECK(base.instrument == Instrument::Iris && base.ribbon == Ribbon::Ladder && !base.strips);
+    TEST_CHECK(base.sizeBy == Measure::Visits && base.colorBy == Color::Modified);
+    TEST_NEAR(base.emphasis, 1.0, 0.0);
+
+    const std::pair<const char*, Instrument> instruments[]{
+        {"nest", Instrument::Nest}, {"iris", Instrument::Iris}, {"atlas", Instrument::Atlas}
+    };
+    for (const auto& [name, value] : instruments) {
+      fixture.write("config.toml", std::format("[browser]\nworkbench_instrument = '{}'\n", name));
+      TEST_CHECK(service.reload() && service.settings().browser.workbench.instrument == value);
+    }
+    const std::pair<const char*, Ribbon> ribbons[]{
+        {"flame", Ribbon::Flame}, {"flow", Ribbon::Flow}, {"ladder", Ribbon::Ladder}
+    };
+    for (const auto& [name, value] : ribbons) {
+      fixture.write("config.toml", std::format("[browser]\nworkbench_ribbon = '{}'\n", name));
+      TEST_CHECK(service.reload() && service.settings().browser.workbench.ribbon == value);
+    }
+    const std::pair<const char*, Measure> measures[]{{"size", Measure::Bytes},    {"files", Measure::Files},
+                                                     {"items", Measure::Items},   {"modified", Measure::Modified},
+                                                     {"visits", Measure::Visits}, {"equal", Measure::Equal}};
+    for (const auto& [name, value] : measures) {
+      fixture.write("config.toml", std::format("[browser]\nworkbench_size_by = '{}'\n", name));
+      TEST_CHECK(service.reload() && service.settings().browser.workbench.sizeBy == value);
+    }
+    const std::pair<const char*, Color> colors[]{
+        {"type", Color::Type}, {"size", Color::Bytes}, {"visits", Color::Visits}, {"modified", Color::Modified}
+    };
+    for (const auto& [name, value] : colors) {
+      fixture.write("config.toml", std::format("[browser]\nworkbench_color_by = '{}'\n", name));
+      TEST_CHECK(service.reload() && service.settings().browser.workbench.colorBy == value);
+    }
+
+    fixture.write("config.toml", "[browser]\nworkbench_instrument = 'iris'\nworkbench_emphasis = 0.75\n");
+    TEST_CHECK(service.reload());
+    const std::array edits{
+        luciole::OverrideEdit{P::WorkbenchInstrument, Instrument::Atlas},
+        luciole::OverrideEdit{P::WorkbenchRibbon, Ribbon::Flow},
+        luciole::OverrideEdit{P::WorkbenchStrips, false},
+        luciole::OverrideEdit{P::WorkbenchSizeBy, Measure::Equal},
+        luciole::OverrideEdit{P::WorkbenchColorBy, Color::Bytes},
+        luciole::OverrideEdit{P::WorkbenchEmphasis, 0.25},
+    };
+    TEST_CHECK(service.saveOverrides(edits) == State::Durable);
+    const auto saved = read(fixture.paths().overrides);
+    TEST_CHECK(saved.contains("workbench_instrument = \"atlas\""));
+    TEST_CHECK(saved.contains("workbench_ribbon = \"flow\""));
+    TEST_CHECK(saved.contains("workbench_strips = false"));
+    TEST_CHECK(saved.contains("workbench_size_by = \"equal\""));
+    TEST_CHECK(saved.contains("workbench_color_by = \"size\""));
+    TEST_CHECK(saved.contains("workbench_emphasis = 0.25"));
+    luciole::ConfigService restarted(fixture.paths());
+    TEST_CHECK(restarted.reload());
+    const auto chosen = restarted.settings().browser.workbench;
+    TEST_CHECK(chosen.instrument == Instrument::Atlas && chosen.ribbon == Ribbon::Flow && !chosen.strips);
+    TEST_CHECK(chosen.sizeBy == Measure::Equal && chosen.colorBy == Color::Bytes);
+    TEST_NEAR(chosen.emphasis, 0.25, 0.0);
+
+    const std::array invalidEdits{
+        luciole::OverrideEdit{P::WorkbenchInstrument, static_cast<Instrument>(255)},
+        luciole::OverrideEdit{P::WorkbenchRibbon, static_cast<Ribbon>(3)},
+        luciole::OverrideEdit{P::WorkbenchSizeBy, static_cast<Measure>(6)},
+        luciole::OverrideEdit{P::WorkbenchColorBy, static_cast<Color>(4)},
+        luciole::OverrideEdit{P::WorkbenchEmphasis, -0.01},
+        luciole::OverrideEdit{P::WorkbenchEmphasis, 1.01},
+        luciole::OverrideEdit{P::WorkbenchEmphasis, std::numeric_limits<double>::quiet_NaN()},
+        luciole::OverrideEdit{P::WorkbenchEmphasis, std::numeric_limits<double>::infinity()},
+    };
+    for (const auto& edit : invalidEdits) {
+      TEST_CHECK(restarted.saveOverrides(std::span(&edit, 1)) == State::NotCommitted);
+      TEST_CHECK(read(fixture.paths().overrides) == saved);
+    }
+
+    const std::array reset{
+        luciole::OverrideEdit{P::WorkbenchInstrument, std::nullopt},
+        luciole::OverrideEdit{P::WorkbenchRibbon, std::nullopt},
+        luciole::OverrideEdit{P::WorkbenchStrips, std::nullopt},
+        luciole::OverrideEdit{P::WorkbenchSizeBy, std::nullopt},
+        luciole::OverrideEdit{P::WorkbenchColorBy, std::nullopt},
+        luciole::OverrideEdit{P::WorkbenchEmphasis, std::nullopt},
+    };
+    TEST_CHECK(restarted.saveOverrides(reset) == State::Durable);
+    const auto inherited = restarted.settings().browser.workbench;
+    TEST_CHECK(inherited.instrument == Instrument::Iris && inherited.ribbon == Ribbon::Flame && inherited.strips);
+    TEST_NEAR(inherited.emphasis, 0.75, 0.0);
+    TEST_CHECK(!read(fixture.paths().overrides).contains("workbench_"));
+
+    const std::pair<const char*, const char*> invalid[]{
+        {"workbench_instrument", "'Nest'"}, {"workbench_instrument", "'treemap'"}, {"workbench_instrument", "1"},
+        {"workbench_ribbon", "'flames'"},   {"workbench_ribbon", "true"},          {"workbench_strips", "'on'"},
+        {"workbench_strips", "1"},          {"workbench_size_by", "'bytes'"},      {"workbench_size_by", "'recent'"},
+        {"workbench_color_by", "'age'"},    {"workbench_color_by", "[]"},          {"workbench_emphasis", "1.5"},
+        {"workbench_emphasis", "-0.5"},     {"workbench_emphasis", "nan"},         {"workbench_emphasis", "inf"},
+        {"workbench_emphasis", "'0.5'"},
+    };
+    for (const auto& [key, value] : invalid) {
+      fixture.write("config.toml", std::format("[browser]\n{} = {}\n", key, value));
+      TEST_CHECK(!luciole::validateConfigFile(fixture.paths().base).empty());
+      TEST_CHECK(!restarted.reload() && restarted.settings().browser.workbench == inherited);
+    }
+  }
+
+  void testWorkbenchLayout() {
+    using P = luciole::BrowserPreference;
+    using State = luciole::AtomicWriteState;
+    Fixture fixture;
+    luciole::ConfigService service(fixture.paths());
+    TEST_CHECK(service.reload());
+    const auto defaults = service.settings().browser.workbench;
+    TEST_CHECK(defaults.leftWidth == 0 && defaults.instrumentHeight == 0);
+    TEST_CHECK((defaults.ribbonHeights == std::array{0, 0, 0}));
+    TEST_CHECK(!defaults.instrumentCollapsed && !defaults.jumpCollapsed && !defaults.ribbonCollapsed);
+    TEST_CHECK((defaults.columnWidths == std::array{260, 190, 140}) && defaults.listWidth == 0);
+
+    fixture.write(
+        "config.toml",
+        "[browser]\nworkbench_left_width = 360\nworkbench_instrument_height = 300\n"
+        "workbench_flame_height = 210\nworkbench_flow_height = 330\nworkbench_ladder_height = 120\n"
+        "workbench_instrument_collapsed = true\nworkbench_jump_collapsed = true\n"
+        "workbench_ribbon_collapsed = true\nworkbench_first_column_width = 300\n"
+        "workbench_second_column_width = 200\nworkbench_third_column_width = 150\n"
+        "workbench_list_width = 400\n"
+    );
+    TEST_CHECK(service.reload());
+    const auto base = service.settings().browser.workbench;
+    TEST_CHECK(base.leftWidth == 360 && base.instrumentHeight == 300);
+    TEST_CHECK((base.ribbonHeights == std::array{210, 330, 120}));
+    TEST_CHECK(base.instrumentCollapsed && base.jumpCollapsed && base.ribbonCollapsed);
+    TEST_CHECK((base.columnWidths == std::array{300, 200, 150}) && base.listWidth == 400);
+
+    const std::array edits{
+        luciole::OverrideEdit{P::WorkbenchLeftWidth, 0},
+        luciole::OverrideEdit{P::WorkbenchInstrumentHeight, 100000},
+        luciole::OverrideEdit{P::WorkbenchFlameHeight, 1},
+        luciole::OverrideEdit{P::WorkbenchFlowHeight, 0},
+        luciole::OverrideEdit{P::WorkbenchLadderHeight, 181},
+        luciole::OverrideEdit{P::WorkbenchInstrumentCollapsed, false},
+        luciole::OverrideEdit{P::WorkbenchJumpCollapsed, false},
+        luciole::OverrideEdit{P::WorkbenchRibbonCollapsed, false},
+        luciole::OverrideEdit{P::WorkbenchFirstColumnWidth, 640},
+        luciole::OverrideEdit{P::WorkbenchSecondColumnWidth, 140},
+        luciole::OverrideEdit{P::WorkbenchThirdColumnWidth, 141},
+        luciole::OverrideEdit{P::WorkbenchListWidth, 469},
+    };
+    TEST_CHECK(service.saveOverrides(edits) == State::Durable);
+    const auto saved = read(fixture.paths().overrides);
+    TEST_CHECK(saved.contains("workbench_left_width = 0"));
+    TEST_CHECK(saved.contains("workbench_ladder_height = 181"));
+    TEST_CHECK(saved.contains("workbench_list_width = 469"));
+    luciole::ConfigService restarted(fixture.paths());
+    TEST_CHECK(restarted.reload());
+    const auto chosen = restarted.settings().browser.workbench;
+    TEST_CHECK(chosen.leftWidth == 0 && chosen.instrumentHeight == 100000);
+    TEST_CHECK((chosen.ribbonHeights == std::array{1, 0, 181}));
+    TEST_CHECK(!chosen.instrumentCollapsed && !chosen.jumpCollapsed && !chosen.ribbonCollapsed);
+    TEST_CHECK((chosen.columnWidths == std::array{640, 140, 141}) && chosen.listWidth == 469);
+
+    const std::array invalidEdits{
+        luciole::OverrideEdit{P::WorkbenchLeftWidth, -1},
+        luciole::OverrideEdit{P::WorkbenchLeftWidth, 100001},
+        luciole::OverrideEdit{P::WorkbenchInstrumentHeight, -1},
+        luciole::OverrideEdit{P::WorkbenchFlameHeight, 100001},
+        luciole::OverrideEdit{P::WorkbenchFlowHeight, std::numeric_limits<int>::min()},
+        luciole::OverrideEdit{P::WorkbenchLadderHeight, std::numeric_limits<int>::max()},
+        luciole::OverrideEdit{P::WorkbenchFirstColumnWidth, 0},
+        luciole::OverrideEdit{P::WorkbenchSecondColumnWidth, 139},
+        luciole::OverrideEdit{P::WorkbenchThirdColumnWidth, 641},
+        luciole::OverrideEdit{P::WorkbenchListWidth, 319},
+        luciole::OverrideEdit{P::WorkbenchListWidth, 470},
+        luciole::OverrideEdit{P::WorkbenchListWidth, -1},
+    };
+    for (const auto& edit : invalidEdits) {
+      TEST_CHECK(restarted.saveOverrides(std::span(&edit, 1)) == State::NotCommitted);
+      TEST_CHECK(read(fixture.paths().overrides) == saved);
+    }
+
+    const std::array reset{
+        luciole::OverrideEdit{P::WorkbenchLeftWidth, std::nullopt},
+        luciole::OverrideEdit{P::WorkbenchFirstColumnWidth, std::nullopt},
+        luciole::OverrideEdit{P::WorkbenchListWidth, std::nullopt},
+    };
+    TEST_CHECK(restarted.saveOverrides(reset) == State::Durable);
+    const auto inherited = restarted.settings().browser.workbench;
+    TEST_CHECK(inherited.leftWidth == 360 && inherited.columnWidths[0] == 300 && inherited.listWidth == 400);
+    TEST_CHECK(inherited.instrumentHeight == 100000);
+
+    const std::pair<const char*, const char*> invalid[]{
+        {"workbench_left_width", "-1"},
+        {"workbench_left_width", "100001"},
+        {"workbench_left_width", "340.0"},
+        {"workbench_left_width", "'340'"},
+        {"workbench_instrument_height", "1e9"},
+        {"workbench_flame_height", "-5"},
+        {"workbench_flow_height", "true"},
+        {"workbench_ladder_height", "9223372036854775807"},
+        {"workbench_instrument_collapsed", "'yes'"},
+        {"workbench_jump_collapsed", "0"},
+        {"workbench_ribbon_collapsed", "[]"},
+        {"workbench_first_column_width", "139"},
+        {"workbench_second_column_width", "0"},
+        {"workbench_third_column_width", "641"},
+        {"workbench_list_width", "470"},
+        {"workbench_list_width", "100"},
+    };
+    for (const auto& [key, value] : invalid) {
+      fixture.write("config.toml", std::format("[browser]\n{} = {}\n", key, value));
+      TEST_CHECK(!luciole::validateConfigFile(fixture.paths().base).empty());
+      TEST_CHECK(!restarted.reload() && restarted.settings().browser.workbench == inherited);
+    }
+  }
+
+  void testRecordVisits() {
+    using P = luciole::BrowserPreference;
+    using State = luciole::AtomicWriteState;
+    Fixture fixture;
+    luciole::ConfigService service(fixture.paths());
+    TEST_CHECK(service.reload() && service.settings().browser.recordVisits);
+    fixture.write("config.toml", "[browser]\nrecord_visits = false\n");
+    TEST_CHECK(service.reload() && !service.settings().browser.recordVisits);
+    TEST_CHECK(service.saveOverrides(std::array{luciole::OverrideEdit{P::RecordVisits, true}}) == State::Durable);
+    TEST_CHECK(read(fixture.paths().overrides).contains("record_visits = true"));
+    TEST_CHECK(luciole::loadSettings(fixture.paths())->browser.recordVisits);
+    TEST_CHECK(
+        service.saveOverrides(std::array{luciole::OverrideEdit{P::RecordVisits, std::nullopt}}) == State::Durable
+        && !service.settings().browser.recordVisits
+    );
+    for (const auto* value : {"'false'", "0", "[]"}) {
+      fixture.write("config.toml", std::format("[browser]\nrecord_visits = {}\n", value));
+      TEST_CHECK(!luciole::validateConfigFile(fixture.paths().base).empty());
+      TEST_CHECK(!service.reload() && !service.settings().browser.recordVisits);
+    }
+  }
+
+  // The preview size is one of the steps; anything else is reported and the default stays.
+  void testWorkbenchPreviewSize() {
+    using P = luciole::BrowserPreference;
+    using State = luciole::AtomicWriteState;
+    Fixture fixture;
+    luciole::ConfigService service(fixture.paths());
+    TEST_CHECK(service.reload() && service.settings().browser.workbench.previewSize == 100);
+    fixture.write("config.toml", "[browser]\nworkbench_preview_size = 150\n");
+    TEST_CHECK(service.reload() && service.settings().browser.workbench.previewSize == 150);
+    for (const int step : {70, 80, 90, 100, 110, 125, 150, 175, 200, 250, 300}) {
+      TEST_CHECK(
+          service.saveOverrides(std::array{luciole::OverrideEdit{P::WorkbenchPreviewSize, step}}) == State::Durable
+      );
+      TEST_CHECK(read(fixture.paths().overrides).contains(std::format("workbench_preview_size = {}", step)));
+      luciole::ConfigService restarted(fixture.paths());
+      TEST_CHECK(restarted.reload() && restarted.settings().browser.workbench.previewSize == step);
+    }
+    const auto saved = read(fixture.paths().overrides);
+    for (const int bad : {0, 69, 75, 101, 301, -100, std::numeric_limits<int>::max()}) {
+      TEST_CHECK(
+          service.saveOverrides(std::array{luciole::OverrideEdit{P::WorkbenchPreviewSize, bad}}) == State::NotCommitted
+      );
+      TEST_CHECK(read(fixture.paths().overrides) == saved);
+    }
+    std::filesystem::remove(fixture.paths().overrides);
+    for (const char* bad : {"75", "100.0", "'100'", "true", "1e3"}) {
+      fixture.write("config.toml", std::format("[browser]\nworkbench_preview_size = {}\n", bad));
+      const auto issues = luciole::validateConfigFile(fixture.paths().base);
+      TEST_CHECK(!issues.empty());
+      TEST_CHECK(std::ranges::any_of(issues, [](const auto& issue) {
+        return issue.key.contains("workbench_preview_size");
+      }));
+      luciole::ConfigService fresh(fixture.paths());
+      TEST_CHECK(!fresh.reload() && fresh.settings().browser.workbench.previewSize == 100);
+    }
+  }
+
+  // A pane size the settings accept is one the Workbench layout keeps, and one it refuses the layout refuses too.
+  void testWorkbenchLayoutLimits() {
+    using P = luciole::BrowserPreference;
+    using State = luciole::AtomicWriteState;
+    namespace wb = luciole::workbench;
+    Fixture fixture;
+    luciole::ConfigService service(fixture.paths());
+    const auto accepted = [&](const luciole::OverrideEdit& edit) {
+      return service.saveOverrides(std::span(&edit, 1)) != State::NotCommitted;
+    };
+    for (const int size : {-100001, -1, 0, 1, 199, 200, 99999, 100000, 100001}) {
+      const auto value = static_cast<double>(size);
+      wb::PaneState state;
+      state.leftWidth = value;
+      TEST_CHECK(accepted({P::WorkbenchLeftWidth, size}) == wb::sanitizePaneState(state).problems.empty());
+      state = {};
+      state.instrumentHeight = value;
+      TEST_CHECK(accepted({P::WorkbenchInstrumentHeight, size}) == wb::sanitizePaneState(state).problems.empty());
+      // Indexed by workbench::RibbonKind.
+      const std::array ribbonKeys{P::WorkbenchFlameHeight, P::WorkbenchFlowHeight, P::WorkbenchLadderHeight};
+      for (std::size_t kind = 0; kind < ribbonKeys.size(); ++kind) {
+        state = {};
+        state.ribbonHeights[kind] = value;
+        TEST_CHECK(accepted({ribbonKeys[kind], size}) == wb::sanitizePaneState(state).problems.empty());
+      }
+    }
+    const std::array columnKeys{
+        P::WorkbenchFirstColumnWidth, P::WorkbenchSecondColumnWidth, P::WorkbenchThirdColumnWidth
+    };
+    for (const int width : {0, 139, 140, 141, 639, 640, 641}) {
+      for (std::size_t column = 0; column < columnKeys.size(); ++column) {
+        wb::ColumnWidths widths;
+        widths.columns[column] = width;
+        const bool kept = wb::normalizeWidths(widths).columns[column] == width;
+        TEST_CHECK(accepted({columnKeys[column], width}) == kept);
+      }
+    }
+    for (const int width : {-1, 1, 319, 320, 321, 468, 469, 470, 1272}) {
+      wb::ColumnWidths widths;
+      widths.list = width;
+      TEST_CHECK(accepted({P::WorkbenchListWidth, width}) == wb::normalizeWidths(widths).list.has_value());
+    }
+    // 0 is the absence of a remembered list width, which the layout reads as none.
+    TEST_CHECK(accepted({P::WorkbenchListWidth, 0}));
+  }
 } // namespace
 
 int main() {
@@ -1176,6 +1536,12 @@ int main() {
     testInteractionModes();
     testThumbnailSettings();
     testOverrideSaving();
+    testWorkbenchViewMode();
+    testWorkbenchChoices();
+    testWorkbenchLayout();
+    testWorkbenchLayoutLimits();
+    testWorkbenchPreviewSize();
+    testRecordVisits();
     std::println("settings checks passed");
     return 0;
   } catch (const std::exception& error) {

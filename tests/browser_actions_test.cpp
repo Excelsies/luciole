@@ -772,6 +772,25 @@ namespace {
     model.setFilter({false, "alpha"});
     TEST_CHECK(!input.append(model, "b", now + 8s));
   }
+  void testViewModeActions() {
+    luciole::DirectoryModel model;
+    model.applySnapshot(snapshot());
+    luciole::ActionContext context{.model = model, .query = {}, .pinned = {}, .viewMode = luciole::ViewMode::Workbench};
+    const auto request = R::capture(context);
+    TEST_CHECK(R::definition(A::Workbench).label == "Workbench view");
+    TEST_CHECK(R::state(A::Workbench, context, request).checked == 1);
+    TEST_CHECK(R::state(A::List, context, request).checked == 0);
+    TEST_CHECK(R::state(A::Miller, context, request).checked == 0);
+    // Workbench previews in its columns, so the docked preview cannot be shown there.
+    TEST_CHECK(!R::state(A::ShowPreview, context, request).enabled);
+    context.viewMode = luciole::ViewMode::List;
+    TEST_CHECK(R::state(A::ShowPreview, context, request).enabled);
+    TEST_CHECK(R::state(A::Workbench, context, request).checked == 0);
+    TEST_CHECK(R::state(A::List, context, request).checked == 1);
+    TEST_CHECK(!luciole::chooserAction(A::Workbench));
+    context.chooser = true;
+    TEST_CHECK(!R::state(A::Workbench, context, request).enabled);
+  }
   void testActionTable() {
     TEST_CHECK(R::definitions().size() == luciole::kBrowserActionCount);
     for (std::size_t index = 0; index < luciole::kBrowserActionCount; ++index) {
@@ -787,6 +806,17 @@ namespace {
   void testShortcuts() {
     for (const auto& definition : R::definitions()) {
       TEST_CHECK(luciole::actionChord(definition.action).has_value() == !definition.shortcut.empty());
+    }
+    // No chord is bound to two actions.
+    for (const auto& first : R::definitions()) {
+      for (const auto& second : R::definitions()) {
+        const auto& a = luciole::actionChord(first.action);
+        const auto& b = luciole::actionChord(second.action);
+        if (first.action != second.action && a && b && *a == *b) {
+          std::println(stderr, "{} and {} share {}", first.label, second.label, first.shortcut);
+        }
+        TEST_CHECK(first.action == second.action || !a || !b || !(*a == *b));
+      }
     }
     const auto chord = [](A action) { return luciole::actionChord(action).value_or(KeyChord{}); };
     TEST_CHECK((chord(A::Settings) == KeyChord{XKB_KEY_comma, KeyMod::Ctrl}));
@@ -811,6 +841,11 @@ namespace {
     TEST_CHECK(!luciole::shortcutMatches(A::Terminal, XKB_KEY_F4, KeyMod::Ctrl));
     TEST_CHECK(!luciole::shortcutMatches(A::Root, 0, 0));
     TEST_CHECK(luciole::shortcutAction({A::Grid, A::List, A::Miller}, XKB_KEY_2, KeyMod::Ctrl) == A::List);
+    TEST_CHECK((chord(A::Workbench) == KeyChord{XKB_KEY_4, KeyMod::Ctrl}));
+    TEST_CHECK(
+        luciole::shortcutAction({A::Grid, A::List, A::Miller, A::Workbench}, XKB_KEY_4, KeyMod::Ctrl) == A::Workbench
+    );
+    TEST_CHECK(!luciole::shortcutAction({A::Grid, A::List, A::Miller, A::Workbench}, XKB_KEY_4, 0));
     TEST_CHECK(luciole::shortcutAction({A::DeletePermanently, A::Trash}, XKB_KEY_Delete, 0) == A::Trash);
     TEST_CHECK(
         luciole::shortcutAction({A::DeletePermanently, A::Trash}, XKB_KEY_Delete, KeyMod::Shift) == A::DeletePermanently
@@ -823,6 +858,7 @@ int main() {
   try {
     testActionTable();
     testShortcuts();
+    testViewModeActions();
     testTerminalActions();
     testArchiveActions();
     testSplitArchiveActions();

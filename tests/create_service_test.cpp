@@ -2,6 +2,7 @@
 #include "event_loop/glib_poll_source.h"
 #include "fs/gio_interop.h"
 #include "operations/create_service.h"
+#include "temp_folder.h"
 #include "test_check.h"
 
 #include <algorithm>
@@ -21,17 +22,8 @@ namespace {
   namespace fs = std::filesystem;
   luciole::Location location(const fs::path& path) { return luciole::Location::fromPath(path.native()); }
   struct Fixture {
-    fs::path root;
-    Fixture() {
-      std::string path = "/tmp/luciole-create-XXXXXX";
-      TEST_CHECK(::mkdtemp(path.data()) != nullptr);
-      root = path;
-    }
-    ~Fixture() {
-      std::error_code error;
-      fs::permissions(root, fs::perms::owner_all, fs::perm_options::add, error);
-      fs::remove_all(root, error);
-    }
+    luciole::test::TempFolder tempFolder{"luciole-create"};
+    fs::path root = tempFolder.path();
   };
   class Pump {
   public:

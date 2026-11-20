@@ -1,6 +1,7 @@
 #include "browser/miller_columns.h"
 #include "event_loop/glib_poll_source.h"
 #include "fs/gio_interop.h"
+#include "temp_folder.h"
 #include "test_check.h"
 
 #include <chrono>
@@ -20,23 +21,16 @@ namespace {
   class Fixture {
   public:
     Fixture() {
-      const luciole::GString name(g_dir_make_tmp("luciole-miller-XXXXXX", nullptr));
-      TEST_CHECK(name != nullptr);
-      path = name.get();
       fs::create_directories(path / "a" / "nested");
       fs::create_directory(path / "b");
       std::ofstream(path / "a" / "file.txt") << "column fixture";
       std::ofstream(path / "a" / "nested" / "kept.txt") << "selected fixture";
       fs::create_directory_symlink("..", path / "a" / "cycle");
     }
-    ~Fixture() {
-      std::error_code ignored;
-      fs::permissions(path / "locked", fs::perms::owner_all, ignored);
-      fs::remove_all(path, ignored);
-    }
     Fixture(const Fixture&) = delete;
     Fixture& operator=(const Fixture&) = delete;
-    fs::path path;
+    luciole::test::TempFolder tempFolder{"luciole-miller"};
+    fs::path path = tempFolder.path();
   };
   class Pump {
   public:

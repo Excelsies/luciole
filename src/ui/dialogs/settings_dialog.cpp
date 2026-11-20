@@ -31,7 +31,7 @@ namespace {
 
 SettingsDialog::SettingsDialog(
     std::function<void(luciole::OverrideEdit)> change, std::function<void()> reset, std::function<void()> close,
-    std::function<void()> clearThumbnails
+    std::function<void()> clearThumbnails, std::function<void()> clearVisits
 )
     : m_change(std::move(change)), m_resetAll(std::move(reset)) {
   setDirection(FlexDirection::Vertical);
@@ -123,7 +123,10 @@ SettingsDialog::SettingsDialog(
   card("View");
   addChoice(
       P::ViewMode, "View",
-      {{"Grid", luciole::ViewMode::Grid}, {"List", luciole::ViewMode::List}, {"Columns", luciole::ViewMode::Miller}}
+      {{"Grid", luciole::ViewMode::Grid},
+       {"List", luciole::ViewMode::List},
+       {"Columns", luciole::ViewMode::Miller},
+       {"Workbench", luciole::ViewMode::Workbench}}
   );
   addChoice(
       P::Density, "Density",
@@ -163,6 +166,7 @@ SettingsDialog::SettingsDialog(
   card("Column view");
   addNumber(P::MillerColumnWidth, "Column width", {180, 208, 240, 260, 300, 360, 480, 640, 800});
   addBool(P::MillerShowParents, "Show parent folders");
+  addWorkbenchCard(std::move(clearVisits));
   section("List columns", "list-details");
   card("List");
   addBool(P::ExpandableFolders, "Expandable folders");
@@ -316,6 +320,26 @@ void SettingsDialog::addChoice(
   };
   addRow<T>(key, title, show, std::move(control), std::move(subtitle));
 }
+// The Workbench card builds these choices in settings_dialog_workbench.cpp.
+template <class T> using Key = luciole::PreferenceKey<T>;
+template void SettingsDialog::addChoice(
+    Key<luciole::WorkbenchInstrument>, const std::string&, const Choices<luciole::WorkbenchInstrument>&, std::string
+);
+template void SettingsDialog::addChoice(
+    Key<luciole::WorkbenchRibbon>, const std::string&, const Choices<luciole::WorkbenchRibbon>&, std::string
+);
+template void SettingsDialog::addChoice(
+    Key<luciole::WorkbenchMeasure>, const std::string&, const Choices<luciole::WorkbenchMeasure>&, std::string
+);
+template void SettingsDialog::addChoice(
+    Key<luciole::WorkbenchColor>, const std::string&, const Choices<luciole::WorkbenchColor>&, std::string
+);
+template void SettingsDialog::addChoice(
+    Key<luciole::WorkbenchPreviewPlace>, const std::string&, const Choices<luciole::WorkbenchPreviewPlace>&, std::string
+);
+template void SettingsDialog::addChoice(
+    Key<luciole::AudioVisualKind>, const std::string&, const Choices<luciole::AudioVisualKind>&, std::string
+);
 
 void SettingsDialog::addTerminal() {
   auto control = std::make_unique<Input>();
@@ -423,16 +447,25 @@ template <class T> void SettingsDialog::send(luciole::PreferenceKey<T> key, std:
 }
 void SettingsDialog::sync(
     const luciole::BrowserSettings& settings, const luciole::BrowserSettings& inherited, bool busy,
-    const std::string& error, bool clearingThumbnails
+    const std::string& error, bool clearingThumbnails, bool clearingVisits
 ) {
   m_clearThumbnails->setEnabled(!clearingThumbnails);
   m_clearThumbnails->setText(clearingThumbnails ? "Clearing…" : "Clear cache");
+  m_clearVisits->setEnabled(!clearingVisits);
+  m_clearVisits->setText(clearingVisits ? "Clearing…" : "Clear visit history");
   m_current = settings;
   m_inherited = inherited;
   for (const auto& [id, show] : m_rows) {
     show();
   }
-  setStatus(!error.empty() ? error : clearingThumbnails ? "Clearing cache…" : busy ? "Saving…" : "", !error.empty());
+  setStatus(
+      !error.empty()           ? error
+          : clearingThumbnails ? "Clearing cache…"
+          : clearingVisits     ? "Clearing visit history…"
+          : busy               ? "Saving…"
+                               : "",
+      !error.empty()
+  );
 }
 void SettingsDialog::setStatus(const std::string& text, bool error) {
   // One line in the header: the tooltip shows an ellipsized error in full.

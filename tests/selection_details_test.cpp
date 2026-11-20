@@ -2,6 +2,7 @@
 #include "browser/selection_details.h"
 #include "fs/file_query.h"
 #include "fs/gio_interop.h"
+#include "temp_folder.h"
 #include "test_check.h"
 
 #include <chrono>
@@ -137,12 +138,10 @@ namespace {
 } // namespace
 
 int main() {
-  const luciole::GString temporary(g_dir_make_tmp("luciole-selection-details-XXXXXX", nullptr));
-  TEST_CHECK(temporary);
-  const fs::path root(temporary.get());
+  const luciole::test::TempFolder temporary("luciole-selection-details");
+  const fs::path& root = temporary.path();
   typedMetadataChecks();
   selectionChecks(root);
   lifecycleChecks(root);
-  fs::remove_all(root);
   std::println("selection details checks passed");
 }

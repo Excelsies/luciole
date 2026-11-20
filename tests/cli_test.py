@@ -5,6 +5,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
 
 BINARY = str(Path(sys.argv.pop(1)).resolve())
@@ -141,6 +142,76 @@ printf '%s\n' "${COMPREPLY[@]}"
                 self.assertNotEqual(strict.returncode, 0)
                 self.assertIn("browser.show_tab_bar_with_single_tab: unknown setting", strict.stderr)
                 path.unlink()
+
+    def invoke_helper(self, *args, input_path=None):
+        """Run a helper mode with input_path open as descriptor 3, as the preview services start it."""
+        env = dict(os.environ)
+        for name in ("DISPLAY", "WAYLAND_DISPLAY", "WAYLAND_SOCKET", "DBUS_SESSION_BUS_ADDRESS"):
+            env.pop(name, None)
+        env["XDG_RUNTIME_DIR"] = str(self.runtime_dir)
+        env["XDG_CONFIG_HOME"] = str(self.config_dir)
+        script = 'exec "$0" "$@" 3<"$LUCIOLE_TEST_INPUT"' if input_path else 'exec "$0" "$@"'
+        if input_path:
+            env["LUCIOLE_TEST_INPUT"] = str(input_path)
+        return subprocess.run(
+            ["sh", "-c", script, BINARY, *args], check=False, capture_output=True, env=env, timeout=60,
+        )
+
+    def write_workbook(self, path):
+        sheet = '<row r="1"><c r="A1" t="inlineStr"><is><t>Item</t></is></c><c r="B1"><v>120.5</v></c></row>'
+        members = {
+            "[Content_Types].xml": '<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/'
+            '2006/content-types"><Override PartName="/xl/workbook.xml" ContentType="application/'
+            'vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/></Types>',
+            "_rels/.rels": '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/'
+            '2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/'
+            '2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>',
+            "xl/workbook.xml": '<?xml version="1.0"?><workbook xmlns="http://schemas.openxmlformats.org/'
+            'spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/'
+            'relationships"><sheets><sheet name="Budget" sheetId="1" r:id="rId1"/></sheets></workbook>',
+            "xl/_rels/workbook.xml.rels": '<?xml version="1.0"?><Relationships xmlns="http://schemas.'
+            'openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.'
+            'openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>'
+            "</Relationships>",
+            "xl/worksheets/sheet1.xml": '<?xml version="1.0"?><worksheet xmlns="http://schemas.openxmlformats.'
+            f'org/spreadsheetml/2006/main"><sheetData>{sheet}</sheetData></worksheet>',
+        }
+        with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as archive:
+            for name, text in members.items():
+                archive.writestr(name, text)
+
+    def test_sheet_preview_worker_is_headless(self):
+        book = self.config_dir / "budget.xlsx"
+        self.write_workbook(book)
+        result = self.invoke_helper("--sheet-preview-worker", "xlsx", "0", input_path=book)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stderr, b"")
+        self.assertTrue(result.stdout.startswith(b"NSR1"))
+        for text in (b"Budget", b"Item", b"120.5"):
+            self.assertIn(text, result.stdout)
+        # A file that is no workbook gets an answer that says so; a sheet past the last says it does not exist.
+        notes = self.config_dir / "notes.xlsx"
+        notes.write_text("not a workbook")
+        result = self.invoke_helper("--sheet-preview-worker", "xlsx", "0", input_path=notes)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue(result.stdout.startswith(b"NSE1"))
+        self.assertIn(b"This spreadsheet could not be read.", result.stdout)
+        result = self.invoke_helper("--sheet-preview-worker", "xlsx", "3", input_path=book)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(b"This sheet does not exist.", result.stdout)
+        # Malformed calls and a missing descriptor answer nothing.
+        for args, input_path in (
+            (("--sheet-preview-worker",), book),
+            (("--sheet-preview-worker", "csv", "0"), book),
+            (("--sheet-preview-worker", "xlsx", "-1"), book),
+            (("--sheet-preview-worker", "ods", "0", "extra"), book),
+            (("--sheet-preview-worker", "xlsx", "0"), None),
+            (("--sheet-preview-worker", "xlsx", "0"), self.config_dir),
+        ):
+            with self.subTest(args=args, input_path=input_path):
+                result = self.invoke_helper(*args, input_path=input_path)
+                self.assertEqual(result.returncode, 2)
+                self.assertEqual(result.stdout, b"")
 
     def test_startup_reports_connection_failure(self):
         result = self.invoke()

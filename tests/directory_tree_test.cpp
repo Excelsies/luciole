@@ -3,6 +3,7 @@
 #include "config/settings.h"
 #include "directory_fixture.h"
 #include "fs/gio_interop.h"
+#include "temp_folder.h"
 #include "test_check.h"
 
 #include <chrono>
@@ -259,12 +260,10 @@ namespace {
   }
 } // namespace
 int main() {
-  const luciole::GString temporary(g_dir_make_tmp("luciole-directory-tree-XXXXXX", nullptr));
-  TEST_CHECK(temporary);
-  const fs::path root(temporary.get());
+  const luciole::test::TempFolder temporary("luciole-directory-tree");
+  const fs::path& root = temporary.path();
   details(root);
   boundsAndSidebar(root);
   settings(root);
-  fs::remove_all(root);
   std::println("directory tree checks passed");
 }

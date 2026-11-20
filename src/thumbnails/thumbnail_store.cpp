@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <array>
 #include <cerrno>
+#include <charconv>
 #include <cmath>
 #include <fcntl.h>
 #include <format>
@@ -18,6 +19,19 @@
 
 namespace {
   constexpr std::size_t kMaxEntries = 1024;
+  // A picture side a thumbnail states, or 0 when the key is missing or is not a whole number from 1 to 1048576.
+  int textSize(const luciole::ThumbnailPng& thumbnail, const std::string& key) {
+    const auto found = thumbnail.text.find(key);
+    int value = 0;
+    if (found == thumbnail.text.end()) {
+      return 0;
+    }
+    const auto& text = found->second;
+    const auto result = std::from_chars(text.data(), text.data() + text.size(), value);
+    return result.ec == std::errc{} && result.ptr == text.data() + text.size() && value >= 1 && value <= (1 << 20)
+        ? value
+        : 0;
+  }
   std::string_view directory(int side) {
     return side <= 128 ? "normal" : side <= 256 ? "large" : side <= 512 ? "x-large" : "xx-large";
   }
@@ -162,6 +176,11 @@ std::optional<luciole::ThumbnailPng> luciole::ThumbnailStore::read(
     if (cachedSide < side && image->text.contains("Software") && image->text.at("Software") == "Luciole") {
       continue;
     }
+    image->image.sourceWidth = textSize(*image, "Thumb::Image::Width");
+    image->image.sourceHeight = textSize(*image, "Thumb::Image::Height");
+    if ((image->image.sourceWidth == 0) != (image->image.sourceHeight == 0)) {
+      image->image.sourceWidth = image->image.sourceHeight = 0;
+    }
     if (std::max(image->image.width, image->image.height) > side) {
       if (side < 1) {
         return std::nullopt;
@@ -184,8 +203,8 @@ std::optional<luciole::ThumbnailPng> luciole::ThumbnailStore::read(
           .rgba = std::vector<std::uint8_t>(static_cast<std::size_t>(width) * height * 4),
           .width = width,
           .height = height,
-          .sourceWidth = source.width,
-          .sourceHeight = source.height
+          .sourceWidth = source.sourceWidth > 0 ? source.sourceWidth : source.width,
+          .sourceHeight = source.sourceHeight > 0 ? source.sourceHeight : source.height
       };
       const auto* pixels = gdk_pixbuf_read_pixels(scaled.get());
       const int stride = gdk_pixbuf_get_rowstride(scaled.get());

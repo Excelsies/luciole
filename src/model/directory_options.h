@@ -15,7 +15,40 @@ namespace luciole {
   inline constexpr int kMinSidebarWidth = 160;
   inline constexpr int kMaxSidebarWidth = 400;
   inline constexpr int kDefaultSidebarWidth = 206;
-  enum class ViewMode : std::uint8_t { List, Grid, Miller };
+  enum class ViewMode : std::uint8_t { List, Grid, Miller, Workbench };
+  // List and Workbench show the current folder as details rows under a column header.
+  constexpr bool showsDetailsRows(ViewMode mode) { return mode == ViewMode::List || mode == ViewMode::Workbench; }
+  // The mode after history reaches a visit saved in `saved`: Column view and Workbench stay on.
+  constexpr ViewMode viewModeAfterVisit(ViewMode current, bool columnView, ViewMode saved) {
+    if (columnView) {
+      return ViewMode::Miller;
+    }
+    return current == ViewMode::Workbench ? ViewMode::Workbench : saved;
+  }
+  // What sizes Workbench shapes and orders their entries.
+  enum class WorkbenchMeasure : std::uint8_t { Bytes, Files, Items, Modified, Visits, Equal };
+  // What colors Workbench shapes; Modified puts the newest change at the top of the ramp.
+  enum class WorkbenchColor : std::uint8_t { Type, Bytes, Visits, Modified };
+  // The Workbench part above Jump ahead in the left column.
+  enum class WorkbenchInstrument : std::uint8_t { Nest, Iris, Atlas };
+  // The Workbench part above the list.
+  enum class WorkbenchRibbon : std::uint8_t { Flame, Flow, Ladder };
+  inline constexpr std::size_t kWorkbenchRibbonCount = 3;
+  // Where a file's preview is shown: in its column, with the place of Jump ahead taken when no column has room; in the
+  // place of Jump ahead whatever the room; or in its column, and nowhere when no column has room.
+  enum class WorkbenchPreviewPlace : std::uint8_t { JumpAheadWhenNarrow, JumpAheadAlways, HiddenWhenNarrow };
+  // Saved Workbench pane sizes in pixels; the layout refuses larger ones.
+  inline constexpr int kMaxWorkbenchPaneSize = 100000;
+  inline constexpr std::size_t kWorkbenchColumnCount = 3;
+  inline constexpr std::array<int, kWorkbenchColumnCount> kDefaultWorkbenchColumnWidths{260, 190, 140};
+  inline constexpr int kMinWorkbenchColumnWidth = 140;
+  inline constexpr int kMaxWorkbenchColumnWidth = 640;
+  // A remembered Workbench list width is narrower than the 470 pixels the list keeps by default.
+  inline constexpr int kMinWorkbenchListWidth = 320;
+  inline constexpr int kMaxWorkbenchListWidth = 469;
+  // The Workbench ancestor strips pane holds one to twelve named bands beside the "+N levels" band.
+  inline constexpr int kMinWorkbenchStripsWidth = 70;
+  inline constexpr int kMaxWorkbenchStripsWidth = 321;
   enum class ViewDensity : std::uint8_t { Compact, Comfortable };
   enum class FilenameTruncation : std::uint8_t { Middle, End };
   struct IconCaptions {

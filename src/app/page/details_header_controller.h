@@ -44,6 +44,8 @@ public:
   void applySettings(const luciole::BrowserSettings& before, const luciole::BrowserSettings& settings, bool force);
 
   const luciole::DetailsColumnVisibility& columnVisibility() const { return m_columnVisibility; }
+  // The columns the header lays out at its current width; Workbench leaves out those that do not fit.
+  const luciole::DetailsColumns& shownColumns() const { return m_detailsColumns; }
   const luciole::DetailsColumnOrder& columnOrder() const { return m_columnOrder; }
   const luciole::DetailsColumnWidths& columnWidths() const { return m_columnWidths; }
   // The column order with `column` moved one place in `direction`; empty when it cannot move.

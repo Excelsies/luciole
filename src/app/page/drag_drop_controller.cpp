@@ -264,7 +264,10 @@ luciole::FileDropTarget DragDropController::externalDestination(const luciole::L
 }
 
 std::optional<std::pair<luciole::Location, LayoutRect>> DragDropController::foreignTarget(float x, float y) const {
-  if (!m_page.visible() || !m_page.filePane().containsScenePoint(x, y) || m_page.overlay()) {
+  if (!m_page.visible()
+      || m_page.filePaneCovered()
+      || !m_page.filePane().containsScenePoint(x, y)
+      || m_page.overlay()) {
     return std::nullopt;
   }
   if (const auto index = m_page.fileList()->visible() ? m_page.fileList()->itemAtScene(x, y) : std::nullopt) {
@@ -380,7 +383,7 @@ std::optional<DragDropController::DropTarget> DragDropController::dropTarget() c
       return DropTarget{target->first, target->second};
     }
   }
-  if (!m_page.filePane().containsScenePoint(m_page.pointerX(), m_page.pointerY())) {
+  if (m_page.filePaneCovered() || !m_page.filePane().containsScenePoint(m_page.pointerX(), m_page.pointerY())) {
     return std::nullopt;
   }
   if (m_miller.enabled()) {
@@ -567,7 +570,10 @@ float DragDropController::dragScrollSpeed(bool& places) const {
   if (places) {
     return m_sidebar.places().dragScrollSpeed(m_page.pointerX(), m_page.pointerY());
   }
-  if ((!m_drag && !m_externalDraggingHere) || (m_drag && m_drag->sourcePin) || !m_page.fileList()->visible()) {
+  if ((!m_drag && !m_externalDraggingHere)
+      || (m_drag && m_drag->sourcePin)
+      || !m_page.fileList()->visible()
+      || m_page.filePaneCovered()) {
     return 0;
   }
   auto& scroll = dragView()->scrollView();

@@ -21,29 +21,27 @@
 #include <unordered_set>
 #include <vector>
 
-namespace {
-  // Filesystems whose per-file calls may block on a network or a userspace server keep GIO's enumeration, which
-  // reads every fact on its worker; deferred access checks would otherwise run on the main thread.
-  bool remoteFilesystem(const struct statfs& info) {
-    constexpr std::uint32_t kCifs = 0xFF534D42;
-    constexpr std::uint32_t kSmb2 = 0xFE534D42;
-    constexpr std::uint32_t kFuse = 0x65735546;
-    constexpr std::uint32_t kAfs = 0x5346414F;
-    constexpr std::uint32_t kCoda = 0x73757245;
-    constexpr std::uint32_t kCeph = 0x00C36400;
-    constexpr std::uint32_t kNineP = 0x01021997;
-    const auto type = static_cast<std::uint32_t>(info.f_type);
-    return type == NFS_SUPER_MAGIC
-        || type == SMB_SUPER_MAGIC
-        || type == kCifs
-        || type == kSmb2
-        || type == kFuse
-        || type == kAfs
-        || type == kCoda
-        || type == kCeph
-        || type == kNineP;
-  }
+bool luciole::remoteFilesystem(const struct statfs& info) {
+  constexpr std::uint32_t kCifs = 0xFF534D42;
+  constexpr std::uint32_t kSmb2 = 0xFE534D42;
+  constexpr std::uint32_t kFuse = 0x65735546;
+  constexpr std::uint32_t kAfs = 0x5346414F;
+  constexpr std::uint32_t kCoda = 0x73757245;
+  constexpr std::uint32_t kCeph = 0x00C36400;
+  constexpr std::uint32_t kNineP = 0x01021997;
+  const auto type = static_cast<std::uint32_t>(info.f_type);
+  return type == NFS_SUPER_MAGIC
+      || type == SMB_SUPER_MAGIC
+      || type == kCifs
+      || type == kSmb2
+      || type == kFuse
+      || type == kAfs
+      || type == kCoda
+      || type == kCeph
+      || type == kNineP;
+}
 
+namespace {
   // GLib's convert_pwd_string_to_utf8.
   std::optional<std::string> passwdText(const char* value) {
     if (value == nullptr || *value == '\0') {
@@ -237,7 +235,9 @@ luciole::listNativeFolder(const std::string& path, std::size_t entryLimit, GCanc
   }
   struct statfs filesystem{};
   struct stat folderInfo{};
-  if (::fstatfs(fd, &filesystem) != 0 || remoteFilesystem(filesystem) || ::fstat(fd, &folderInfo) != 0) {
+  // A remote folder keeps GIO's enumeration, which reads every fact on its worker; deferred access checks would
+  // otherwise run on the main thread.
+  if (::fstatfs(fd, &filesystem) != 0 || luciole::remoteFilesystem(filesystem) || ::fstat(fd, &folderInfo) != 0) {
     result.unsupported = true;
     return result;
   }

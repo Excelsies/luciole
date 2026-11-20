@@ -1,6 +1,8 @@
 #include "event_loop/glib_poll_source.h"
 #include "fs/file_query.h"
 #include "fs/gio_interop.h"
+#include "metrics_renderer.h"
+#include "temp_folder.h"
 #include "test_check.h"
 #include "ui/browser/file_tooltip.h"
 #include "ui/controls/label.h"
@@ -17,27 +19,7 @@
 
 namespace {
   namespace fs = std::filesystem;
-  class MetricsRenderer final : public Renderer {
-  public:
-    TextMetrics measureText(
-        std::string_view text, float size, const TextFont&, float width, int, TextAlign, TextEllipsize, bool
-    ) override {
-      const float natural = static_cast<float>(text.size()) * size * 0.5F;
-      return {
-          .width = width > 0 ? std::min(width, natural) : natural, .bottom = size, .capHeight = size, .lineCount = 1
-      };
-    }
-    TextMetrics measureFont(float size, const TextFont&) override { return {.bottom = size, .capHeight = size}; }
-    TextMetrics measureGlyph(char32_t, float size) override { return {.width = size, .bottom = size}; }
-    void measureTextCursorStops(
-        std::string_view, float, const std::vector<std::size_t>&, std::vector<float>&, const TextFont&
-    ) override {}
-    void measureTextCursorStopsWrapped(
-        std::string_view, float, const std::vector<std::size_t>&, float, std::vector<TextCursorStop>&, const TextFont&
-    ) override {}
-    TextureManager& textureManager() override { std::abort(); }
-    float renderScale() const noexcept override { return 1; }
-  };
+  using test::MetricsRenderer;
   void wait(const std::function<bool()>& done) {
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
     while (!done()) {
@@ -239,11 +221,9 @@ namespace {
 } // namespace
 
 int main() {
-  const luciole::GString directory(g_dir_make_tmp("luciole-tooltip-test-XXXXXX", nullptr));
-  TEST_CHECK(directory != nullptr);
-  checks(directory.get());
+  const luciole::test::TempFolder directory("luciole-tooltip-test");
+  checks(directory.path().c_str());
   presenterChecks();
-  cursorChecks(directory.get());
-  fs::remove_all(directory.get());
+  cursorChecks(directory.path().c_str());
   std::println("file tooltip checks passed");
 }

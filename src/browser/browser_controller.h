@@ -28,6 +28,11 @@ namespace luciole {
 
     void setChangedCallback(std::function<void()> callback);
     void setFileActivatedCallback(std::function<void(const Location&)> callback);
+    // Called with each folder entered by open, back or forward once it has loaded. A folder that fails to load or is
+    // left before it loads, a refresh and a duplicated history are not entries.
+    void setEnteredCallback(std::function<void(const Location&)> callback);
+    // The folder still loading is not reported as an entry.
+    void skipPendingEntry() { m_entryPending = false; }
     void open(const Location& location);
     bool openText(const std::string& text);
     void setCaptureViewport(std::function<BrowseViewport()> callback);
@@ -146,6 +151,7 @@ namespace luciole {
     };
     void saveVisit();
     void loadVisit();
+    void reportEntry();
     std::optional<Reference> reference(std::optional<EntryId> id) const;
     std::vector<Visit> m_history;
     BrowseViewport m_defaults;
@@ -160,5 +166,8 @@ namespace luciole {
     std::string m_message;
     std::function<void()> m_changed;
     std::function<void(const Location&)> m_fileActivated;
+    std::function<void(const Location&)> m_entered;
+    // The current history entry was entered and has not loaded yet.
+    bool m_entryPending = false;
   };
 } // namespace luciole

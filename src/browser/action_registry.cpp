@@ -352,6 +352,10 @@ namespace {
        .label = "Column view",
        .shortcut = "Ctrl+3",
        .rule = [](const C& c, const R&) { return checked(c.viewMode == luciole::ViewMode::Miller); }},
+      {.action = A::Workbench,
+       .label = "Workbench view",
+       .shortcut = "Ctrl+4",
+       .rule = [](const C& c, const R&) { return checked(c.viewMode == luciole::ViewMode::Workbench); }},
       {.action = A::ShowHidden,
        .label = "Show hidden files",
        .shortcut = "Ctrl+H",
@@ -363,7 +367,13 @@ namespace {
       {.action = A::ShowPreview,
        .label = "Show preview",
        .shortcut = "F8",
-       .rule = [](const C& c, const R&) { return checked(c.showPreview); }},
+       .rule =
+           [](const C& c, const R&) {
+             if (c.viewMode == luciole::ViewMode::Workbench) {
+               return unavailable("Workbench previews files in its columns.");
+             }
+             return checked(c.showPreview);
+           }},
       {.action = A::QuickPreview,
        .label = "Preview",
        .shortcut = "Space",
@@ -662,6 +672,7 @@ bool luciole::chooserAction(BrowserAction action) {
   case A::KeyboardShortcuts:
     return true;
   case A::Miller:
+  case A::Workbench:
   case A::OpenWith:
   case A::ContainingFolder:
   case A::OriginalLocation:

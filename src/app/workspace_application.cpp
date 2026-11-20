@@ -54,11 +54,13 @@ WorkspaceApplication::WorkspaceApplication(
 )
     : m_connection(connection), m_renderer(renderer), m_input(input), m_clipboard(clipboard),
       m_defaults(std::move(settings)), m_preferences(luciole::ConfigPaths::fromEnvironment()),
-      m_pins(luciole::StateStore::pathFromEnvironment()) {
+      m_pins(luciole::StateStore::pathFromEnvironment()), m_visits(luciole::VisitStore::pathFromEnvironment()) {
+  m_visits.setEnabled(m_defaults.recordVisits);
   m_preferences.setChangedCallback([this](const std::string& error) {
     if (m_preferences.settings()) {
       m_defaults = m_preferences.settings()->browser;
     }
+    m_visits.setEnabled(m_defaults.recordVisits);
     for (auto& [id, page] : m_pages) {
       (void)id;
       page->preferencesChanged(error);
@@ -150,11 +152,18 @@ WorkspaceApplication::WorkspaceApplication(
       page->iconsReady();
     }
   });
+  m_workbench.setPreviewWorkers({.text = &m_textTiles, .thumbnails = &m_thumbnails});
   m_thumbnails.setOptions(m_defaults.thumbnails);
   m_thumbnails.setChangedCallback([this] {
     for (auto& [id, page] : m_pages) {
       (void)id;
       page->thumbnailsChanged();
+    }
+  });
+  m_visits.setChangedCallback([this] {
+    for (auto& [id, page] : m_pages) {
+      (void)id;
+      page->visitsChanged();
     }
   });
   luciole::StateStore state(luciole::StateStore::pathFromEnvironment());
@@ -176,6 +185,7 @@ WorkspaceApplication::~WorkspaceApplication() {
   m_drives.setUsageChangedCallback({});
   m_icons.setChangedCallback({});
   m_thumbnails.setChangedCallback({});
+  m_visits.setChangedCallback({});
   for (auto& [id, host] : m_hosts) {
     (void)id;
     releaseChrome(*host);
@@ -387,9 +397,10 @@ bool WorkspaceApplication::running() {
   // they stop.
   if (!live) {
     m_hub.shutdown();
+    m_visits.flush();
   }
   m_hub.update(m_focused);
-  bool busy = m_hub.busy() || m_thumbnails.clearing() || m_pins.busy();
+  bool busy = m_hub.busy() || m_thumbnails.clearing() || m_pins.busy() || m_visits.busy();
   for (auto& [id, page] : m_pages) {
     if (!live) {
       page->shutdown();
@@ -485,7 +496,7 @@ void WorkspaceApplication::keyboard(const KeyboardEvent& event) {
   }
   if (event.pressed && !event.preedit) {
     if (!host.chooser && event.modifiers == KeyMod::Ctrl && event.sym == XKB_KEY_q) {
-      g_stopRequested = 1;
+      quit();
       host.surface.requestUpdate();
       return;
     }
@@ -525,7 +536,11 @@ void WorkspaceApplication::keyboard(const KeyboardEvent& event) {
       defer(host.id, record->second.active, *command);
       return;
     }
-    if (!page.overlay() && KeySymbol::isTab(event.sym) && (event.modifiers == 0 || event.modifiers == KeyMod::Shift)) {
+    // An editor with the keyboard gets Tab from the page.
+    if (!page.overlay()
+        && !page.editorFocused()
+        && KeySymbol::isTab(event.sym)
+        && (event.modifiers == 0 || event.modifiers == KeyMod::Shift)) {
       if (page.completeLocationOnTab(event.modifiers)) {
         return;
       }
@@ -726,7 +741,7 @@ void WorkspaceApplication::pointer(const PointerEvent& event) {
     }
   }
   if (host->strip && host->strip->containsScenePoint(x, y)) {
-    host->pointerPage = 0;
+    pointTo(*host, 0);
     for (const auto& [tab, button] : host->buttons) {
       if (host->tabScroll->containsScenePoint(x, y)
           && button->containsScenePoint(x, y)
@@ -806,8 +821,15 @@ void WorkspaceApplication::pointer(const PointerEvent& event) {
       break;
     }
   }
-  host->pointerPage = target;
+  pointTo(*host, target);
   m_pages.at(target)->pointer(event);
+}
+
+void WorkspaceApplication::pointTo(Host& host, luciole::TabId page) {
+  if (host.pointerPage != page && std::ranges::contains(host.mounted, host.pointerPage)) {
+    m_pages.at(host.pointerPage)->pointerLeft();
+  }
+  host.pointerPage = page;
 }
 
 void WorkspaceApplication::clearExternalDrops() {
@@ -884,7 +906,11 @@ luciole::WindowId WorkspaceApplication::newWindow(std::unique_ptr<FileChooserSes
   host->dispatcher.setCursorShapeCallback([this](auto serial, auto shape) {
     m_connection.extension<luciole::DesktopIntegration>().setCursorShape(serial, shape);
   });
-  host->dispatcher.setFocusChangeCallback([this, raw](InputArea*, InputArea* focused) { focusChanged(*raw, focused); });
+  host->dispatcher.setFocusChangeCallback([this, raw](InputArea* old, InputArea* focused) {
+    focusChanged(*raw, focused);
+    raw->dividerFocus.changed(old, focused);
+  });
+  host->surface.setCloseGuard([this, id] { return mayClose(id); });
   const bool choosing = host->chooser != nullptr;
   if (!host->surface.initialize(
           nullptr,
@@ -904,7 +930,8 @@ luciole::WindowId WorkspaceApplication::newWindow(std::unique_ptr<FileChooserSes
 }
 
 luciole::TabId WorkspaceApplication::newTab(
-    luciole::WindowId window, std::optional<luciole::Location> location, luciole::TabId duplicate, bool activate
+    luciole::WindowId window, std::optional<luciole::Location> location, luciole::TabId duplicate, bool activate,
+    PageOpening opening
 ) {
   if (m_pages.size() >= pageLimit) {
     return 0;
@@ -914,11 +941,11 @@ luciole::TabId WorkspaceApplication::newTab(
   if (!id) {
     return 0;
   }
-  return createPage(window, id, std::move(location), duplicate, previous);
+  return createPage(window, id, std::move(location), duplicate, previous, opening);
 }
 
 luciole::TabId WorkspaceApplication::newPane(
-    luciole::WindowId window, std::optional<luciole::Location> location, luciole::TabId duplicate
+    luciole::WindowId window, std::optional<luciole::Location> location, luciole::TabId duplicate, PageOpening opening
 ) {
   if (m_pages.size() >= pageLimit) {
     return 0;
@@ -928,24 +955,25 @@ luciole::TabId WorkspaceApplication::newPane(
   if (!id) {
     return 0;
   }
-  return createPage(window, id, std::move(location), duplicate, previous);
+  return createPage(window, id, std::move(location), duplicate, previous, opening);
 }
 
 luciole::TabId WorkspaceApplication::createPage(
     luciole::WindowId window, luciole::TabId id, std::optional<luciole::Location> location, luciole::TabId duplicate,
-    luciole::TabId previous
+    luciole::TabId previous, PageOpening opening
 ) {
   auto& host = *m_hosts.at(window);
   auto settings = duplicate                    ? m_pages.at(duplicate)->options()
       : previous && m_pages.contains(previous) ? m_pages.at(previous)->options()
                                                : m_defaults;
-  // Miller columns enter folders on selection, which a chooser needs for choosing them.
-  if (host.chooser && settings.viewMode == luciole::ViewMode::Miller) {
+  // Miller columns enter folders on selection, which a chooser needs for choosing them. Workbench is not offered.
+  if (host.chooser
+      && (settings.viewMode == luciole::ViewMode::Miller || settings.viewMode == luciole::ViewMode::Workbench)) {
     settings.viewMode = luciole::ViewMode::List;
   }
   auto page = std::make_unique<BrowserPage>(
       m_connection, m_renderer, m_input, settings, m_clipboard, host.surface, host.dispatcher, m_animations, m_pins,
-      m_drives, m_icons, m_thumbnails, m_preferences, m_hub, id
+      m_drives, m_icons, m_thumbnails, m_preferences, m_visits, m_hub, id
   );
   page->setHasOther([this, id] {
     const auto owner = m_model.owner(id);
@@ -1012,7 +1040,14 @@ luciole::TabId WorkspaceApplication::createPage(
     }
     return std::nullopt;
   });
+  if (!host.chooser) {
+    page->setVisitRecorder([this](const luciole::Location& visited) { m_visits.record(visited); });
+  }
+  page->setWorkbenchServices(m_workbench);
   page->initialize(location ? std::optional(location->uri()) : std::nullopt);
+  if (opening == PageOpening::Reopened) {
+    page->browser().skipPendingEntry();
+  }
   if (duplicate) {
     page->duplicateFrom(*m_pages.at(duplicate));
   }
@@ -1043,7 +1078,7 @@ void WorkspaceApplication::defer(
   const std::weak_ptr<int> lifetime = m_lifetime;
   DeferredCall::callLater([this, lifetime, window, tab, command, location = std::move(location)] {
     if (!lifetime.expired() && m_model.owner(tab) == window) {
-      execute(window, tab, command, location);
+      executeAsked(window, tab, command, location);
     }
   });
 }
@@ -1057,6 +1092,8 @@ void WorkspaceApplication::execute(
   const auto layout = m_model.layout(tab);
   const auto source = (logical && *logical == tab && layout) ? layout->active : tab;
   auto& page = *m_pages.at(source);
+  // A new page without a destination shows the current folder again.
+  const auto opening = destination ? PageOpening::Entered : PageOpening::Reopened;
   if (logical
       && (command == WorkspaceCommand::Duplicate
           || command == WorkspaceCommand::Split
@@ -1072,7 +1109,7 @@ void WorkspaceApplication::execute(
   case WorkspaceCommand::NewBackgroundTab: {
     const bool activate =
         command == WorkspaceCommand::NewTab || (command == WorkspaceCommand::OpenTab && page.options().switchToNewTab);
-    if (!newTab(window, destination ? destination : page.location(), 0, activate)) {
+    if (!newTab(window, destination ? destination : page.location(), 0, activate, opening)) {
       page.workspaceError("Close a tab before opening another.");
     }
     break;
@@ -1109,7 +1146,7 @@ void WorkspaceApplication::execute(
   case WorkspaceCommand::NewWindow: {
     if (auto id = newWindow()) {
       const bool restored = !destination && restoreLastWindow(id);
-      if (!restored && !newTab(id, destination ? destination : page.location())) {
+      if (!restored && !newTab(id, destination ? destination : page.location(), 0, true, opening)) {
         m_hosts.at(id)->surface.close();
         page.workspaceError("Close a tab before opening another window.");
       }
@@ -1187,7 +1224,7 @@ void WorkspaceApplication::execute(
         m_pages.at(*other)->open(*destination);
       }
     } else {
-      newPane(window, destination ? destination : page.location());
+      newPane(window, destination ? destination : page.location(), 0, opening);
     }
     break;
   case WorkspaceCommand::CopyOther:
@@ -1269,13 +1306,13 @@ bool WorkspaceApplication::restoreWindow(luciole::WindowId window, const luciole
   }
   std::vector<luciole::TabId> tabs;
   for (const auto& savedTab : saved.tabs) {
-    const auto tab = newTab(window, savedTab.primary);
+    const auto tab = newTab(window, savedTab.primary, 0, true, PageOpening::Reopened);
     if (!tab) {
       break;
     }
     tabs.push_back(tab);
     if (savedTab.secondary) {
-      if (const auto pane = newPane(window, savedTab.secondary)) {
+      if (const auto pane = newPane(window, savedTab.secondary, 0, PageOpening::Reopened)) {
         (void)m_model.focus(window, savedTab.activePane == luciole::ActivePane::Secondary ? pane : tab);
       }
     }

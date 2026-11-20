@@ -61,6 +61,9 @@ namespace luciole {
     void setParent(std::string handle, bool modal);
     // rendered runs after each drawn frame; frameDone after each completed frame callback and may destroy the surface.
     void setFrameCallbacks(std::function<void()> rendered, std::function<void()> frameDone);
+    // Runs on every close(), the compositor's close request included: false keeps the window running, for an owner
+    // that asks first and closes it again later. Unset, every close goes ahead.
+    void setCloseGuard(std::function<bool()> mayClose);
 
   protected:
     void render() override;

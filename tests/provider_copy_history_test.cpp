@@ -2,6 +2,7 @@
 #include "fs/gio_interop.h"
 #include "operations/provider_copy_receipt.h"
 #include "operations/provider_transfer.h"
+#include "temp_folder.h"
 #include "test_check.h"
 
 #include <algorithm>
@@ -1563,9 +1564,8 @@ int main(int argc, char* argv[]) {
     }
   } else {
     TEST_CHECK(argc == 1);
-    const luciole::GString temp(g_dir_make_tmp("luciole-provider-history-XXXXXX", nullptr));
-    TEST_CHECK(temp);
-    const fs::path root(temp.get());
+    const luciole::test::TempFolder temp("luciole-provider-history");
+    const fs::path& root = temp.path();
     fs::create_directories(root / "backend");
     run(root / "local", Location::fromPath((root / "backend").native()), root / "backend");
     linkNamespaces();
@@ -1573,7 +1573,6 @@ int main(int argc, char* argv[]) {
     localRetention(root / "retention-local", root / "retention-backend");
     localHistoryGuards(root / "guard-local", root / "guard-backend");
     localPartialCancellation(root / "partial-local", root / "partial-backend");
-    fs::remove_all(root);
   }
   std::println("Provider copy history checks passed");
 }

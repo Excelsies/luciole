@@ -6,8 +6,10 @@
 
 #include <algorithm>
 #include <array>
+#include <condition_variable>
 #include <deque>
 #include <fcntl.h>
+#include <mutex>
 #include <unistd.h>
 #include <unordered_map>
 
@@ -104,6 +106,21 @@ struct luciole::FileIconCache::State : std::enable_shared_from_this<State> {
   std::uint64_t clock = 0;
   std::size_t active = 0;
   bool alive = true;
+  // Jobs handed to a worker thread that have not finished their body yet.
+  std::mutex runningMutex;
+  std::condition_variable runningDone;
+  std::size_t running = 0;
+
+  void jobFinished() {
+    const std::scoped_lock lock(runningMutex);
+    --running;
+    runningDone.notify_all();
+  }
+
+  void waitForJobs() {
+    std::unique_lock lock(runningMutex);
+    runningDone.wait(lock, [this] { return running == 0; });
+  }
 
   void trim(bool reserveEntry) {
     std::erase_if(cache, [](const auto& item) {
@@ -133,6 +150,10 @@ struct luciole::FileIconCache::State : std::enable_shared_from_this<State> {
       auto* request = new Request(std::move(pending.front()));
       pending.pop_front();
       ++active;
+      {
+        const std::scoped_lock lock(runningMutex);
+        ++running;
+      }
       GioPtr<GTask> task(g_task_new(
           nullptr, nullptr,
           [](GObject*, GAsyncResult* result, gpointer) {
@@ -160,6 +181,7 @@ struct luciole::FileIconCache::State : std::enable_shared_from_this<State> {
       g_task_set_task_data(task.get(), request, [](gpointer data) { delete static_cast<Request*>(data); });
       g_task_run_in_thread(task.get(), [](GTask* task, gpointer, gpointer data, GCancellable*) {
         const auto& request = *static_cast<Request*>(data);
+        const auto owner = request.owner;
         auto image = std::make_unique<FileIconImage>();
         try {
           *image = load(request.source, request.pixels);
@@ -167,6 +189,7 @@ struct luciole::FileIconCache::State : std::enable_shared_from_this<State> {
           image->ready = true;
         }
         g_task_return_pointer(task, image.release(), [](gpointer data) { delete static_cast<FileIconImage*>(data); });
+        owner->jobFinished();
       });
     }
   }
@@ -177,6 +200,8 @@ luciole::FileIconCache::~FileIconCache() {
   m_state->alive = false;
   m_state->changed = {};
   m_state->pending.clear();
+  // Workers read process-wide icon state; none may still run once the owner is gone.
+  m_state->waitForJobs();
 }
 void luciole::FileIconCache::setChangedCallback(std::function<void()> callback) {
   m_state->changed = std::move(callback);

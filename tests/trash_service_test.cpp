@@ -2,6 +2,7 @@
 #include "event_loop/glib_poll_source.h"
 #include "fs/gio_ptr.h"
 #include "operations/trash_service.h"
+#include "temp_folder.h"
 #include "test_check.h"
 
 #include <algorithm>
@@ -23,20 +24,14 @@ namespace {
     return {std::istreambuf_iterator<char>(input), {}};
   }
   struct Fixture {
-    fs::path root, home, data;
+    luciole::test::TempFolder tempFolder{"luciole-trash"};
+    fs::path root = tempFolder.path(), home, data;
     Fixture() {
-      std::string path = "/tmp/luciole-trash-XXXXXX";
-      TEST_CHECK(::mkdtemp(path.data()) != nullptr);
-      root = path;
       home = root / "home";
       data = home / ".local/share";
       fs::create_directories(data);
       TEST_CHECK(::setenv("HOME", home.c_str(), 1) == 0);
       TEST_CHECK(::setenv("XDG_DATA_HOME", data.c_str(), 1) == 0);
-    }
-    ~Fixture() {
-      std::error_code error;
-      fs::remove_all(root, error);
     }
     fs::path folder(const std::string& name) const {
       const auto path = home / name;

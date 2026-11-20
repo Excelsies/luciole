@@ -9,3 +9,10 @@ executable('luciole-transfer-bench',
   include_directories: src_inc,
   dependencies: [operations_dep, event_loop_dep, noctalia_ui_dep, gio],
 )
+if media_playback
+  executable('luciole-bink2-bench',
+    'bink2_bench.cpp',
+    include_directories: src_inc,
+    dependencies: [media_dep],
+  )
+endif

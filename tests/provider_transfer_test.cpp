@@ -5,6 +5,7 @@
 #include "operations/provider_transfer.h"
 #include "operations/transfer_service.h"
 #include "operations/transfer_staging.h"
+#include "temp_folder.h"
 #include "test_check.h"
 
 #include <algorithm>
@@ -725,9 +726,8 @@ int main(int argc, char** argv) {
     );
     mount(remote);
   } else {
-    char directory[] = "/tmp/luciole-provider-test-XXXXXX";
-    TEST_CHECK(mkdtemp(directory));
-    const fs::path root(directory);
+    const luciole::test::TempFolder directory("luciole-provider-test");
+    const fs::path& root = directory.path();
     fs::create_directory(root / "remote");
     run(root, Location::fromPath((root / "remote").native()), root / "remote", false);
     downloadHistory(root / "history", Location::fromPath((root / "remote-history").native()), root / "remote-history");
@@ -778,7 +778,6 @@ int main(int argc, char** argv) {
     ));
     wait(refused);
     TEST_CHECK(refused.results().front().outcome == Failed && !refused.report().contains("secret"));
-    fs::remove_all(root);
   }
   std::println("provider transfer checks passed");
 }

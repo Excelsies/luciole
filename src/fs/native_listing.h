@@ -10,7 +10,13 @@
 #include <string>
 #include <vector>
 
+struct statfs;
+
 namespace luciole {
+  // NFS, SMB, CIFS, SMB2, FUSE, AFS, Coda, Ceph and 9P: their per-file calls may block on a network or a userspace
+  // server.
+  bool remoteFilesystem(const struct statfs& info);
+
   struct NativeListing {
     std::vector<DirectoryEntry> entries; // IDs are 0; the session assigns them on the main thread.
     bool unsupported = false;            // Use GIO's enumeration instead; it also reports the folder's errors.

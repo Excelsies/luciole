@@ -33,6 +33,8 @@ public:
     RunProgram,
     Operations,
     OperationDetails,
+    // "Save changes to <name>?" before an edited file is left; see PageEditing.
+    SaveChanges,
   };
 
   // Takes the popup scene. `content` is the menu or dialog inside it: the scene itself for menus, the dialog

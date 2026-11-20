@@ -2,6 +2,7 @@
 #include "event_loop/glib_poll_source.h"
 #include "fs/gio_interop.h"
 #include "operations/copy_receipt.h"
+#include "temp_folder.h"
 #include "test_check.h"
 
 #include <chrono>
@@ -16,17 +17,9 @@ namespace {
   namespace fs = std::filesystem;
   using luciole::ActivityState;
   struct Fixture {
-    fs::path root;
-    Fixture() {
-      std::string path = "/tmp/luciole-activity-XXXXXX";
-      TEST_CHECK(::mkdtemp(path.data()));
-      root = path;
-      fs::create_directory(root / "destination");
-    }
-    ~Fixture() {
-      std::error_code error;
-      fs::remove_all(root, error);
-    }
+    luciole::test::TempFolder tempFolder{"luciole-activity"};
+    fs::path root = tempFolder.path();
+    Fixture() { fs::create_directory(root / "destination"); }
     luciole::Location at(const std::string& name) const { return luciole::Location::fromPath((root / name).native()); }
     void write(const std::string& name) const { std::ofstream(root / name) << name; }
   };

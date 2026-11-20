@@ -15,10 +15,13 @@
 #include "ui/browser/preview_layout.h"
 #include "ui/builders.h"
 #include "ui/controls/file_preview_view.h"
+#include "ui/workbench/column_preview_page.h"
 #include "wayland/popup_surface.h"
 #include "wayland/wayland_seat.h"
 
 #include <algorithm>
+#include <cmath>
+#include <stdexcept>
 #include <utility>
 
 using Action = luciole::BrowserAction;
@@ -33,13 +36,20 @@ PreviewController::PreviewController(
 void PreviewController::sync() {
   auto* surface = m_page.popupSurface();
   const bool quick = m_quickPreview && surface;
-  if ((!m_bounds && !quick) || !m_page.active() || m_page.overlay() || m_page.thumbnailsPaused()) {
+  const bool target = targetShown();
+  const bool shown = target || ((m_bounds || quick) && m_page.active());
+  if (!shown || m_page.overlay() || m_page.thumbnailsPaused()) {
     m_preview.clear();
     return;
   }
-  auto& model = m_page.browser().model();
-  const auto selected = model.selectedIds();
-  const auto* entry = selected.size() == 1 && model.selectionAvailable() ? model.entry(selected.front()) : nullptr;
+  const luciole::DirectoryEntry* entry = nullptr;
+  if (target) {
+    entry = &m_target->entry;
+  } else {
+    auto& model = m_page.browser().model();
+    const auto selected = model.selectedIds();
+    entry = selected.size() == 1 && model.selectionAvailable() ? model.entry(selected.front()) : nullptr;
+  }
   if (entry && (entry->metadataPending || entry->metadataFailed)) {
     m_preview.clear();
     return;
@@ -55,12 +65,24 @@ void PreviewController::sync() {
       ? current.image
       : prepared;
   const auto* pixels = image && image->pixels ? &*image->pixels : nullptr;
-  const auto size = quick ? quickPreviewSize() : std::pair{m_bounds->width, m_bounds->height};
+  const auto rect = target ? m_target->bounds : m_bounds.value_or(LayoutRect{});
+  const auto size = quick ? quickPreviewSize() : std::pair{rect.width, rect.height};
   const auto& renderer = quick ? surface->renderTarget().renderer() : m_page.surface().renderTarget().renderer();
   const auto layout = luciole::previewImageLayout(
       pixels ? pixels->width : 0, pixels ? pixels->height : 0, size.first, size.second, renderer.renderScale(), quick
   );
   m_preview.show(entry ? std::optional(*entry) : std::nullopt, layout.pixels, prepared);
+}
+
+void PreviewController::setTarget(std::optional<PreviewTarget> target) {
+  if (target && (!std::isfinite(target->textSize) || target->textSize <= 0)) {
+    throw std::invalid_argument("a preview target needs a positive text size");
+  }
+  m_target = std::move(target);
+}
+
+bool PreviewController::targetShown() const {
+  return m_target && !(m_quickPreview && m_page.popupSurface()) && m_page.visible();
 }
 
 void PreviewController::openPreviewed(bool with) {
@@ -162,7 +184,9 @@ bool PreviewController::quickPreviewKey(const KeyboardEvent& event) {
 
 void PreviewController::layoutPane(bool show) {
   auto& surface = m_page.surface();
-  if (m_bounds && show) {
+  const bool target = targetShown();
+  layoutTarget(target);
+  if (m_bounds && show && !target) {
     if (!m_view) {
       auto view = makeView(false);
       m_view = view.get();
@@ -187,13 +211,48 @@ void PreviewController::layoutPane(bool show) {
   }
 }
 
+void PreviewController::layoutTarget(bool shown) {
+  auto& renderer = m_page.surface().renderTarget().renderer();
+  if (!shown) {
+    if (m_targetView) {
+      m_targetView->setVisible(false);
+      m_targetView->clear(renderer);
+    }
+    return;
+  }
+  if (!m_targetView) {
+    auto view = std::make_unique<luciole::ColumnPreviewPage>(m_icons);
+    m_targetView = view.get();
+    view->setParticipatesInLayout(false);
+    view->setZIndex(20);
+    m_page.sceneRoot().addChild(std::move(view));
+  }
+  const auto& snapshot = m_preview.snapshot();
+  const auto& bounds = m_target->bounds;
+  m_targetView->setVisible(true);
+  m_targetView->setTextSize(m_target->textSize);
+  m_targetView->sync(snapshot, bounds.width, bounds.height);
+  if (!snapshot.image || !snapshot.image->pixels) {
+    m_targetView->clear(renderer);
+  }
+  m_targetView->arrange(renderer, bounds);
+}
+
 void PreviewController::hidePane() {
   m_preview.clear();
-  if (m_view) {
-    m_view->setVisible(false);
+  for (Node* view : {static_cast<Node*>(m_view), static_cast<Node*>(m_targetView)}) {
+    if (view != nullptr) {
+      view->setVisible(false);
+    }
   }
-  if (m_view && m_renderer.makeCurrent(m_page.surface().renderTarget())) {
-    m_view->clear(m_page.surface().renderTarget().renderer());
+  if ((m_view || m_targetView) && m_renderer.makeCurrent(m_page.surface().renderTarget())) {
+    auto& renderer = m_page.surface().renderTarget().renderer();
+    if (m_view) {
+      m_view->clear(renderer);
+    }
+    if (m_targetView) {
+      m_targetView->clear(renderer);
+    }
   }
 }
 

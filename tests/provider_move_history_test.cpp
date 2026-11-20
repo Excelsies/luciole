@@ -3,6 +3,7 @@
 #include "operations/copy_receipt.h"
 #include "operations/move_receipt.h"
 #include "operations/provider_transfer.h"
+#include "temp_folder.h"
 #include "test_check.h"
 
 #include <algorithm>
@@ -786,11 +787,9 @@ int main(int argc, char* argv[]) {
     run(remote.child(name), backend);
   } else {
     TEST_CHECK(argc == 1);
-    const luciole::GString tmp(g_dir_make_tmp("luciole-provider-moves-XXXXXX", nullptr));
-    TEST_CHECK(tmp);
-    const fs::path backend(tmp.get());
+    const luciole::test::TempFolder tmp("luciole-provider-moves");
+    const fs::path& backend = tmp.path();
     run(Location::fromPath(backend.native()), backend);
-    fs::remove_all(backend);
   }
   std::println("Provider Move history checks passed");
 }

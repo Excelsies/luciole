@@ -5,6 +5,7 @@
 #include "fs/gio_interop.h"
 #include "fs/native_listing.h"
 #include "fs/recursive_search.h"
+#include "temp_folder.h"
 #include "test_check.h"
 
 #include <algorithm>
@@ -29,23 +30,8 @@ namespace {
   namespace fs = std::filesystem;
 
   struct Fixture {
-    fs::path path;
-    Fixture() {
-      GError* error = nullptr;
-      const luciole::GString directory(g_dir_make_tmp("luciole-test-XXXXXX", &error));
-      if (!directory) {
-        const std::string message(error->message);
-        g_error_free(error);
-        throw std::runtime_error(message);
-      }
-      path = directory.get();
-    }
-    ~Fixture() {
-      std::error_code ignored;
-      fs::remove_all(path, ignored);
-    }
-    Fixture(const Fixture&) = delete;
-    Fixture& operator=(const Fixture&) = delete;
+    luciole::test::TempFolder tempFolder{"luciole-test"};
+    fs::path path = tempFolder.path();
 
     void write(const std::string& name, const std::string& contents = "data") const {
       std::ofstream file(path / name);

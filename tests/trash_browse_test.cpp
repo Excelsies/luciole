@@ -3,6 +3,7 @@
 #include "event_loop/glib_poll_source.h"
 #include "fs/gio_interop.h"
 #include "fs/trash_info.h"
+#include "temp_folder.h"
 #include "test_check.h"
 
 #include <algorithm>
@@ -40,16 +41,8 @@ namespace {
     GlibPollSource m_source;
   };
   struct Fixture {
-    fs::path root;
-    Fixture() {
-      const luciole::GString path(g_dir_make_tmp("luciole-trash-browse-XXXXXX", nullptr));
-      TEST_CHECK(path != nullptr);
-      root = path.get();
-    }
-    ~Fixture() {
-      std::error_code error;
-      fs::remove_all(root, error);
-    }
+    luciole::test::TempFolder tempFolder{"luciole-trash-browse"};
+    fs::path root = tempFolder.path();
   };
   void metadataAndPresentation() {
     luciole::GioPtr<GFileInfo> info(g_file_info_new());

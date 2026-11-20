@@ -8,6 +8,7 @@
 #include "imaging/svg_rasterizer.h"
 #include "render/core/image_orientation.h"
 #include "render/core/image_resize.h"
+#include "temp_folder.h"
 #include "test_check.h"
 #include "thumbnails/thumbnail_provider.h"
 #include "thumbnails/thumbnail_service.h"
@@ -54,11 +55,9 @@ namespace {
     GlibPollSource m_source;
   };
   struct Fixture {
-    fs::path root;
+    luciole::test::TempFolder tempFolder{"luciole-thumbnails-test"};
+    fs::path root = tempFolder.path();
     Fixture() {
-      const luciole::GString temporary(g_dir_make_tmp("luciole-thumbnails-test-XXXXXX", nullptr));
-      TEST_CHECK(temporary != nullptr);
-      root = temporary.get();
       fs::create_directory(root / "home");
       ::setenv("HOME", (root / "home").c_str(), 1);
       ::setenv("XDG_CACHE_HOME", (root / "cache").c_str(), 1);
@@ -66,10 +65,6 @@ namespace {
       ::setenv("XDG_DATA_HOME", (root / "data").c_str(), 1);
       ::setenv("DBUS_SESSION_BUS_ADDRESS", "unix:path=/luciole-thumbnail-test-no-session", 1);
       ::setenv("DBUS_SYSTEM_BUS_ADDRESS", "unix:path=/luciole-thumbnail-test-no-system", 1);
-    }
-    ~Fixture() {
-      std::error_code ignored;
-      fs::remove_all(root, ignored);
     }
   };
   LoadedImageFile picture(int width = 32, int height = 16) {

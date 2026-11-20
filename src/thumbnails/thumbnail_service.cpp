@@ -1,9 +1,12 @@
 #include "thumbnails/thumbnail_service.h"
 
 #include "core/log.h"
+#include "formats/file_kind.h"
 #include "fs/gio_interop.h"
 #include "fs/gio_ptr.h"
 #include "fs/posix_fd.h"
+#include "thumbnails/font_facts.h"
+#include "thumbnails/font_preview.h"
 #include "thumbnails/thumbnail_codec.h"
 #include "thumbnails/thumbnail_provider.h"
 #include "thumbnails/thumbnail_store.h"
@@ -27,11 +30,13 @@ namespace {
     return revision ? revision->text() : std::string();
   }
   // Purpose is part of the identity: previews accept no smaller foreign thumbnail and take clean video frames.
+  // So are the theme colors a font sheet is drawn in.
   std::string cacheKey(const luciole::DirectoryEntry& source, int side, luciole::ThumbnailPurpose purpose) {
     return std::format(
-        "{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}", source.location().uri(), source.id, source.etag().value_or(""),
+        "{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}", source.location().uri(), source.id, source.etag().value_or(""),
         source.modifiedSeconds.value_or(0), source.size.value_or(0), revisionText(source.contentRevision), side,
-        purpose == luciole::ThumbnailPurpose::Preview ? "preview" : "thumbnail"
+        purpose == luciole::ThumbnailPurpose::Preview ? "preview" : "thumbnail",
+        luciole::fontSheetVariant(source.contentType.value_or(""))
     );
   }
 
@@ -65,7 +70,7 @@ namespace {
   };
   LoadResult load(
       const luciole::DirectoryEntry& source, int side, const luciole::ThumbnailOptions& options, GCancellable* cancel,
-      bool generate, luciole::ThumbnailPurpose purpose
+      bool generate, luciole::ThumbnailPurpose purpose, std::string_view variant
   ) {
     using namespace luciole;
     LoadResult result;
@@ -95,7 +100,7 @@ namespace {
         return result;
       }
     }
-    const std::string mime(source.contentType.value_or(""));
+    const std::string mime(luciole::thumbnailContentType(source).value_or(""));
     const bool media = mime.starts_with("video/") || mime.starts_with("audio/");
     const luciole::Fd file(::open(native->c_str(), O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK));
     struct stat before{};
@@ -133,7 +138,9 @@ namespace {
     const auto relative = std::filesystem::path(*native).lexically_relative(store.root());
     const bool insideCache = !relative.empty() && *relative.begin() != "..";
     const bool videoPreview = mime.starts_with("video/") && purpose == luciole::ThumbnailPurpose::Preview;
-    if (!generate && !insideCache && side <= 1024 && !videoPreview) {
+    // Theme-colored font sheets never enter or come from the shared cache.
+    const bool uncached = videoPreview || isFontContentType(mime);
+    if (!generate && !insideCache && side <= 1024 && !uncached) {
       if (auto cached = store.read(
               location.uri(), side, static_cast<std::uint64_t>(before.st_mtim.tv_sec),
               static_cast<std::uint64_t>(before.st_size), sourceStamp, purpose == ThumbnailPurpose::Thumbnail
@@ -143,7 +150,14 @@ namespace {
             && cached->text.at("Software") == "Luciole"
             && (!cached->text.contains("X-Luciole::VideoVersion")
                 || cached->text.at("X-Luciole::VideoVersion") != kVideoThumbnailVersion);
-        if (!oldVideo) {
+        // A picture cached before its own size was kept with it is decoded again for a preview, which states that size.
+        const bool oldPicture = mime.starts_with("image/")
+            && !mime.starts_with("image/svg")
+            && purpose == ThumbnailPurpose::Preview
+            && cached->text.contains("Software")
+            && cached->text.at("Software") == "Luciole"
+            && !cached->text.contains("Thumb::Image::Width");
+        if (!oldVideo && !oldPicture) {
           struct stat after{};
           if (::fstat(file.get(), &after) == 0 && stamp(after) == sourceStamp && !g_cancellable_is_cancelled(cancel)) {
             result.image.pixels = std::make_shared<const LoadedImageFile>(std::move(cached->image));
@@ -158,7 +172,7 @@ namespace {
     }
     std::expected<LoadedImageFile, std::string> decoded = std::unexpected("no thumbnail decoder");
     if (mime.starts_with("image/") || !insideCache) {
-      decoded = renderThumbnailProvider(file.get(), mime, side, options, cancel, purpose);
+      decoded = renderThumbnailProvider(file.get(), mime, side, options, cancel, purpose, variant);
     }
     if (!decoded && !g_cancellable_is_cancelled(cancel)) {
       logDebug("[thumbnail] mime={} size={}: {}", mime, side, decoded.error());
@@ -175,7 +189,7 @@ namespace {
     if (::lstat(native->c_str(), &named) < 0 || stamp(named) != sourceStamp) {
       return result;
     }
-    if (!insideCache && side <= 1024 && !videoPreview) {
+    if (!insideCache && side <= 1024 && !uncached) {
       ThumbnailPng cached{
           .image = *decoded,
           .text = {
@@ -188,6 +202,10 @@ namespace {
       };
       if (mime.starts_with("video/")) {
         cached.text["X-Luciole::VideoVersion"] = kVideoThumbnailVersion;
+      }
+      if (decoded->sourceWidth > 0 && decoded->sourceHeight > 0) { // the freedesktop keys for the file's own size
+        cached.text["Thumb::Image::Width"] = std::to_string(decoded->sourceWidth);
+        cached.text["Thumb::Image::Height"] = std::to_string(decoded->sourceHeight);
       }
       result.write.emplace(ThumbnailCacheWrite{std::move(cached), side});
     }
@@ -209,6 +227,8 @@ struct luciole::ThumbnailService::State : std::enable_shared_from_this<State> {
     std::chrono::steady_clock::time_point seen;
     int side = 128;
     ThumbnailPurpose purpose = ThumbnailPurpose::Thumbnail;
+    // Theme colors of a font sheet, fixed when the item is created.
+    std::string variant;
     bool visible = false, failed = false;
     Stage stage = Stage::ProbeQueued;
     std::chrono::steady_clock::time_point retry;
@@ -222,6 +242,7 @@ struct luciole::ThumbnailService::State : std::enable_shared_from_this<State> {
     int side;
     bool generate;
     ThumbnailPurpose purpose;
+    std::string variant;
   };
   struct Result {
     LoadResult loaded;
@@ -487,7 +508,8 @@ struct luciole::ThumbnailService::State : std::enable_shared_from_this<State> {
                   nlohmann::json::array({"pixbuf-media-v1", source.etag().value_or(""),
                                          source.modifiedSeconds.value_or(0), source.size.value_or(0),
                                          revisionText(source.contentRevision), identity ? identity->filesystem : "",
-                                         identity ? identity->file : "", request->side, request->options.maxFileMiB})
+                                         identity ? identity->file : "", request->side, request->options.maxFileMiB,
+                                         request->variant})
                       .dump();
               *item.image = std::move(loaded->loaded.image);
               const std::size_t bytes = item.image->pixels ? item.image->pixels->rgba.size() : 0;
@@ -516,7 +538,7 @@ struct luciole::ThumbnailService::State : std::enable_shared_from_this<State> {
         task.get(),
         new Request{
             shared_from_this(), next->first, item.source, requestOptions, epoch, item.serial, item.side, generate,
-            item.purpose
+            item.purpose, item.variant
         },
         [](gpointer data) { delete static_cast<Request*>(data); }
     );
@@ -524,7 +546,9 @@ struct luciole::ThumbnailService::State : std::enable_shared_from_this<State> {
       const auto& request = *static_cast<Request*>(data);
       auto result = std::make_unique<Result>();
       try {
-        result->loaded = load(request.source, request.side, request.options, cancel, request.generate, request.purpose);
+        result->loaded = load(
+            request.source, request.side, request.options, cancel, request.generate, request.purpose, request.variant
+        );
       } catch (const std::exception& error) {
         result->error = error.what();
       }
@@ -571,12 +595,24 @@ luciole::ThumbnailService::~ThumbnailService() {
   m_state->changed = {};
   m_state->retire();
 }
+luciole::InternedText luciole::thumbnailContentType(const DirectoryEntry& source) {
+  const auto& type = source.contentType;
+  const bool unknown =
+      !type || type->empty() || *type == "application/octet-stream" || *type == "application/x-zerosize";
+  if (unknown && formats::fileKind(source.name).content == formats::ContentKind::Video) {
+    return InternedText("video/x-luciole-named");
+  }
+  return type;
+}
+
 std::shared_ptr<const luciole::FileIconImage>
 luciole::ThumbnailService::request(const DirectoryEntry& source, int pixels, bool visible, ThumbnailPurpose purpose) {
   auto& state = *m_state;
-  const auto& mime = source.contentType;
+  const auto mime = thumbnailContentType(source);
   const auto location = source.location();
   const auto policy = purpose == ThumbnailPurpose::Preview ? ThumbnailPolicy::All : state.options.policy;
+  // Font sheets are previews only; browsing keeps the type icon.
+  const bool font = mime && isFontContentType(*mime);
   if (policy == ThumbnailPolicy::Never
       || state.clearing
       || !mime
@@ -585,7 +621,9 @@ luciole::ThumbnailService::request(const DirectoryEntry& source, int pixels, boo
           || mime->starts_with("video/")
           || mime->starts_with("audio/")
           || *mime == "application/pdf"
+          || font
       )
+      || (font && purpose != ThumbnailPurpose::Preview)
       || source.type != luciole::FileType::Regular
       || source.symlink
       || !source.modifiedSeconds
@@ -611,6 +649,7 @@ luciole::ThumbnailService::request(const DirectoryEntry& source, int pixels, boo
     item.bytes = bytes;
     item.side = side;
     item.purpose = purpose;
+    item.variant = fontSheetVariant(*mime);
     found = state.cache.emplace(key, std::move(item)).first;
     state.leases.emplace(found->second.image.get(), &found->second);
     state.armSweep();
