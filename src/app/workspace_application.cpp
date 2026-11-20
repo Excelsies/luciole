@@ -700,7 +700,7 @@ void WorkspaceApplication::pointer(const PointerEvent& event) {
   }
   const auto x = static_cast<float>(event.sx), y = static_cast<float>(event.sy);
   if (active.sidebarOverlays(x, y)) {
-    host->pointerPage = window.active;
+    pointTo(*host, window.active);
     active.pointer(event);
     return;
   }
