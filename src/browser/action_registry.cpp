@@ -52,9 +52,13 @@ namespace {
     }
     return clipboard(c, r);
   }
+  State trashItems(const C& c, const R& r, bool restore);
   State fileClipboard(const C& c, const R& r, bool cut) {
     if (!c.clipboardAvailable) {
       return unavailable("The application clipboard is unavailable.");
+    }
+    if (cut && r.folder && r.folder->isTrash()) {
+      return trashItems(c, r, false);
     }
     if (!all(c, r, [&](const DirectoryEntry& entry) {
           const auto location = entry.location();
@@ -107,8 +111,8 @@ namespace {
     if (!all(c, r, [](const DirectoryEntry& entry) { return entry.location().nativePath().has_value(); })) {
       return unavailable("This operation currently supports native files only.");
     }
-    if (!rename && (!native(r) || !c.query.empty() || !ready(c))) {
-      return unavailable("Open the containing native folder before moving items to Trash.");
+    if (!rename && (!ready(c) || r.targets.size() > 4096)) {
+      return unavailable("Select at most 4096 native items from an available listing.");
     }
     if (!all(c, r, [&](const DirectoryEntry& entry) {
           return (rename ? entry.access.rename : entry.access.trash).value_or(true);
@@ -159,6 +163,16 @@ namespace {
     }
     return {};
   }
+  // One readable native regular archive: what Browse Archive and Extract accept, regardless of running jobs.
+  bool browsableArchive(const C& c, const R& r) {
+    return single(r) && all(c, r, [](const DirectoryEntry& entry) {
+             return entry.type == FileType::Regular
+                 && !entry.symlink
+                 && entry.location().nativePath().has_value()
+                 && entry.access.read.value_or(true)
+                 && luciole::isSupportedArchive(entry.location(), entry.contentType.value_or(""));
+           });
+  }
   State archive(const C& c, const R& r, bool compress) {
     if (c.operationsBusy) {
       return unavailable("Another file operation is still finishing.");
@@ -174,11 +188,7 @@ namespace {
           })) {
         return unavailable("Special files cannot be compressed.");
       }
-    } else if (!single(r) || !all(c, r, [](const DirectoryEntry& entry) {
-                 return entry.type == FileType::Regular
-                     && !entry.symlink
-                     && luciole::isSupportedArchive(entry.location(), entry.contentType.value_or(""));
-               })) {
+    } else if (!browsableArchive(c, r)) {
       return unavailable("Select one ZIP or TAR archive.");
     }
     return {};
@@ -432,6 +442,10 @@ namespace {
        .label = "Folders first",
        .shortcut = "",
        .rule = [](const C& c, const R&) { return checked(c.model.sort().directoriesFirst); }},
+      {.action = A::HiddenLast,
+       .label = "Hidden last",
+       .shortcut = "",
+       .rule = [](const C& c, const R&) { return checked(c.model.sort().hiddenLast); }},
       {.action = A::Open, .label = "Open", .shortcut = "Enter", .scope = S::Targets, .rule = open},
       {.action = A::ContainingFolder,
        .label = "Show in containing folder",
@@ -630,6 +644,11 @@ bool luciole::ActionRegistry::current(const ActionContext& context, const Action
            return context.model.location(target.id) == target.location && context.model.visible(target.id);
          });
 }
+luciole::BrowserAction luciole::ActionRegistry::openAction(const ActionContext& context, const ActionRequest& request) {
+  return !context.chooser && current(context, request, ActionScope::Targets) && browsableArchive(context, request)
+      ? A::BrowseArchive
+      : A::Open;
+}
 bool luciole::chooserAction(BrowserAction action) {
   switch (action) {
   case A::Back:
@@ -660,6 +679,7 @@ bool luciole::chooserAction(BrowserAction action) {
   case A::Ascending:
   case A::Descending:
   case A::FoldersFirst:
+  case A::HiddenLast:
   case A::Open:
   case A::SelectAll:
   case A::InvertSelection:
@@ -670,6 +690,7 @@ bool luciole::chooserAction(BrowserAction action) {
   case A::CopyPath:
   case A::CopyUri:
   case A::KeyboardShortcuts:
+  case A::CreateFolder:
     return true;
   case A::Miller:
   case A::Workbench:
@@ -691,7 +712,6 @@ bool luciole::chooserAction(BrowserAction action) {
   case A::ExtractHere:
   case A::ExtractTo:
   case A::BrowseArchive:
-  case A::CreateFolder:
   case A::CreateFile:
   case A::NewDocument:
   case A::PinCurrent:
@@ -714,6 +734,16 @@ bool luciole::chooserAction(BrowserAction action) {
     return false;
   }
   return false;
+}
+
+std::vector<luciole::BrowserAction> luciole::itemMenuDeletionActions(bool inTrash, bool showPermanentDeletion) {
+  if (inTrash) {
+    return {A::Restore, A::DeletePermanently};
+  }
+  if (showPermanentDeletion) {
+    return {A::Trash, A::DeletePermanently};
+  }
+  return {A::Trash};
 }
 
 luciole::ActionState

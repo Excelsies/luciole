@@ -36,6 +36,20 @@ void luciole::DirectoryTree::clear() {
   m_nodes.clear();
   m_rejected.reset();
 }
+void luciole::DirectoryTree::releaseLocation(const Location& root) {
+  const auto removed = std::erase_if(m_nodes, [&](const auto& item) {
+    const auto& location = item.second->entry.navigationLocation();
+    if (location == root || location.uri().starts_with(root.uri() + (root.uri().ends_with('/') ? "" : "/"))) {
+      item.second->session.setChangedCallback({});
+      return true;
+    }
+    return false;
+  });
+  if (removed) {
+    publish();
+  }
+}
+
 void luciole::DirectoryTree::setRoot(DirectorySnapshot snapshot) {
   if (m_root.location != snapshot.location) {
     clear();
@@ -51,7 +65,7 @@ std::size_t luciole::DirectoryTree::loading() const {
 luciole::TreeRowInfo luciole::DirectoryTree::row(EntryId id) const {
   TreeRowInfo result{.depth = m_model.treeDepth(id), .enabled = true, .status = {}};
   const auto* entry = m_model.entry(id);
-  result.expandable = entry && entry->type == FileType::Directory && !entry->symlink && !entry->location().isTrash();
+  result.expandable = entry && entry->isFolderLink() && !entry->symlink && !entry->location().isTrash();
   if (!entry) {
     return result;
   }
@@ -76,7 +90,7 @@ luciole::TreeRowInfo luciole::DirectoryTree::row(EntryId id) const {
 bool luciole::DirectoryTree::cycle(const DirectoryEntry& entry) const {
   auto parent = m_model.treeParent(entry.id);
   std::set<EntryId> visited;
-  const auto location = entry.location();
+  const auto location = entry.navigationLocation();
   const auto identity = entry.identity();
   while (parent) {
     if (!visited.insert(*parent).second) {
@@ -86,7 +100,7 @@ bool luciole::DirectoryTree::cycle(const DirectoryEntry& entry) const {
     if (!ancestor) {
       break;
     }
-    if (ancestor->location() == location || (identity && ancestor->identity() == identity)) {
+    if (ancestor->navigationLocation() == location || (identity && ancestor->identity() == identity)) {
       return true;
     }
     parent = m_model.treeParent(*parent);
@@ -162,7 +176,7 @@ void luciole::DirectoryTree::pump() {
     if (node.session.snapshot().location) {
       node.session.refresh();
     } else {
-      node.session.open(node.entry.location());
+      node.session.open(node.entry.navigationLocation());
     }
   }
   m_pumping = false;
@@ -186,7 +200,7 @@ void luciole::DirectoryTree::publish() {
   std::vector<DirectoryEntries::Index> rows;
   std::unordered_map<EntryId, EntryId> parents;
   std::set<EntryId> retained;
-  const auto append = [&](this auto&& self, const DirectoryEntry& entry, std::size_t depth) -> void {
+  const auto append = [&](auto&& self, const DirectoryEntry& entry, std::size_t depth) -> void {
     if (depth >= maxDepth + 1) {
       return;
     }
@@ -198,7 +212,8 @@ void luciole::DirectoryTree::publish() {
     if (entry.id != node.entry.id
         || entry.identity() != node.entry.identity()
         || entry.symlink
-        || entry.type != FileType::Directory) {
+        || !entry.isFolderLink()
+        || entry.navigationLocation() != node.entry.navigationLocation()) {
       return;
     }
     retained.insert(found->first);
@@ -209,7 +224,7 @@ void luciole::DirectoryTree::publish() {
     for (std::size_t i = 0; i < children.size(); ++i) {
       const auto& child = children[i];
       currentIds.emplace(child.name, Node::Identity{child.id, child.identity()});
-      if (m_foldersOnly && child.type != FileType::Directory) {
+      if (m_foldersOnly && !child.isFolderLink()) {
         continue;
       }
       if (parents.empty()) {
@@ -220,13 +235,13 @@ void luciole::DirectoryTree::publish() {
       }
       parents.emplace(child.id, entry.id);
       rows.push_back({source, i});
-      self(child, depth + 1);
+      self(self, child, depth + 1);
     }
     node.ids->previous = std::move(currentIds);
   };
   if (!m_nodes.empty()) {
     for (const auto& entry : m_root.entries) {
-      append(entry, 0);
+      append(append, entry, 0);
     }
   }
   for (auto it = m_nodes.begin(); it != m_nodes.end();) {

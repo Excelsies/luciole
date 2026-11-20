@@ -46,6 +46,7 @@ namespace luciole {
     Ascending,
     Descending,
     FoldersFirst,
+    HiddenLast,
     Open,
     ContainingFolder,
     OriginalLocation,
@@ -127,8 +128,11 @@ namespace luciole {
     bool chooser = false;
     bool singleSelection = false;
   };
-  // Actions a file chooser window offers; everything else would act on files or leave the chooser.
+  // Actions a file chooser window offers: browsing, selection and New Folder. Everything else would act on files or
+  // leave the chooser.
   bool chooserAction(BrowserAction action);
+  // Deletion entries of the item context menu. Trash always offers permanent deletion; outside Trash it is opt-in.
+  std::vector<BrowserAction> itemMenuDeletionActions(bool inTrash, bool showPermanentDeletion);
   struct ActionState {
     bool enabled = true;
     std::string_view reason;
@@ -166,5 +170,8 @@ namespace luciole {
     static ActionRequest capture(const ActionContext& context);
     static bool current(const ActionContext& context, const ActionRequest& request, ActionScope scope);
     static ActionState state(BrowserAction action, const ActionContext& context, const ActionRequest& request);
+    // The action Open performs: Browse Archive for one browsable archive, otherwise Open. Running jobs do not change
+    // the choice; state() still refuses Browse Archive meanwhile.
+    static BrowserAction openAction(const ActionContext& context, const ActionRequest& request);
   };
 } // namespace luciole

@@ -161,11 +161,11 @@ namespace {
     TEST_CHECK(shown.find("page.pdf") == nullptr && shown.find("Preview") == nullptr);
     TEST_CHECK(shown.buttons.empty());
     // The picture is sized as the page asks for its pixels: the slot's width less the docked pane's margins and the
-    // scrollbar, 260 - 24 - 6 - 8 = 222, in the page's shape, 222 * 160 / 120 tall.
+    // scrollbar, 260 - 24 - 3 - 8 = 225, in the page's shape, 225 * 160 / 120 tall.
     TEST_CHECK(shown.picture != nullptr);
     if (shown.picture != nullptr) {
-      TEST_NEAR(shown.picture->width(), 222, 0.5F);
-      TEST_NEAR(shown.picture->height(), 296, 0.5F);
+      TEST_NEAR(shown.picture->width(), 225, 0.5F);
+      TEST_NEAR(shown.picture->height(), 300, 0.5F);
     }
     // The view stays inside the slot it was given.
     TEST_NEAR(page.width(), kWidth, 0.01F);

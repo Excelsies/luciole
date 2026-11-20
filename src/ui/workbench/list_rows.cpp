@@ -73,7 +73,7 @@ float luciole::quietTextSize(float listTextSize, std::size_t column) {
 
 luciole::QuietRow::QuietRow(FileIconCache& icons, std::size_t column) : m_column(metricsColumn(column)) {
   setHitTestVisible(false);
-  addChild(ui::box({.out = &m_background, .radius = Style::radiusMd}));
+  addChild(ui::box({.out = &m_background, .styleRadius = Style::radiusMd}));
   addChild(
       ui::box(
           {.out = &m_lead,
@@ -161,7 +161,7 @@ void luciole::QuietRow::doLayout(Renderer& renderer) {
 
 luciole::JumpRowTile::JumpRowTile() {
   setHitTestVisible(false);
-  addChild(ui::box({.out = &m_background, .radius = Style::radiusMd}));
+  addChild(ui::box({.out = &m_background, .styleRadius = Style::radiusMd}));
   auto bar = shareBar(kJumpBarWidth);
   m_bar = bar.get();
   addChild(

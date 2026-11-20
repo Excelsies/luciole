@@ -9,6 +9,7 @@
 #include "ui/controls/slider.h"
 #include "ui/controls/stepper.h"
 #include "ui/dialogs/dialog_chrome.h"
+#include "ui/dialogs/settings_dialog_rows.h"
 
 #include <algorithm>
 #include <cmath>
@@ -100,13 +101,17 @@ SettingsDialog::SettingsDialog(
        {"Select names", luciole::TypingMode::Typeahead}}
   );
   addBool(P::ConfirmPermanentDeletion, "Confirm permanent deletion");
+  addBool(P::ShowPermanentDeletion, "Show Delete Permanently in context menus");
   addBool(P::SwitchToNewTab, "Switch to new folder tabs");
   addBool(P::RestoreLastWindow, "Restore tabs from last closed window");
   card("Terminal");
   addTerminal();
   section("Appearance", "paint");
   card("Window");
-  addFraction(P::BackgroundOpacity, "Background opacity");
+  addFraction(P::BackgroundOpacity, "Background opacity", 1.0, 0.01);
+  addFraction(P::CornerRadiusScale, "Corner roundness", 2.0, 0.05, {}, [](double value) {
+    Style::setCornerRadiusScale(static_cast<float>(value));
+  });
   addBool(P::AlwaysShowTabBar, "Always show tab bar");
   addBool(P::AlwaysShowStatusBar, "Always show status bar");
   addBool(P::CompactMenus, "Compact context menus");
@@ -114,6 +119,7 @@ SettingsDialog::SettingsDialog(
   addBool(P::ShowSidebar, "Show sidebar");
   addBool(P::SidebarTree, "Show folder tree");
   addBool(P::ShowDrives, "Show drives");
+  addBool(P::ShowNetwork, "Show Network");
   addNumber(P::SidebarWidth, "Sidebar width", widths(luciole::kMinSidebarWidth, luciole::kMaxSidebarWidth));
   card("Preview");
   addBool(P::ShowPreview, "Show preview");
@@ -158,6 +164,7 @@ SettingsDialog::SettingsDialog(
   );
   addBool(P::SortDescending, "Reverse order");
   addBool(P::DirectoriesFirst, "Folders first");
+  addBool(P::HiddenLast, "Hidden last");
   card("Grid");
   addNumber(P::GridIconSize, "Icon size", {luciole::kGridIconSizes.begin(), luciole::kGridIconSizes.end()});
   addBool(P::ShowSizeCaption, "File size caption");
@@ -211,10 +218,10 @@ SettingsDialog::SettingsDialog(
   );
   addNumber(P::ThumbnailMaxFileMib, "Image/PDF size limit", {1, 1024}, "MiB");
   card("Cache");
-  addNumber(P::ThumbnailCacheMib, "Disk cache limit", {16, 1024}, "MiB");
+  addNumber(P::ThumbnailCacheMib, "Disk cache limit", {16, 8192}, "MiB");
   m_section->addChild(
       ui::row(
-          {.align = FlexAlign::Center, .gap = 8.0F, .paddingV = 6.0F},
+          {.align = FlexAlign::Center, .gap = 8.0F, .paddingV = kRowPaddingV, .minHeight = Style::controlHeight},
           ui::label({.text = "Cached thumbnails", .fontWeight = FontWeight::SemiBold, .flexGrow = 1.0F}),
           ui::button(
               {.out = &m_clearThumbnails,
@@ -270,77 +277,6 @@ void SettingsDialog::setCompact(bool compact) {
   m_navigation->setMaxWidth(width);
 }
 Node* SettingsDialog::navigation() const { return m_navigation; }
-template <class T>
-void SettingsDialog::addRow(
-    luciole::PreferenceKey<T> key, const std::string& title, std::function<void(const T&)> show,
-    std::unique_ptr<Node> control, std::string subtitle
-) {
-  auto titleLabel = ui::label({.text = title, .fontWeight = FontWeight::SemiBold, .maxLines = 2, .flexGrow = 1.0F});
-  std::unique_ptr<Node> copy;
-  if (subtitle.empty()) {
-    copy = std::move(titleLabel);
-  } else {
-    copy = ui::column(
-        {.align = FlexAlign::Stretch, .gap = 2.0F, .flexGrow = 1.0F}, std::move(titleLabel),
-        ui::label(
-            {.text = std::move(subtitle),
-             .fontSize = Style::fontSizeCaption,
-             .color = colorSpecFromRole(ColorRole::OnSurfaceVariant),
-             .maxLines = 3}
-        )
-    );
-  }
-  m_section->addChild(
-      ui::row({.align = FlexAlign::Center, .gap = 8.0F, .paddingV = 6.0F}, std::move(copy), std::move(control))
-  );
-  m_rows[key.id()] = [this, key, show = std::move(show)] { show(luciole::preferenceValue(m_current, key)); };
-}
-
-template <class T>
-void SettingsDialog::addChoice(
-    luciole::PreferenceKey<T> key, const std::string& title, const Choices<T>& choices, std::string subtitle
-) {
-  auto control = std::make_unique<Select>();
-  auto* select = control.get();
-  std::vector<std::string> options;
-  options.reserve(choices.size());
-  for (const auto& choice : choices) {
-    options.push_back(choice.first);
-  }
-  select->setOptions(std::move(options));
-  select->setMinWidth(180.0F);
-  select->setMaxWidth(180.0F);
-  select->setFontSize(Style::fontSizeCaption);
-  select->setOnSelectionChanged([this, key, choices](std::size_t index, std::string_view) {
-    send(key, std::optional<T>(choices[index].second));
-  });
-  const auto show = [select, choices](const T& value) {
-    const auto found = std::ranges::find(choices, value, &Choices<T>::value_type::second);
-    select->setSelectedIndexSilently(static_cast<std::size_t>(found - choices.begin()));
-  };
-  addRow<T>(key, title, show, std::move(control), std::move(subtitle));
-}
-// The Workbench card builds these choices in settings_dialog_workbench.cpp.
-template <class T> using Key = luciole::PreferenceKey<T>;
-template void SettingsDialog::addChoice(
-    Key<luciole::WorkbenchInstrument>, const std::string&, const Choices<luciole::WorkbenchInstrument>&, std::string
-);
-template void SettingsDialog::addChoice(
-    Key<luciole::WorkbenchRibbon>, const std::string&, const Choices<luciole::WorkbenchRibbon>&, std::string
-);
-template void SettingsDialog::addChoice(
-    Key<luciole::WorkbenchMeasure>, const std::string&, const Choices<luciole::WorkbenchMeasure>&, std::string
-);
-template void SettingsDialog::addChoice(
-    Key<luciole::WorkbenchColor>, const std::string&, const Choices<luciole::WorkbenchColor>&, std::string
-);
-template void SettingsDialog::addChoice(
-    Key<luciole::WorkbenchPreviewPlace>, const std::string&, const Choices<luciole::WorkbenchPreviewPlace>&, std::string
-);
-template void SettingsDialog::addChoice(
-    Key<luciole::AudioVisualKind>, const std::string&, const Choices<luciole::AudioVisualKind>&, std::string
-);
-
 void SettingsDialog::addTerminal() {
   auto control = std::make_unique<Input>();
   auto* input = control.get();
@@ -407,12 +343,15 @@ void SettingsDialog::addNumber(
   addRow<int>(key, title, show, std::move(control));
 }
 
-void SettingsDialog::addFraction(luciole::PreferenceKey<double> key, const std::string& title) {
+void SettingsDialog::addFraction(
+    luciole::PreferenceKey<double> key, const std::string& title, double maximum, double step, std::string subtitle,
+    std::function<void(double)> onPreview
+) {
   Label* percent = nullptr;
   auto slider = std::make_unique<Slider>();
   auto* control = slider.get();
-  control->setRange(0.0, 1.0);
-  control->setStep(0.01);
+  control->setRange(0.0, maximum);
+  control->setStep(step);
   control->setFlexGrow(1.0F);
   const auto showPercent = [](Label* label, double value) {
     label->setText(std::format("{}%", std::lround(value * 100)));
@@ -421,7 +360,12 @@ void SettingsDialog::addFraction(luciole::PreferenceKey<double> key, const std::
       {.align = FlexAlign::Center, .gap = Style::spaceSm, .width = 180.0F}, std::move(slider),
       ui::label({.out = &percent, .fontSize = Style::fontSizeCaption, .minWidth = 36.0F})
   );
-  control->setOnValueChanged([percent, showPercent](double value) { showPercent(percent, value); });
+  control->setOnValueChanged([percent, showPercent, onPreview = std::move(onPreview)](double value) {
+    showPercent(percent, value);
+    if (onPreview) {
+      onPreview(value);
+    }
+  });
   // Whole percents, so a snapped 0.6000000000000001 matches an inherited 0.6.
   control->setOnDragEnd([this, key, control] {
     send(key, std::optional(std::round(control->value() * 100.0) / 100.0));
@@ -432,19 +376,9 @@ void SettingsDialog::addFraction(luciole::PreferenceKey<double> key, const std::
       showPercent(percent, value);
     }
   };
-  addRow<double>(key, title, show, std::move(row));
+  addRow<double>(key, title, show, std::move(row), std::move(subtitle));
 }
 
-template <class T> void SettingsDialog::send(luciole::PreferenceKey<T> key, std::optional<T> value) {
-  // Choosing the inherited value stores no override.
-  if (value && *value == luciole::preferenceValue(m_inherited, key)) {
-    value.reset();
-  }
-  luciole::preferenceValue(m_current, key) = value.value_or(luciole::preferenceValue(m_inherited, key));
-  m_rows.at(key.id())();
-  setStatus("Saving…", false);
-  m_change(value ? luciole::OverrideEdit(key, *value) : luciole::OverrideEdit(key, std::nullopt));
-}
 void SettingsDialog::sync(
     const luciole::BrowserSettings& settings, const luciole::BrowserSettings& inherited, bool busy,
     const std::string& error, bool clearingThumbnails, bool clearingVisits

@@ -5,6 +5,7 @@
 #include "fs/filename.h"
 #include "fs/gio_interop.h"
 #include "fs/posix_fd.h"
+#include "operations/history_mount.h"
 
 #include <algorithm>
 #include <array>
@@ -186,8 +187,12 @@ namespace {
       }
       if (row.changed && row.error.empty() && !sources.contains(row.name)) {
         struct stat info{};
+        // A case-insensitive folder resolves a case-only rename to the item itself; apply's
+        // RENAME_NOREPLACE still rejects a hard-link alias under the new name.
         if (::fstatat(plan.fd.get(), row.name.c_str(), &info, AT_SYMLINK_NOFOLLOW) == 0) {
-          row.error = "An unselected item already has this name.";
+          if (!luciole::sameIdentity(info, plan.items[i]->identity)) {
+            row.error = "An unselected item already has this name.";
+          }
         } else if (errno != ENOENT) {
           row.error = std::strerror(errno);
         }
@@ -408,6 +413,11 @@ struct luciole::BatchRenameReceipt {
   std::shared_ptr<const Prepared> plan;
   std::shared_ptr<const std::vector<BatchRenameRow>> rows;
 };
+
+bool luciole::batchRenameUsesMount(const BatchRenameReceipt& receipt, const HistoryMount& mount) {
+  return mount.contains(receipt.plan->fd.get())
+      || std::ranges::any_of(receipt.plan->items, [&](const auto& item) { return mount.contains(item->fd.get()); });
+}
 
 namespace {
   using Revisions = std::map<std::pair<dev_t, ino_t>, std::shared_ptr<struct stat>>;
@@ -676,6 +686,9 @@ bool luciole::BatchRenameService::applying() const {
 }
 std::size_t luciole::BatchRenameService::completed() const { return m_state->completed.load(); }
 const luciole::BatchRenameSnapshot& luciole::BatchRenameService::snapshot() const { return m_state->snapshot; }
+std::shared_ptr<const luciole::BatchRenameReceipt> luciole::BatchRenameService::takeReceipt() {
+  return std::move(m_state->snapshot.receipt);
+}
 void luciole::BatchRenameService::setChangedCallback(std::function<void()> callback) {
   m_state->changed = std::move(callback);
 }

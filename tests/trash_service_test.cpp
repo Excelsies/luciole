@@ -1,6 +1,9 @@
+#include "browser/action_registry.h"
 #include "browser/directory_model.h"
 #include "event_loop/glib_poll_source.h"
 #include "fs/gio_ptr.h"
+#include "fs/recursive_search.h"
+#include "operations/empty_trash_service.h"
 #include "operations/trash_service.h"
 #include "temp_folder.h"
 #include "test_check.h"
@@ -131,6 +134,143 @@ namespace {
         std::ranges::any_of(versions, [](const auto& path) { return read(path) == "recoverable"; })
         && std::ranges::any_of(versions, [](const auto& path) { return read(path) == "second version"; })
     );
+  }
+  void multipleParents(const Fixture& fixture, Pump& pump) {
+    const auto first = fixture.folder("drop-first");
+    const auto second = fixture.folder("drop-second");
+    write(first / "same", "first");
+    write(second / "same", "second");
+    write(second / "keep", "untouched");
+    fs::create_symlink(second / "keep", first / "link");
+    luciole::TrashService service;
+    TEST_CHECK(service.prepare({location(first / "same"), location(second / "same"), location(first / "link")}));
+    pump.until([&] { return !service.busy(); });
+    TEST_CHECK(service.canTrash() && fs::exists(first / "same") && fs::exists(second / "same"));
+    pump.trash(service);
+    TEST_CHECK(service.completed() == 3);
+    const auto firstCopy = fixture.archived(first / "same"), secondCopy = fixture.archived(second / "same");
+    const auto links = fixture.archived(first / "link");
+    TEST_CHECK(firstCopy.size() == 1 && read(firstCopy.front()) == "first");
+    TEST_CHECK(secondCopy.size() == 1 && read(secondCopy.front()) == "second");
+    TEST_CHECK(links.size() == 1 && fs::read_symlink(links.front()) == second / "keep");
+    TEST_CHECK(read(second / "keep") == "untouched");
+
+    write(first / "item", "original");
+    write(second / "item", "good");
+    TEST_CHECK(service.prepare({location(first / "item"), location(second / "item")}));
+    pump.until([&] { return !service.busy(); });
+    TEST_CHECK(service.canTrash());
+    fs::rename(first, fixture.home / "drop-original");
+    fs::create_directory(first);
+    write(first / "item", "replacement");
+    pump.trash(service);
+    TEST_CHECK(service.snapshot().results[0].outcome == luciole::TrashOutcome::Failed);
+    TEST_CHECK(service.snapshot().results[1].outcome == luciole::TrashOutcome::Trashed);
+    TEST_CHECK(read(first / "item") == "replacement" && read(fixture.home / "drop-original/item") == "original");
+    TEST_CHECK(fixture.archived(second / "item").size() == 1);
+  }
+  void recursiveSearchSelection(const Fixture& fixture, Pump& pump) {
+    const auto root = fixture.folder("search");
+    fs::create_directories(root / "first");
+    fs::create_directories(root / "second");
+    write(root / "first/match.txt", "first result");
+    write(root / "second/match.txt", "second result");
+    write(root / "keep.txt", "unselected");
+    fs::create_symlink(root / "keep.txt", root / "match-link");
+    luciole::RecursiveSearch search;
+    luciole::DirectoryModel model;
+    search.setChangedCallback([&] { model.applySnapshot(search.snapshot()); });
+    search.start(location(root), "match", false);
+    pump.until([&] { return search.snapshot().status == luciole::DirectoryStatus::Ready; });
+    TEST_CHECK(model.rows().size() == 3);
+    model.selectAll();
+    luciole::ActionContext context{.model = model, .context = 79, .query = "match", .pinned = {}};
+    const auto request = luciole::ActionRegistry::capture(context);
+    TEST_CHECK(luciole::ActionRegistry::state(luciole::BrowserAction::Trash, context, request).enabled);
+    std::vector<luciole::Location> sources;
+    sources.reserve(request.targets.size());
+    for (const auto& target : request.targets) {
+      sources.push_back(target.location);
+    }
+    luciole::TrashService service;
+    TEST_CHECK(service.prepare(std::move(sources)));
+    pump.until([&] { return !service.busy(); });
+    TEST_CHECK(service.canTrash());
+    pump.trash(service);
+    TEST_CHECK(std::ranges::all_of(service.snapshot().results, [](const auto& result) {
+      return result.outcome == luciole::TrashOutcome::Trashed;
+    }));
+    const auto first = fixture.archived(root / "first/match.txt");
+    const auto second = fixture.archived(root / "second/match.txt");
+    const auto link = fixture.archived(root / "match-link");
+    TEST_CHECK(first.size() == 1 && read(first.front()) == "first result");
+    TEST_CHECK(second.size() == 1 && read(second.front()) == "second result");
+    TEST_CHECK(link.size() == 1 && fs::read_symlink(link.front()) == root / "keep.txt");
+    TEST_CHECK(
+        read(root / "keep.txt") == "unselected" && fs::is_empty(root / "first") && fs::is_empty(root / "second")
+    );
+    search.start(location(root), "match", false);
+    pump.until([&] { return search.snapshot().status == luciole::DirectoryStatus::Ready; });
+    TEST_CHECK(model.rows().empty());
+    write(root / "first/match.txt", "permanent first");
+    write(root / "second/match.txt", "permanent second");
+    const auto selected = [&] {
+      search.start(location(root), "match", false);
+      pump.until([&] { return search.snapshot().status == luciole::DirectoryStatus::Ready; });
+      return std::vector<luciole::DirectoryEntry>(search.snapshot().entries.begin(), search.snapshot().entries.end());
+    };
+    auto targets = selected();
+    TEST_CHECK(targets.size() == 2);
+    luciole::EmptyTrashService deletion;
+    TEST_CHECK(deletion.prepareDeletion(targets));
+    pump.until([&] { return !deletion.busy(); });
+    TEST_CHECK(deletion.canEmpty() && read(root / "first/match.txt") == "permanent first");
+    deletion.cancel();
+    write(root / "first/match.txt", "changed since search");
+    TEST_CHECK(deletion.prepareDeletion(targets));
+    pump.until([&] { return !deletion.busy(); });
+    TEST_CHECK(deletion.snapshot().status == luciole::EmptyTrashStatus::Error);
+    TEST_CHECK(deletion.snapshot().error && deletion.snapshot().error->kind == luciole::FileErrorKind::Changed);
+    TEST_CHECK(read(root / "second/match.txt") == "permanent second");
+    targets = selected();
+    TEST_CHECK(deletion.deleteSelection(targets));
+    pump.until([&] { return !deletion.busy(); });
+    TEST_CHECK(deletion.snapshot().status == luciole::EmptyTrashStatus::Finished);
+    TEST_CHECK(std::ranges::all_of(deletion.snapshot().results, [](const auto& result) {
+      return result.outcome == luciole::EmptyTrashOutcome::Deleted;
+    }));
+    TEST_CHECK(!fs::exists(root / "first/match.txt") && !fs::exists(root / "second/match.txt"));
+    TEST_CHECK(read(root / "keep.txt") == "unselected");
+    search.setChangedCallback({});
+  }
+
+  void invalidDropPayloads(const Fixture& fixture, Pump& pump) {
+    const auto parent = fixture.folder("drop-invalid");
+    fs::create_directory(parent / "a");
+    write(parent / "a/child", "child");
+    write(parent / "a-", "between");
+    write(parent / "keep", "keep");
+    luciole::TrashService service;
+    TEST_CHECK(!service.prepare(std::vector<luciole::Location>{}));
+    for (const auto& sources : std::vector<std::vector<luciole::Location>>{
+             {location(parent / "keep"), luciole::Location::fromUri("sftp://example.invalid/file")},
+             {location(parent / "keep"), luciole::Location::trash()},
+             {location(parent / "keep"), location("/")},
+             {location(parent / "keep"), location(parent / "keep")},
+             {location(parent / "keep"), location(parent / "missing")},
+             {location(parent / "a"), location(parent / "a-"), location(parent / "a/child")}
+         }) {
+      TEST_CHECK(service.prepare(sources));
+      pump.until([&] { return !service.busy(); });
+      TEST_CHECK(service.snapshot().status == luciole::TrashStatus::Error && !service.canTrash());
+      TEST_CHECK(read(parent / "keep") == "keep" && read(parent / "a/child") == "child");
+      TEST_CHECK(read(parent / "a-") == "between");
+    }
+    TEST_CHECK(service.prepare({location(parent / "keep")}));
+    pump.until([&] { return !service.busy(); });
+    TEST_CHECK(service.canTrash());
+    service.cancel();
+    TEST_CHECK(!service.canTrash() && !service.trash() && read(parent / "keep") == "keep");
   }
   void rawNames(const Fixture& fixture, Pump& pump) {
     const auto raw = std::string("raw-") + static_cast<char>(0xff);
@@ -291,6 +431,9 @@ int main() {
     Fixture fixture;
     Pump pump;
     preservesRecoverableContent(fixture, pump);
+    multipleParents(fixture, pump);
+    recursiveSearchSelection(fixture, pump);
+    invalidDropPayloads(fixture, pump);
     rawNames(fixture, pump);
     staleTargetsAndPartialResults(fixture, pump);
     rejectsInvalidRequests(fixture, pump);

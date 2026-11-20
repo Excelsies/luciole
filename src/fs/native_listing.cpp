@@ -21,27 +21,9 @@
 #include <unordered_set>
 #include <vector>
 
-bool luciole::remoteFilesystem(const struct statfs& info) {
-  constexpr std::uint32_t kCifs = 0xFF534D42;
-  constexpr std::uint32_t kSmb2 = 0xFE534D42;
-  constexpr std::uint32_t kFuse = 0x65735546;
-  constexpr std::uint32_t kAfs = 0x5346414F;
-  constexpr std::uint32_t kCoda = 0x73757245;
-  constexpr std::uint32_t kCeph = 0x00C36400;
-  constexpr std::uint32_t kNineP = 0x01021997;
-  const auto type = static_cast<std::uint32_t>(info.f_type);
-  return type == NFS_SUPER_MAGIC
-      || type == SMB_SUPER_MAGIC
-      || type == kCifs
-      || type == kSmb2
-      || type == kFuse
-      || type == kAfs
-      || type == kCoda
-      || type == kCeph
-      || type == kNineP;
-}
-
 namespace {
+  constexpr std::uint32_t kFuse = 0x65735546;
+
   // GLib's convert_pwd_string_to_utf8.
   std::optional<std::string> passwdText(const char* value) {
     if (value == nullptr || *value == '\0') {
@@ -218,6 +200,25 @@ namespace {
     void operator()(DIR* dir) const { ::closedir(dir); }
   };
 } // namespace
+
+bool luciole::remoteFilesystem(const struct statfs& info) {
+  constexpr std::uint32_t kCifs = 0xFF534D42;
+  constexpr std::uint32_t kSmb2 = 0xFE534D42;
+  constexpr std::uint32_t kAfs = 0x5346414F;
+  constexpr std::uint32_t kCoda = 0x73757245;
+  constexpr std::uint32_t kCeph = 0x00C36400;
+  constexpr std::uint32_t kNineP = 0x01021997;
+  const auto type = static_cast<std::uint32_t>(info.f_type);
+  return type == NFS_SUPER_MAGIC
+      || type == SMB_SUPER_MAGIC
+      || type == kCifs
+      || type == kSmb2
+      || type == kFuse
+      || type == kAfs
+      || type == kCoda
+      || type == kCeph
+      || type == kNineP;
+}
 
 luciole::NativeListing
 luciole::listNativeFolder(const std::string& path, std::size_t entryLimit, GCancellable* cancellable, bool catalogue) {
@@ -487,6 +488,23 @@ luciole::CatalogueValidation luciole::validateCatalogueRows(
   return result;
 }
 
+bool luciole::networkFilesystem(const std::string& path) {
+  struct statfs filesystem{};
+  struct stat info{};
+  if (::statfs(path.c_str(), &filesystem) != 0 || ::stat(path.c_str(), &info) != 0) {
+    return true;
+  }
+  return networkFilesystem(filesystem, info.st_dev);
+}
+
+bool luciole::networkFilesystem(const struct statfs& filesystem, dev_t device) {
+  // Block-backed FUSE mounts such as ntfs-3g have a disk's device number; rclone and sshfs mounts have none.
+  if (static_cast<std::uint32_t>(filesystem.f_type) == kFuse) {
+    return major(device) == 0;
+  }
+  return remoteFilesystem(filesystem);
+}
+
 std::optional<std::string> luciole::sniffContentType(const std::string& path) {
   const GioPtr<GFile> file(g_file_new_for_path(path.c_str()));
   const GioPtr<GFileInfo> sniffed(g_file_query_info(
@@ -494,4 +512,9 @@ std::optional<std::string> luciole::sniffContentType(const std::string& path) {
   ));
   const char* type = sniffed ? infoString(sniffed.get(), G_FILE_ATTRIBUTE_STANDARD_CONTENT_TYPE) : nullptr;
   return type != nullptr ? std::optional<std::string>(type) : std::nullopt;
+}
+
+bool luciole::linksToDirectory(const std::string& path) {
+  struct statx target{};
+  return ::statx(AT_FDCWD, path.c_str(), AT_NO_AUTOMOUNT, STATX_TYPE, &target) == 0 && S_ISDIR(target.stx_mode);
 }

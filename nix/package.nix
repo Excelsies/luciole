@@ -2,6 +2,7 @@
   lib,
   stdenv,
   fetchurl,
+  fetchFromGitHub,
   meson,
   ninja,
   pkg-config,
@@ -20,6 +21,8 @@
   dconf,
   dbus,
   gvfs,
+  curl,
+  libxml2,
   pango,
   harfbuzz,
   libpng,
@@ -46,6 +49,15 @@
   buildRevision ? "unknown",
 }:
 let
+  stb' = stb.overrideAttrs (_: {
+    version = "unstable-2025-10-26";
+    src = fetchFromGitHub {
+      owner = "nothings";
+      repo = "stb";
+      rev = "f1c79c02822848a9bed4315b12c8c8f3761e1296";
+      hash = "sha256-BlyXJtAI7WqXCTT3ylww8zoG0hBxaojJnQDvdQOXJPE=";
+    };
+  });
   pixbufWithGlycin = gdk-pixbuf.overrideAttrs (previous: {
     # 2.44.8 requires Glycin 2.2; the pinned collection provides its 2.1 API.
     version = "2.44.6";
@@ -141,6 +153,8 @@ stdenv.mkDerivation (finalAttrs: {
     fontconfig
     cairo
     glib
+    curl
+    libxml2
     pango
     harfbuzz
     libpng
@@ -152,7 +166,7 @@ stdenv.mkDerivation (finalAttrs: {
     svgWithGlycin
     libglycin
     glycin-loaders
-    stb
+    stb'
     nlohmann_json
     tomlplusplus
   ];

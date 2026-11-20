@@ -40,7 +40,9 @@ alias_target('generated-headers', protocol_headers)
 
 gio = dependency('gio-2.0', version: '>=2.76')
 gio_unix = dependency('gio-unix-2.0', version: '>=2.76')
-gdk_pixbuf = dependency('gdk-pixbuf-2.0', version: '>=2.44')
+curl = dependency('libcurl', version: '>=7.85')
+xml = dependency('libxml-2.0', version: '>=2.9')
+gdk_pixbuf = dependency('gdk-pixbuf-2.0', version: '>=2.42')
 glycin = dependency('glycin-2', version: '>=2.0.1')
 if not cpp.has_header('stb/stb_image_resize2.h')
   error('system stb/stb_image_resize2.h is required')
@@ -270,6 +272,10 @@ fs_lib = static_library('luciole-fs',
     'src/fs/location_mount.cpp',
     'src/fs/mount_interaction.cpp',
     'src/fs/native_listing.cpp',
+    'src/fs/network_listing.cpp',
+    'src/fs/ws_discovery.cpp',
+    'src/fs/ws_discovery_metadata.cpp',
+    'src/fs/ws_discovery_protocol.cpp',
     'src/fs/transfer_location.cpp',
     'src/fs/posix_fd.cpp',
     'src/fs/recursive_search.cpp',
@@ -281,9 +287,9 @@ fs_lib = static_library('luciole-fs',
     'src/fs/xdg_dirs.cpp',
   ),
   include_directories: src_inc,
-  dependencies: [gio, libarchive, liblzma],
+  dependencies: [gio, libarchive, liblzma, curl, xml],
 )
-fs_dep = declare_dependency(link_with: fs_lib, include_directories: src_inc, dependencies: [gio, libarchive, liblzma])
+fs_dep = declare_dependency(link_with: fs_lib, include_directories: src_inc, dependencies: [gio, libarchive, liblzma, curl, xml])
 
 config_lib = static_library('luciole-config',
   files(
@@ -358,6 +364,7 @@ operations_lib = static_library('luciole-operations',
     'src/operations/copied_move_receipt.cpp',
     'src/operations/copy_history_tree.cpp',
     'src/operations/creation_stage.cpp',
+    'src/operations/history_mount.cpp',
     'src/operations/empty_trash_service.cpp',
     'src/operations/permission_accounts.cpp',
     'src/operations/permission_jobs.cpp',
@@ -564,6 +571,7 @@ ui_lib = static_library('luciole-ui',
     'src/ui/controls/media_view_seek.cpp',
     'src/ui/controls/mesh_program.cpp',
     'src/ui/controls/mesh_view.cpp',
+    'src/ui/controls/glyph_picker.cpp',
     'src/ui/controls/miller_view.cpp',
     'src/ui/controls/pane_divider.cpp',
     'src/ui/controls/pane_divider_focus.cpp',
@@ -644,7 +652,7 @@ ui_dep = declare_dependency(link_with: ui_lib, include_directories: src_inc,
 )
 
 app_jobs_lib = static_library('luciole-app-jobs',
-  files('src/app/operation_hub.cpp', 'src/app/job_activity.cpp'),
+  files('src/app/operation_hub.cpp', 'src/app/job_activity.cpp', 'src/app/drive_removal.cpp'),
   include_directories: src_inc,
   dependencies: [browser_dep, operations_dep],
 )
@@ -696,6 +704,7 @@ app = executable('luciole',
     'src/app/page/browser_page.cpp',
     'src/app/page/create_controller.cpp',
     'src/app/page/details_header_controller.cpp',
+    'src/app/page/dialog_dropdown.cpp',
     'src/app/page/program_controller.cpp',
     'src/app/page/drag_drop_controller.cpp',
     'src/app/page/file_keyboard_controller.cpp',
@@ -709,6 +718,7 @@ app = executable('luciole',
     'src/app/page/settings_controller.cpp',
     'src/app/page/shortcuts_controller.cpp',
     'src/app/page/sidebar_controller.cpp',
+    'src/app/page/sidebar_drawer.cpp',
     'src/app/page/status_bar_controller.cpp',
     'src/app/page/submenu_controller.cpp',
     'src/app/page/transfer_controller.cpp',

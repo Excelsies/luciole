@@ -136,7 +136,12 @@ namespace {
     TEST_CHECK(tree.expand(child));
     wait([&] { return !tree.row(child).loading; });
     TEST_CHECK(tree.row(child).expanded && !tree.row(30).expanded); // Same URI, independent tree occurrences.
-    TEST_CHECK(tree.collapse(20) && tree.branches() == 0);
+    TEST_CHECK(tree.expand(10));
+    wait([&] { return !tree.row(10).loading; });
+    tree.releaseLocation(luciole::Location::fromPath((root / "a").native()));
+    TEST_CHECK(!tree.row(20).expanded && !tree.row(child).expanded && tree.row(10).expanded);
+    TEST_CHECK(tree.branches() == 1);
+    TEST_CHECK(tree.collapse(10) && tree.branches() == 0);
     snapshot.entries = {};
     for (std::size_t i = 0; i < luciole::DirectoryTree::maxBranches + 1; ++i) {
       const auto path = root / ("branch-" + std::to_string(i));
@@ -228,6 +233,30 @@ namespace {
     }
     drain();
   }
+  void providerShortcuts(const fs::path& root) {
+    luciole::DirectoryModel model;
+    luciole::DirectoryTree tree(model, true);
+    luciole::DirectorySnapshot snapshot;
+    snapshot.status = luciole::DirectoryStatus::Ready;
+    auto shortcut = rootEntry(root / "unrelated", 10);
+    shortcut.place = luciole::Location::network().child("server");
+    shortcut.type = luciole::FileType::Shortcut;
+    shortcut.setShortcutTarget(luciole::Location::fromPath((root / "a").native()));
+    snapshot.entries = {shortcut};
+    tree.setRoot(snapshot);
+    TEST_CHECK(tree.row(10).expandable && tree.expand(10));
+    wait([&] { return !tree.row(10).loading; });
+    TEST_CHECK(find(model, root / "a" / "nested"));
+    TEST_CHECK(model.entry(10)->location() == shortcut.location());
+    shortcut.setShortcutTarget(luciole::Location::fromPath((root / "b").native()));
+    snapshot.entries = {shortcut};
+    tree.setRoot(snapshot);
+    TEST_CHECK(tree.branches() == 0 && model.rows().size() == 1);
+    TEST_CHECK(!find(model, root / "a" / "nested") && tree.expand(10));
+    wait([&] { return !tree.row(10).loading; });
+    TEST_CHECK(model.rows().size() == 1);
+  }
+
   void settings(const fs::path& root) {
     using P = luciole::BrowserPreference;
     const luciole::ConfigPaths paths{root / "config.toml", root / "settings.toml"};
@@ -264,6 +293,7 @@ int main() {
   const fs::path& root = temporary.path();
   details(root);
   boundsAndSidebar(root);
+  providerShortcuts(root);
   settings(root);
   std::println("directory tree checks passed");
 }

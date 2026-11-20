@@ -63,6 +63,28 @@ namespace {
     }
   }
 
+  void testCornerRadiusScale() {
+    Fixture fixture;
+    luciole::ConfigService service(fixture.paths());
+    TEST_CHECK(service.reload() && service.settings().browser.cornerRadiusScale == 1.0);
+    fixture.write("config.toml", "[browser]\ncorner_radius_scale = 0\n");
+    TEST_CHECK(service.reload() && service.settings().browser.cornerRadiusScale == 0.0);
+    fixture.write("config.toml", "[browser]\ncorner_radius_scale = 2\n");
+    TEST_CHECK(service.reload() && service.settings().browser.cornerRadiusScale == 2.0);
+    const std::array edit{luciole::OverrideEdit{luciole::BrowserPreference::CornerRadiusScale, 1.5}};
+    TEST_CHECK(service.saveOverrides(edit) == luciole::AtomicWriteState::Durable);
+    TEST_CHECK(service.reload() && service.settings().browser.cornerRadiusScale == 1.5);
+    TEST_CHECK(read(fixture.paths().overrides).contains("corner_radius_scale = 1.5\n"));
+    const std::array reset{luciole::OverrideEdit{luciole::BrowserPreference::CornerRadiusScale, std::nullopt}};
+    TEST_CHECK(service.saveOverrides(reset) == luciole::AtomicWriteState::Durable);
+    TEST_CHECK(service.reload() && service.settings().browser.cornerRadiusScale == 2.0);
+    for (const auto* value : {"-0.1", "2.5", "nan", "true", "'1'"}) {
+      fixture.write("config.toml", std::format("[browser]\ncorner_radius_scale = {}\n", value));
+      TEST_CHECK(!service.reload() && service.settings().browser.cornerRadiusScale == 2.0);
+      TEST_CHECK(!luciole::validateConfigFile(fixture.paths().base).empty());
+    }
+  }
+
   void testTerminalCommand() {
     Fixture fixture;
     luciole::ConfigService service(fixture.paths());
@@ -115,6 +137,24 @@ namespace {
     TEST_CHECK(!restored.reload() && !restored.settings().browser.confirmPermanentDeletion);
     fixture.write("config.toml", "[browser]\nconfirm_permanent_deletion = true\n");
     TEST_CHECK(restored.reload() && restored.settings().browser.confirmPermanentDeletion);
+  }
+  void testPermanentDeletionMenuPreference() {
+    Fixture fixture;
+    luciole::ConfigService service(fixture.paths());
+    TEST_CHECK(service.reload() && !service.settings().browser.showPermanentDeletion);
+    fixture.write("config.toml", "[browser]\nshow_permanent_deletion = true\n");
+    TEST_CHECK(service.reload() && service.settings().browser.showPermanentDeletion);
+    const std::array off{luciole::OverrideEdit{luciole::BrowserPreference::ShowPermanentDeletion, false}};
+    TEST_CHECK(service.saveOverrides(off) == luciole::AtomicWriteState::Durable);
+    luciole::ConfigService restored(fixture.paths());
+    TEST_CHECK(restored.reload() && !restored.settings().browser.showPermanentDeletion);
+    const std::array reset{luciole::OverrideEdit{luciole::BrowserPreference::ShowPermanentDeletion, std::nullopt}};
+    TEST_CHECK(restored.saveOverrides(reset) == luciole::AtomicWriteState::Durable);
+    TEST_CHECK(restored.reload() && restored.settings().browser.showPermanentDeletion);
+    fixture.write("config.toml", "[browser]\nshow_permanent_deletion = 'true'\n");
+    TEST_CHECK(!restored.reload() && restored.settings().browser.showPermanentDeletion);
+    fixture.write("config.toml", "[browser]\nshow_permanent_deletion = false\n");
+    TEST_CHECK(restored.reload() && !restored.settings().browser.showPermanentDeletion);
   }
   void testRestoreLastWindowPreference() {
     Fixture fixture;
@@ -467,7 +507,7 @@ namespace {
     fixture.write(
         "config.toml",
         "[browser]\nshow_hidden = true\nsort_by = 'size'\nsort_descending = true\n"
-        "directories_first = false\n"
+        "directories_first = false\nhidden_last = true\n"
     );
     const auto loaded = luciole::loadSettings(fixture.paths());
     TEST_CHECK(loaded.has_value());
@@ -492,7 +532,7 @@ namespace {
          .modifiedSeconds = std::nullopt},
     };
     model.applySnapshot(std::move(data));
-    TEST_CHECK((model.rows() == std::vector<luciole::EntryId>{1, 2}));
+    TEST_CHECK((model.rows() == std::vector<luciole::EntryId>{2, 1}));
   }
 
   void testGridIconSize() {
@@ -527,6 +567,30 @@ namespace {
         && config.settings().browser.gridIconSize == 64
         && !read(fixture.paths().overrides).contains("grid_icon_size")
     );
+  }
+
+  void testListIconSize() {
+    Fixture fixture;
+    using Preference = luciole::BrowserPreference;
+    fixture.write("config.toml", "");
+    const auto defaults = luciole::loadSettings(fixture.paths());
+    TEST_CHECK(defaults && defaults->browser.listIconSize == 0);
+    for (const int size : luciole::kListIconSizes) {
+      fixture.write("config.toml", "[browser]\nlist_icon_size = " + std::to_string(size) + "\n");
+      const auto loaded = luciole::loadSettings(fixture.paths());
+      TEST_CHECK(loaded && loaded->browser.listIconSize == size);
+    }
+    for (const auto* value : {"15", "21", "65", "-16", "24.0", "true", "'24'"}) {
+      fixture.write("config.toml", std::string("[browser]\nlist_icon_size = ") + value + "\n");
+      TEST_CHECK(!luciole::validateConfigFile(fixture.paths().base).empty());
+    }
+    fixture.write("config.toml", "");
+    luciole::ConfigService config(fixture.paths());
+    TEST_CHECK(config.reload());
+    const std::array zoom{luciole::OverrideEdit{Preference::ListIconSize, 48}};
+    TEST_CHECK(config.saveOverrides(zoom) == luciole::AtomicWriteState::Durable);
+    const auto saved = luciole::loadSettings(fixture.paths());
+    TEST_CHECK(saved && saved->browser.listIconSize == 48);
   }
 
   void testSidebarWidth() {
@@ -652,6 +716,29 @@ namespace {
       fixture.write("config.toml", std::string("[browser]\nshow_sidebar = ") + value + "\n");
       const auto issues = luciole::validateConfigFile(fixture.paths().base);
       TEST_CHECK(issues.size() == 1 && issues.front().key == "browser.show_sidebar");
+    }
+  }
+
+  void testNetworkVisibility() {
+    using P = luciole::BrowserPreference;
+    using State = luciole::AtomicWriteState;
+    Fixture fixture;
+    luciole::ConfigService config(fixture.paths());
+    TEST_CHECK(config.reload() && config.settings().browser.showNetwork);
+    const std::string base = "[browser]\nshow_network = false\n";
+    fixture.write("config.toml", base);
+    TEST_CHECK(config.reload() && !config.settings().browser.showNetwork);
+    TEST_CHECK(config.saveOverrides(std::array{luciole::OverrideEdit{P::ShowNetwork, true}}) == State::Durable);
+    TEST_CHECK(luciole::loadSettings(fixture.paths())->browser.showNetwork);
+    TEST_CHECK(config.saveOverrides(std::array{luciole::OverrideEdit{P::ShowNetwork, false}}) == State::Durable);
+    TEST_CHECK(!config.settings().browser.showNetwork);
+    TEST_CHECK(config.saveOverrides(std::array{luciole::OverrideEdit{P::ShowNetwork, std::nullopt}}) == State::Durable);
+    TEST_CHECK(!config.settings().browser.showNetwork && !read(fixture.paths().overrides).contains("show_network"));
+    TEST_CHECK(read(fixture.paths().base) == base);
+    for (const auto* value : {"0", "'false'", "1.0"}) {
+      fixture.write("config.toml", std::string("[browser]\nshow_network = ") + value + "\n");
+      const auto issues = luciole::validateConfigFile(fixture.paths().base);
+      TEST_CHECK(issues.size() == 1 && issues.front().key == "browser.show_network");
     }
   }
 
@@ -1022,7 +1109,7 @@ namespace {
     );
     for (const auto* invalid :
          {"thumbnail_policy = true", "thumbnail_policy = 'remote'", "thumbnail_max_file_mib = 0",
-          "thumbnail_max_file_mib = 1025", "thumbnail_cache_mib = 15", "thumbnail_cache_mib = 1025",
+          "thumbnail_max_file_mib = 1025", "thumbnail_cache_mib = 15", "thumbnail_cache_mib = 8193",
           "thumbnail_max_file_mib = 1.5"}) {
       fixture.write("config.toml", std::string("[browser]\n") + invalid + "\n");
       TEST_CHECK(!luciole::validateConfigFile(fixture.paths().base).empty());
@@ -1508,6 +1595,7 @@ namespace {
 int main() {
   try {
     testBackgroundOpacity();
+    testCornerRadiusScale();
     testTerminalCommand();
     testSchemaAndDiagnostics();
     testPresentationSettings();
@@ -1515,6 +1603,7 @@ int main() {
     testBackupPreference();
     testNewTabPreference();
     testDeletionConfirmationPreference();
+    testPermanentDeletionMenuPreference();
     testRestoreLastWindowPreference();
     testMillerSettings();
     testMillerParents();
@@ -1524,8 +1613,10 @@ int main() {
     testEnvironmentPaths();
     testBrowserDefaults();
     testGridIconSize();
+    testListIconSize();
     testSidebarWidth();
     testSidebarVisibility();
+    testNetworkVisibility();
     testAlwaysShowTabBar();
     testAlwaysShowStatusBar();
     testPreviewVisibility();

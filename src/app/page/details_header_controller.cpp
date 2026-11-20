@@ -63,7 +63,6 @@ std::unique_ptr<Flex> DetailsHeaderController::buildHeader() {
       ui::button(
           {.out = &m_nameHeader,
            .text = "Name",
-           .fontSize = Style::fontSizeCaption,
            .controlHeight = Style::controlHeightSm,
            .contentAlign = ButtonContentAlign::Start,
            .variant = ButtonVariant::Ghost,
@@ -78,7 +77,6 @@ std::unique_ptr<Flex> DetailsHeaderController::buildHeader() {
         ui::button(
             {.out = &m_headers[index],
              .text = std::string(luciole::detailsColumnLabel(column)),
-             .fontSize = Style::fontSizeCaption,
              .controlHeight = Style::controlHeightSm,
              .contentAlign = ButtonContentAlign::Start,
              .variant = ButtonVariant::Ghost,

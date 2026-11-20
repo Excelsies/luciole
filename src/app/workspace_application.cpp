@@ -17,6 +17,7 @@
 #include "render/render_context.h"
 #include "render/scene/input_area.h"
 #include "render/scene/input_dispatcher.h"
+#include "system/icon_resolver.h"
 #include "ui/builders.h"
 #include "ui/controls/acl_editor.h"
 #include "ui/controls/bulk_acl_editor.h"
@@ -28,6 +29,7 @@
 #include "ui/controls/scroll_view.h"
 #include "ui/controls/tooltip_presenter.h"
 #include "ui/palette.h"
+#include "ui/style.h"
 #include "wayland/popup_surface.h"
 #include "wayland/text_input_service.h"
 #include "wayland/toplevel_surface.h"
@@ -59,6 +61,8 @@ WorkspaceApplication::WorkspaceApplication(
   m_preferences.setChangedCallback([this](const std::string& error) {
     if (m_preferences.settings()) {
       m_defaults = m_preferences.settings()->browser;
+      // Live-radius bindings update open widgets; controls built afterwards pick it up directly.
+      Style::setCornerRadiusScale(static_cast<float>(m_defaults.cornerRadiusScale));
     }
     m_visits.setEnabled(m_defaults.recordVisits);
     for (auto& [id, page] : m_pages) {
@@ -108,6 +112,9 @@ WorkspaceApplication::WorkspaceApplication(
               }
             }
           }
+          if (found->second.active && m_pages.at(found->second.active)->sidebarOverlays(x, y)) {
+            return m_pages.at(found->second.active)->externalDrop(x, y, pins);
+          }
           for (const auto pageId : host->mounted) {
             if (m_pages.at(pageId)->contains(x, y)) {
               return m_pages.at(pageId)->externalDrop(x, y, pins);
@@ -153,6 +160,12 @@ WorkspaceApplication::WorkspaceApplication(
     }
   });
   m_workbench.setPreviewWorkers({.text = &m_textTiles, .thumbnails = &m_thumbnails});
+  updateIconColorScheme();
+  m_paletteConnection = paletteChanged().connect([this] {
+    if (updateIconColorScheme()) {
+      iconsChanged();
+    }
+  });
   m_thumbnails.setOptions(m_defaults.thumbnails);
   m_thumbnails.setChangedCallback([this] {
     for (auto& [id, page] : m_pages) {
@@ -344,11 +357,34 @@ void WorkspaceApplication::outputChanged(wl_output* output) {
 }
 
 void WorkspaceApplication::iconsChanged() {
+  updateIconColorScheme();
   m_icons.invalidate();
   for (auto& [id, page] : m_pages) {
     (void)id;
     page->iconThemeChanged();
   }
+}
+
+void WorkspaceApplication::fontChanged() {
+  for (auto& [id, page] : m_pages) {
+    (void)id;
+    page->fontChanged();
+  }
+  for (auto& [id, host] : m_hosts) {
+    (void)id;
+    host->surface.requestLayout();
+  }
+}
+
+bool WorkspaceApplication::updateIconColorScheme() {
+  auto roots = IconResolver::colorSchemeThemeRoots();
+  if (roots == m_iconColorSchemeRoots && (roots.empty() || palette == m_iconColorSchemePalette)) {
+    return false;
+  }
+  m_icons.setColorScheme(roots, iconColorSchemeStylesheet(palette));
+  m_iconColorSchemeRoots = std::move(roots);
+  m_iconColorSchemePalette = palette;
+  return true;
 }
 
 bool WorkspaceApplication::running() {
@@ -536,6 +572,9 @@ void WorkspaceApplication::keyboard(const KeyboardEvent& event) {
       defer(host.id, record->second.active, *command);
       return;
     }
+    if (!page.overlay() && page.sidebarKey(event)) {
+      return;
+    }
     // An editor with the keyboard gets Tab from the page.
     if (!page.overlay()
         && !page.editorFocused()
@@ -564,6 +603,10 @@ void WorkspaceApplication::keyboard(const KeyboardEvent& event) {
       if (index < record->second.tabs.size()) {
         select(host.id, record->second.tabs[index]);
       }
+      return;
+    }
+    if (event.sym == XKB_KEY_Escape && host.stripMove.pending()) {
+      host.stripMove.cancel();
       return;
     }
     if (event.sym == XKB_KEY_Escape && host.pressedTab) {
@@ -656,6 +699,11 @@ void WorkspaceApplication::pointer(const PointerEvent& event) {
     return;
   }
   const auto x = static_cast<float>(event.sx), y = static_cast<float>(event.sy);
+  if (active.sidebarOverlays(x, y)) {
+    host->pointerPage = window.active;
+    active.pointer(event);
+    return;
+  }
   if (host->previewDragWidth) {
     if (event.type == PointerEvent::Type::Motion) {
       host->previewDragWidth = std::clamp(static_cast<int>(std::lround(host->surface.width() - x)), 208, 800);
@@ -677,6 +725,9 @@ void WorkspaceApplication::pointer(const PointerEvent& event) {
     if (event.type == PointerEvent::Type::Button && !event.pressed) {
       host->resizing = false;
     }
+    return;
+  }
+  if (stripMovePointer(*host, event)) {
     return;
   }
   if (host->pressedTab) {
@@ -740,12 +791,12 @@ void WorkspaceApplication::pointer(const PointerEvent& event) {
       return;
     }
   }
-  if (host->strip && host->strip->containsScenePoint(x, y)) {
+  if (host->strip && host->strip->visible() && host->strip->containsScenePoint(x, y)) {
     pointTo(*host, 0);
     for (const auto& [tab, button] : host->buttons) {
       if (host->tabScroll->containsScenePoint(x, y)
           && button->containsScenePoint(x, y)
-          && !host->closeButtons.at(tab).first->containsScenePoint(x, y)
+          && (event.button == BTN_MIDDLE || !host->closeButtons.at(tab).first->containsScenePoint(x, y))
           && event.type == PointerEvent::Type::Button
           && event.pressed) {
         if (event.button == BTN_MIDDLE) {
@@ -776,7 +827,7 @@ void WorkspaceApplication::pointer(const PointerEvent& event) {
         child |= x >= bx && x <= bx + button->width();
       }
       if (!child) {
-        host->surface.beginMove(event.serial);
+        host->stripMove.press(event.serial, x, y);
         return;
       }
     }
@@ -827,7 +878,7 @@ void WorkspaceApplication::pointer(const PointerEvent& event) {
 
 void WorkspaceApplication::pointTo(Host& host, luciole::TabId page) {
   if (host.pointerPage != page && std::ranges::contains(host.mounted, host.pointerPage)) {
-    m_pages.at(host.pointerPage)->pointerLeft();
+    m_pages.at(host.pointerPage)->workbench().pointerLeft();
   }
   host.pointerPage = page;
 }
@@ -1022,6 +1073,10 @@ luciole::TabId WorkspaceApplication::createPage(
       return std::nullopt;
     }
     auto& host = *m_hosts.at(*owner);
+    if (const auto window = m_model.windows().find(*owner);
+        window != m_model.windows().end() && m_pages.at(window->second.active)->sidebarOverlays(x, y)) {
+      return std::nullopt;
+    }
     for (auto other : host.mounted) {
       if (other != id) {
         if (auto target = m_pages.at(other)->foreignTarget(x, y)) {
@@ -1041,9 +1096,9 @@ luciole::TabId WorkspaceApplication::createPage(
     return std::nullopt;
   });
   if (!host.chooser) {
-    page->setVisitRecorder([this](const luciole::Location& visited) { m_visits.record(visited); });
+    page->workbench().setVisitRecorder([this](const luciole::Location& visited) { m_visits.record(visited); });
   }
-  page->setWorkbenchServices(m_workbench);
+  page->workbench().setServices(m_workbench);
   page->initialize(location ? std::optional(location->uri()) : std::nullopt);
   if (opening == PageOpening::Reopened) {
     page->browser().skipPendingEntry();
@@ -1343,6 +1398,24 @@ void WorkspaceApplication::saveWindows(std::vector<luciole::SavedWindow> windows
   }
 }
 
+bool WorkspaceApplication::stripMovePointer(Host& host, const PointerEvent& event) {
+  if (!host.stripMove.pending()) {
+    return false;
+  }
+  if (event.type == PointerEvent::Type::Motion) {
+    if (const auto serial = host.stripMove.motion(static_cast<float>(event.sx), static_cast<float>(event.sy))) {
+      host.surface.beginMove(*serial);
+    }
+    return true;
+  }
+  if (event.type == PointerEvent::Type::Button || event.type == PointerEvent::Type::Leave) {
+    host.stripMove.cancel();
+    // The press never reached the strip's controls, so neither does its release.
+    return event.type == PointerEvent::Type::Button && !event.pressed;
+  }
+  return false;
+}
+
 void WorkspaceApplication::tabMenu(Host& host, luciole::TabId tab, float x, float y) {
   auto& page = *m_pages.at(m_model.windows().at(host.id).active);
   std::vector<ContextMenuControlEntry> entries{
@@ -1466,7 +1539,7 @@ void WorkspaceApplication::rebuildStrip(Host& host, const luciole::TabWindow& wi
         ui::button(
             {.out = &close,
              .glyph = "x",
-             .glyphSize = 14.0F,
+             .glyphSize = Style::baseGlyphSize,
              .controlHeight = 24.0F,
              .variant = ButtonVariant::Ghost,
              .customPalette = closeTabPalette(foreground),
@@ -1485,6 +1558,7 @@ void WorkspaceApplication::rebuildStrip(Host& host, const luciole::TabWindow& wi
       ui::button(
           {.out = &host.newTabButton,
            .glyph = "plus",
+           .glyphSize = Style::baseGlyphSize,
            .controlHeight = Style::controlHeightSm,
            .variant = ButtonVariant::Ghost,
            .tooltip = "New tab (Ctrl+T)",
@@ -1506,6 +1580,7 @@ void WorkspaceApplication::rebuildStrip(Host& host, const luciole::TabWindow& wi
       ui::button(
           {.out = &host.splitButton,
            .glyph = "layout-columns",
+           .glyphSize = Style::baseGlyphSize,
            .controlHeight = Style::controlHeightSm,
            .selected = window.secondary.has_value(),
            .variant = ButtonVariant::Ghost,
@@ -1519,6 +1594,7 @@ void WorkspaceApplication::rebuildStrip(Host& host, const luciole::TabWindow& wi
     strip->addChild(
         ui::button(
             {.glyph = "minus",
+             .glyphSize = Style::baseGlyphSize,
              .controlHeight = Style::controlHeightSm,
              .variant = ButtonVariant::Ghost,
              .tooltip = "Minimize window",
@@ -1528,6 +1604,7 @@ void WorkspaceApplication::rebuildStrip(Host& host, const luciole::TabWindow& wi
     strip->addChild(
         ui::button(
             {.glyph = "square",
+             .glyphSize = Style::baseGlyphSize,
              .controlHeight = Style::controlHeightSm,
              .variant = ButtonVariant::Ghost,
              .tooltip = "Toggle maximized",
@@ -1537,6 +1614,7 @@ void WorkspaceApplication::rebuildStrip(Host& host, const luciole::TabWindow& wi
     strip->addChild(
         ui::button(
             {.glyph = "x",
+             .glyphSize = Style::baseGlyphSize,
              .controlHeight = Style::controlHeightSm,
              .variant = ButtonVariant::Ghost,
              .tooltip = "Close window (Ctrl+Shift+W)",
@@ -1773,8 +1851,9 @@ void WorkspaceApplication::prepare(Host& host) {
   // only by 1px lines; the plane's top-left corner is rounded where it meets the sidebar.
   const float top = stripHeight + kNavigationToolbarHeight;
   const float bodyHeight = std::max(1.0F, height - top - footer);
+  active.prepareSidebar(width);
   const float sidebar = active.sidebarWidth();
-  active.sidebar()->arrange(renderer, {0, top, active.sidebarControlWidth(), bodyHeight});
+  active.arrangeSidebar(renderer, top, bodyHeight);
   const float left = sidebar;
   const float right = width;
   const bool split = visible.size() == 2;
@@ -1818,9 +1897,8 @@ void WorkspaceApplication::prepare(Host& host) {
     const LayoutRect bounds{left + (index ? first : 0), top, index ? content - first : first, bodyHeight};
     if (split && tab == window.active) {
       // Inset by the corner radius on both ends so it reads as an indicator, not a clipped border.
-      host.activePaneBar->arrange(
-          renderer, {bounds.x + kWorkspaceRadius, top, std::max(0.0F, bounds.width - kWorkspaceRadius * 2), 2}
-      );
+      const float radius = workspaceRadius();
+      host.activePaneBar->arrange(renderer, {bounds.x + radius, top, std::max(0.0F, bounds.width - radius * 2), 2});
     }
     m_pages.at(tab)->prepare(bounds, tab == window.active, index == 0 && left > 0);
   }

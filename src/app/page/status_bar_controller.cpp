@@ -102,7 +102,8 @@ void StatusBarController::sync(bool miller) {
         );
       }
     } else if (loading) {
-      status = "Loading folder…";
+      status = snapshot.location && snapshot.location->isNetworkDiscovery() ? "Finding network locations…"
+                                                                            : "Loading folder…";
     } else if (snapshot.status == luciole::DirectoryStatus::Cancelled) {
       status = "Loading stopped.";
     } else {
@@ -178,7 +179,12 @@ void StatusBarController::sync(bool miller) {
   };
   const auto notice = [&] -> Notice {
     if (snapshot.error) {
-      return {"alert-triangle", "Could not open this folder", status};
+      return {
+          "alert-triangle",
+          snapshot.location && snapshot.location->isNetworkDiscovery() ? "Network browsing unavailable"
+                                                                       : "Could not open this folder",
+          status
+      };
     }
     if (loading) {
       return {"hourglass-empty", status, {}};
@@ -192,6 +198,12 @@ void StatusBarController::sync(bool miller) {
       return {"search", "No results", std::format("No files or folders match “{}”.", query)};
     }
     if (snapshot.entries.empty()) {
+      if (snapshot.location && snapshot.location->isNetworkDiscovery()) {
+        return {
+            "network", "No network locations found",
+            "You can still connect by entering a server address in the location bar."
+        };
+      }
       return snapshot.location == luciole::Location::trash() ? Notice{"trash", "Trash is empty", {}}
                                                              : Notice{"folder-open", "This folder is empty", {}};
     }

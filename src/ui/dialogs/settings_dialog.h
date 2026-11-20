@@ -43,8 +43,12 @@ private:
       luciole::PreferenceKey<int> key, const std::string& title, const std::vector<int>& values,
       std::string suffix = "px"
   );
-  // A 0 to 1 slider shown as a percentage.
-  void addFraction(luciole::PreferenceKey<double> key, const std::string& title);
+  // A 0 to `maximum` slider shown as a percentage. `onPreview` runs for every
+  // value while the user drags, before the override is persisted on release.
+  void addFraction(
+      luciole::PreferenceKey<double> key, const std::string& title, double maximum, double step,
+      std::string subtitle = {}, std::function<void(double)> onPreview = nullptr
+  );
   template <class T>
   void addRow(
       luciole::PreferenceKey<T> key, const std::string& title, std::function<void(const T&)> show,

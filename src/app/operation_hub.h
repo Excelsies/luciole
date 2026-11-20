@@ -78,10 +78,11 @@ public:
   bool takeResult() { return !std::exchange(m_resultTaken, true); }
   // Runs `callback` once the current run ends, or when the hub goes away first.
   void whenIdle(std::function<void(OperationJob&)> callback) { m_idle = std::move(callback); }
+  // Runs after preparation and mutation finish, or on hub teardown to release external drop offers.
+  void whenFinished(std::function<void(OperationJob&)> callback) { m_finished = std::move(callback); }
 
 private:
   friend class OperationHub;
-
   luciole::JobId m_id;
   Service m_service;
   bool m_running = false, m_ran = false, m_resultTaken = false;
@@ -90,6 +91,7 @@ private:
   std::uint64_t m_historyGeneration = 0;
   HistoryReplay m_historyReplay = HistoryReplay::None;
   std::function<void(OperationJob&)> m_idle;
+  std::function<void(OperationJob&)> m_finished;
 };
 
 // The application's file jobs. Each job keeps running when its page closes; JobRouting picks the page that shows
@@ -105,6 +107,8 @@ public:
     // All pages observe completed transfers, including providers without directory monitors.
     virtual void transfersFinished(const std::vector<luciole::TransferResult>& results) = 0;
     virtual void activityChanged() {}
+    virtual void leaveDrive(const luciole::Location&) {}
+    virtual bool driveReadersBusy(const luciole::Location&) const { return false; }
 
   protected:
     Owner() = default;
@@ -156,6 +160,11 @@ public:
   void update(std::optional<luciole::WindowId> preferred);
   // Cancels every job, including prepared moves to Trash; the application exits once they stop.
   void shutdown();
+  // Ask every pane to leave a drive before explicit removal.
+  void leaveDrive(const luciole::Location& root);
+  // Inspect proofs on a worker and retire only history holding this mount. Retained-data cleanup can follow.
+  void prepareDriveRemoval(const luciole::Location& root, std::function<void(std::optional<luciole::FileError>)> done);
+  bool removalReady(const luciole::Location& root) const;
   // True while any job runs.
   bool busy() const;
   bool historyReplayBusy() const;
@@ -191,6 +200,9 @@ private:
   std::uint64_t m_historyGeneration = 0;
   bool m_historyRedo = false;
   std::deque<luciole::JobActivity> m_finishedActivities;
+  std::size_t m_historyProbes = 0;
+  std::size_t m_historyRetirements = 0;
+  std::shared_ptr<int> m_lifetime = std::make_shared<int>(0);
 };
 
 // One page's view of the hub: the jobs it starts and the ones it owns now.
@@ -202,6 +214,11 @@ public:
     return m_hub.create<Service>(m_page, scope);
   }
   void follow(const OperationJob& job) { m_hub.follow(job); }
+  void leaveDrive(const luciole::Location& root) { m_hub.leaveDrive(root); }
+  void prepareDriveRemoval(const luciole::Location& root, std::function<void(std::optional<luciole::FileError>)> done) {
+    m_hub.prepareDriveRemoval(root, std::move(done));
+  }
+  bool removalReady(const luciole::Location& root) const { return m_hub.removalReady(root); }
   bool owns(const OperationJob& job) const { return m_hub.owner(job) == m_page; }
   // False once the page left its window (closed tab or pane, closed window): its dialogs close for good.
   bool attached() const { return m_hub.attached(m_page); }

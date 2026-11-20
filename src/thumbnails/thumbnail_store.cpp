@@ -18,7 +18,6 @@
 #include <unistd.h>
 
 namespace {
-  constexpr std::size_t kMaxEntries = 1024;
   // A picture side a thumbnail states, or 0 when the key is missing or is not a whole number from 1 to 1048576.
   int textSize(const luciole::ThumbnailPng& thumbnail, const std::string& key) {
     const auto found = thumbnail.text.find(key);
@@ -63,16 +62,14 @@ namespace {
         && leaf.ends_with(".png")
         && leaf.substr(0, 32).find_first_not_of("0123456789abcdef") == std::string::npos;
   }
+  // A damaged ledger must not block caching forever: unreadable entries are dropped and rewritten.
   nlohmann::json readIndex(const std::optional<std::string>& text) {
-    if (!text) {
+    auto index = text ? nlohmann::json::parse(*text, nullptr, false) : nlohmann::json::array();
+    if (!index.is_array()) {
       return nlohmann::json::array();
     }
-    auto index = nlohmann::json::parse(*text);
-    if (!index.is_array() || index.size() > kMaxEntries) {
-      throw std::runtime_error("invalid thumbnail index");
-    }
-    for (const auto& item : index) {
-      if (!item.is_object()
+    std::erase_if(index.get_ref<nlohmann::json::array_t&>(), [](const nlohmann::json& item) {
+      return !item.is_object()
           || !item.contains("name")
           || !item["name"].is_string()
           || !safeName(item["name"].get<std::string>())
@@ -80,10 +77,8 @@ namespace {
           || !item["bytes"].is_number_unsigned()
           || item["bytes"].get<std::uint64_t>() > 8U * 1024U * 1024U
           || !item.contains("identity")
-          || !item["identity"].is_string()) {
-        throw std::runtime_error("invalid thumbnail index entry");
-      }
-    }
+          || !item["identity"].is_string();
+    });
     return index;
   }
   void removeOwned(const std::filesystem::path& root, const std::string& name, const std::string& identity) {
@@ -228,7 +223,7 @@ void luciole::ThumbnailStore::write(ThumbnailPng thumbnail, int side, std::uint6
 void luciole::ThumbnailStore::writeBatch(
     std::span<const ThumbnailCacheWrite> thumbnails, std::uint64_t budget, GCancellable* cancellable
 ) {
-  if (thumbnails.empty() || thumbnails.size() > 8 || g_cancellable_is_cancelled(cancellable)) {
+  if (thumbnails.empty() || thumbnails.size() > kMaxBatch || g_cancellable_is_cancelled(cancellable)) {
     return;
   }
   struct Encoded {
@@ -300,7 +295,7 @@ void luciole::ThumbnailStore::writeBatch(
                 ++it;
               }
             }
-            while (!index.empty() && (bytes + entry.bytes.size() > budget || index.size() >= kMaxEntries)) {
+            while (!index.empty() && bytes + entry.bytes.size() > budget) {
               const auto& oldest = index.front();
               bytes -= oldest["bytes"].get<std::uint64_t>();
               removeOwned(m_root, oldest["name"].get<std::string>(), oldest["identity"].get<std::string>());

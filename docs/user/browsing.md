@@ -2,7 +2,7 @@
 
 ## Navigation and search
 
-The location bar shows clickable folder breadcrumbs. Double-click a breadcrumb or unused space in the bar to edit the path; Ctrl+L also starts editing. Tab accepts a path completion when one is available. Home and its descendants use Home as the breadcrumb root; you can still navigate above it.
+The location bar shows clickable folder breadcrumbs. Double-click a breadcrumb or unused space in the bar to edit the path; Ctrl+L also starts editing. Path editing works with the tab bar hidden and in file chooser windows too. Tab accepts a path completion when one is available. Home and its descendants use Home as the breadcrumb root; you can still navigate above it.
 
 The mouse's Back and Forward side buttons navigate folder history, like the toolbar arrows or Alt+Left/Alt+Right. Each press navigates once; releasing the button does not navigate again. In split view, pressing a side button over a browsing pane focuses that pane and uses its own history. Over shared chrome, the active pane's history is used. Side buttons do not navigate behind an open dialog or during a captured drag, and do nothing when the corresponding history is empty.
 
@@ -34,19 +34,55 @@ The cursor ring marks the item the keyboard acts on and stays visible inside a m
 
 Enter an address such as `smb://server/share` in the location bar, or open a saved network place. If the location is not mounted, Luciole asks the installed GIO/GVfs provider to connect and then opens the folder. You can also open an SMB server address and activate one of its listed shares. The same mounted share becomes visible to other applications using that desktop session.
 
+### SFTP over SSH
+
+Press Ctrl+L, enter an address and press Enter:
+
+```text
+sftp://user@server/home/user
+sftp://user@server:2222/path/to/folder
+```
+
+Replace the username, server, port and path with your own values. Omit the port to use 22. The path belongs to the remote SFTP filesystem; a restricted server may expose a different root from its ordinary SSH shell. Encode spaces as `%20`. Do not put passwords in addresses. GVfs also accepts `ssh://` as an alias for SFTP; it opens files, not an interactive terminal. The server must offer the SFTP subsystem.
+
+The provider handles passwords, SSH keys and the SSH agent available to its session. When confirmation or a password is needed, Luciole displays its request. On first connection, verify the server identity through a trusted source before accepting it. An existing authenticated mount or usable key can open without a password prompt. You do not need to mount the folder in another file manager first.
+
+### Missing network support
+
+An immediate **Operation not supported** error without a login prompt can mean GIO cannot access a backend for that protocol. Luciole identifies an unadvertised scheme and explains that its GIO/GVfs backend and session services need to be installed or enabled. A provider that advertises the protocol can also reject an operation; its own error is preserved.
+
+Install the distribution's GVfs service and protocol backends, then restart Luciole. [Arch Linux](https://archlinux.org/packages/extra/x86_64/gvfs/) and [Fedora](https://packages.fedoraproject.org/pkgs/gvfs/gvfs/) provide SFTP in `gvfs`; [Debian](https://packages.debian.org/trixie/gvfs-backends) also needs `gvfs-backends`. An SSH client alone does not supply the GIO backend. On NixOS, enable `services.gvfs.enable = true;` in your system configuration and rebuild; Luciole's modules leave that choice to you. See [NixOS installation](installation.md#nixos). A usable session D-Bus connection is required. A launcher that forces `GIO_USE_VFS=local` disables remote access.
+
+To check the desktop provider independently, run this in a terminal in the same desktop session, using your address:
+
+```sh
+gio mount 'sftp://user@server:2222/path/to/folder'
+gio list 'sftp://user@server:2222/path/to/folder'
+```
+
+These commands connect to and list the remote folder. If they fail too, include their error when reporting the problem. If they work while Luciole still fails, report how Luciole was installed and launched, its version and its exact error.
+
+### Network discovery and login
+
+The **Network** sidebar entry is shown by default, including when no servers are found. Drag it among Places or use Move up/Move down in its context menu to save its position. Settings → Appearance → Sidebar → Show Network hides or restores it in both sidebar modes; its context menu also offers Hide Network. Hiding the entry preserves its position and does not disable direct network addresses or existing network tabs. Discovery starts when you open Network or expand it in the optional sidebar tree; ordinary local startup does not start discovery. Open a discovered server and its share as usual. You can also enter `network:///` directly. Grid, List and Columns use the discovered destination when opening an entry; middle-click and Ctrl+Enter can open it in a new tab.
+
+Luciole discovers SMB computers using its built-in WS-Discovery client, with optional DNS-SD discovery through GVfs and Avahi. No external WS-Discovery helper is needed. Discovery runs in the background while Network is open; closing its last view stops Luciole's discovery workers. Server names may replace numeric addresses as metadata arrives. Refresh retries discovery. A reachable server may not advertise itself, and multicast filtering can prevent discovery. You can still enter its known address or use a saved network place. Discovery does not ask for credentials or open every share in the background. If nothing is discovered, Network remains available.
+
 When the server requests login, use the username, domain and password fields, or Guest if the server offers anonymous access. A rejected password can produce another login prompt. Cancel stops that connection attempt; refreshing or opening the address again lets you retry. Navigating away or closing the page cancels its pending request. Credentials are passed to GIO for the session and are not saved in Luciole settings or bookmarks.
 
-Network protocols require their installed GVfs backends and a session D-Bus connection. See [packaging requirements](../../PACKAGING.md#gvfs-and-trash). A separate connect-to-server form, device-unlock dialogs and process-blocked mount questions are still planned.
+Network protocols require their installed GVfs backends and a session D-Bus connection. See [packaging requirements](../../PACKAGING.md#gvfs-and-trash). A separate connect-to-server form and process-blocked mount questions are still planned.
 
 ## Views and selection
 
 [Undo/redo](file-operations.md#undo-and-redo) affects the most recent supported creation, rename or native copy/link/move in the running application, independently of the current folder or selection. When a text input is focused, its text-editing undo takes precedence.
 
-Use the toolbar or main menu to choose Grid (Ctrl+1), List (Ctrl+2), Columns (Ctrl+3) or Workbench (Ctrl+4). File picker windows offer Grid and List only. Ctrl+wheel changes grid icon size. View, zoom, sort and hidden-file choices are saved as defaults for new browsing pages. Existing tabs and panes keep their own browsing state.
+Use the toolbar or main menu to choose Grid (Ctrl+1), List (Ctrl+2), Columns (Ctrl+3) or Workbench (Ctrl+4). File picker windows offer Grid and List only. In Grid and List views, Ctrl+wheel (or Ctrl with a touchpad scroll), Ctrl+Plus and Ctrl+Minus change the icon size, and Ctrl+0 resets it. View, zoom, sort and hidden-file choices are saved as defaults for new browsing pages. Existing tabs and panes keep their own browsing state.
 
 List and Columns shorten overflowing filenames in the middle by default, keeping their beginning and ending visible. Settings → Views → Long filenames also offers Shorten at the end. Changes apply to open panes immediately. Grid keeps its two-line name wrapping.
 
-List headers sort by their column. Drag their dividers to resize columns; Settings → List columns controls visibility and order. Additional columns include accessed/created time, owner, group, permissions and location. Missing provider metadata stays unavailable rather than becoming a made-up value. Grid view uses the toolbar's Sort menu.
+List headers sort by their column. Drag their dividers to resize columns; Settings → List columns controls visibility and order. Additional columns include accessed/created time, owner, group, permissions and location. Missing provider metadata stays unavailable rather than becoming a made-up value. Grid view uses the toolbar's Sort menu. By default, shown hidden items sort among visible ones. Hidden last, in the Sort menu and Settings, sorts them after visible ones; Folders first then applies within each group.
+
+The background right-click menu also offers Sort. Changing the sort field, direction, Folders first or Hidden last shows the beginning of the new order, including in folders that need scrolling. Selected items stay selected. Sort changes made through list headings or Settings follow the same rule.
 
 In large folders, names can appear while detail values are still loading. “Reading…” means a value is pending; “Unknown” means it was unavailable after querying. Hidden extra columns are not queried by ordinary large-folder browsing. Enabling one loads its visible rows. Sorting by metadata or selecting many items can require facts from the rest of the folder; file actions wait for the facts they need.
 
@@ -54,17 +90,33 @@ The floating status pill reports actions, search and selection. Settings → App
 
 Click an entry to select it, Ctrl+click to toggle it and Shift+click to select a range. Clicking empty space clears selection. Drag an area over entries to select several. Ctrl+A selects all visible results, Ctrl+Shift+I inverts selection and Ctrl+S selects by pattern. Escape clears the selection when browsing. Opening uses double-click by default; Settings → General offers single-click opening.
 
+Opening a local file uses the default application for its file type; supported local archives open in Luciole's archive browser instead (see [archives](file-operations.md#archives)). Use Open With to choose another application or change that file type's default.
+
 ## Places and folder trees
 
-Places contains Home, available XDG user folders, Trash and your pinned folders. Pin or unpin a folder through its context menu, or drag a folder into Places. Drag rows to reorder them. Trash can move within the list but cannot be unpinned. Its context menu offers Empty Trash.
+Places contains Home, available XDG user folders, Trash, Network and your pinned folders. Pin or unpin a folder through its context menu, or drag a folder into Places. Drag rows to reorder them. Trash can move within the list but cannot be unpinned. Its context menu offers Empty Trash.
+
+Middle-click anywhere inside a Places or mounted-drive row to open that folder in a new tab, including the row's top and bottom edges. Dropping folders near Places row edges still inserts or reorders pins; the center remains the transfer target.
+
+Drop native files or folders onto the Trash row to move them to Trash. This works in both sidebar modes. Trash accepts moves only; Ctrl-copy, Alt action choices, remote files and deferred archive extraction cannot target it.
 
 Pinned folders use the shared GTK bookmark file, also used by Nemo and Nautilus. Adding, removing, renaming or reordering user bookmarks in Luciole updates that file; changes from another application appear automatically. Built-in Places keep their Luciole layout and are not automatically added to other applications' bookmarks. Old Luciole-only pins are not imported.
 
+Use a bookmark's context menu and choose **Change icon…** to select a Tabler icon. This icon is stored in Luciole's private state and does not change the shared GTK bookmark or its appearance in other applications. Choose **Reset to default** to restore the place's standard icon.
+
 Drives starts with File System (`/`), followed by the volumes and mounts GIO reports: removable media, extra partitions and network mounts, but not other system mounts such as `/home` or `/boot`. Mounted drives come before unmounted ones. In the Places list, each mounted drive shows a bar of its used space under its row; the bar turns red at 90% used. Unmounted drives and filesystems that do not report a size have no bar.
 
-The eject button and the drive's context menu remove a mounted drive the way GNOME Files does: Safely Remove powers off a USB disk plugged in during the session, Eject ejects removable media, and Unmount unmounts anything else. Removal never forces: while a program still has files open on the drive, nothing is unmounted and the status bar names the programs or Luciole's running file operations that keep it busy.
+To open a LUKS-encrypted drive, click its row under Drives. When the provider needs a passphrase, Luciole opens Unlock drive. Enter the passphrase and choose Unlock; the mounted folder opens after the provider succeeds. If unlocking fails, Luciole shows the provider's error; click the drive again to retry. Cancel, Escape or dismissing the dialog stops the request. Navigating elsewhere or closing the pane also cancels it. Your current folder stays visible until mounting succeeds.
+
+Device unlocking requires the GVfs UDisks volume monitor, the UDisks2 system service and working session/system D-Bus connections. System policy may additionally require authorization through your desktop's authentication agent. Luciole passes credentials to GIO; it never writes passphrases into its configuration or history. The provider may retain them for the session through an available system credential service. Drives already unlocked and mounted elsewhere can be opened directly. Key management and an explicit lock action remain with system disk tools.
+
+The eject button and the drive's context menu remove a mounted drive the way GNOME Files does: Safely Remove powers off a USB disk plugged in during the session, Eject ejects removable media, and Unmount unmounts anything else. Open panes leave the drive first. Undo/Redo history that holds that mount is retired, and removal waits briefly for cleanup and cancelled preview/thumbnail reads. History belonging to other mounts stays available. Removal never forces: active operations or other programs with open files still prevent removal, and the status bar names the reported blockers.
 
 Settings → Appearance controls sidebar visibility, width, drive rows and the optional folder tree. The separate expandable-folder preference adds a tree within List view. Both tree options are off by default.
+
+Below 760 logical pixels wide, the sidebar slides out of the way to leave room for browsing. Use the sidebar button at the left of the toolbar or F9 to open it as a drawer over the file area. Selecting a destination, pressing Escape, pressing F9 again or clicking outside closes the drawer. Escape returns keyboard focus to the file view. Tab and Shift+Tab stay within the open drawer. Folder-tree navigation, pin menus and supported folder drops remain available there.
+
+Widening the window restores the saved docked-sidebar preference and width. Temporary drawer opening, dismissal and window resizing do not rewrite either setting. In a wide window, F9 and Show sidebar still save the usual visibility preference. Each window adapts independently, and switching tabs or split panes closes a temporary drawer.
 
 ## Tabs and split view
 

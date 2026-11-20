@@ -190,7 +190,9 @@ int main() {
     rig.choice = WorkbenchPreviewPlace::JumpAheadWhenNarrow;
     aResizeNeverDrawsThePreviewInAStalePlace(rig);
     theFirstFrameTitlesThePane(files, *capture);
-    aResizeKeepsTheLoadAndAPlayingSound(rig);
+    if (luciole::MediaPlayer::available()) { // a build without playback has no sound to keep
+      aResizeKeepsTheLoadAndAPlayingSound(rig);
+    }
     aHiddenJumpRowLeavesNoLink(rig);
     aDragThatChangesTheHomeKeepsItsGrip(rig);
     aColumnDragKeepsTheHome(rig);

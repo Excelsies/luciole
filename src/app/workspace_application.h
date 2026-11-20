@@ -7,6 +7,7 @@
 #include "app/operation_hub.h"
 #include "app/page/browser_page.h"
 #include "app/palette_watcher.h"
+#include "app/window_move_gesture.h"
 #include "browser/tab_workspace.h"
 #include "browser/workbench_services.h"
 #include "config/state_store.h"
@@ -14,6 +15,7 @@
 #include "imaging/text_tile_service.h"
 #include "thumbnails/thumbnail_service.h"
 #include "ui/controls/pane_divider_focus.h"
+#include "ui/palette.h"
 
 #include <csignal>
 #include <cstdint>
@@ -61,6 +63,8 @@ class WorkspaceApplication {
     luciole::TabId chromeOwner = 0;
     std::optional<luciole::TabId> pressedTab;
     float pressX = 0, pressY = 0;
+    // A left press on empty tab strip, until it becomes a window move.
+    WindowMoveGesture stripMove;
     bool tabDrag = false, resizing = false, closed = false;
     bool decorated = false;
     bool stripVisible = true;
@@ -96,6 +100,8 @@ public:
   void focus(wl_surface* surface, bool entered);
   void outputChanged(wl_output* output);
   void iconsChanged();
+  // The system font changed (already applied to the renderer): lays every window out again.
+  void fontChanged();
   bool running();
   void keyboard(const KeyboardEvent& event);
   void pointer(const PointerEvent& event);
@@ -134,6 +140,8 @@ private:
   bool restoreLastWindow(luciole::WindowId window);
   bool restoreWindow(luciole::WindowId window, const luciole::SavedWindow& saved);
   void saveWindows(std::vector<luciole::SavedWindow> windows);
+  // A pending move from an empty tab strip press; true when it consumed the event.
+  bool stripMovePointer(Host& host, const PointerEvent& event);
   void tabMenu(Host& host, luciole::TabId tab, float x, float y);
   static Button::ButtonPalette closeTabPalette(ColorRole foreground);
   void rebuildStrip(Host& host, const luciole::TabWindow& window);
@@ -161,6 +169,10 @@ private:
   bool mayClose(luciole::WindowId window);
   // Ctrl+Q: asks the unsaved pages of every window, the focused one first, then quits.
   void quit();
+
+  // Points SVG icons of a theme that follows the color scheme at the current palette; true when that changed
+  // what they draw.
+  bool updateIconColorScheme();
   WaylandConnection& m_connection;
   RenderContext& m_renderer;
   TextInputService& m_input;
@@ -182,6 +194,10 @@ private:
   luciole::DriveMonitor m_drives;
   bool m_drivesStarted = false;
   luciole::FileIconCache m_icons;
+  // What updateIconColorScheme() last applied.
+  std::vector<std::string> m_iconColorSchemeRoots;
+  Palette m_iconColorSchemePalette;
+  Signal<>::ScopedConnection m_paletteConnection;
   // One thumbnail pipeline for every page.
   luciole::ThumbnailService m_thumbnails;
   luciole::TabWorkspace m_model;

@@ -190,6 +190,9 @@ namespace luciole::preference_schema {
           P::ConfirmPermanentDeletion, "confirm_permanent_deletion",
           [](S& s) -> auto& { return s.confirmPermanentDeletion; }
       ),
+      describe(
+          P::ShowPermanentDeletion, "show_permanent_deletion", [](S& s) -> auto& { return s.showPermanentDeletion; }
+      ),
       describe(P::SwitchToNewTab, "switch_to_new_tab", [](S& s) -> auto& { return s.switchToNewTab; }),
       describe(P::RestoreLastWindow, "restore_last_window", [](S& s) -> auto& { return s.restoreLastWindow; }),
       describe(P::ShowHidden, "show_hidden", [](S& s) -> auto& { return s.showHidden; }),
@@ -201,14 +204,24 @@ namespace luciole::preference_schema {
           P::BackgroundOpacity, "background_opacity", [](S& s) -> auto& { return s.backgroundOpacity; },
           {0.0, 1.0, "expected a number from 0 to 1"}
       ),
+      describe(
+          P::CornerRadiusScale, "corner_radius_scale", [](S& s) -> auto& { return s.cornerRadiusScale; },
+          {0.0, 2.0, "expected a number from 0 to 2"}
+      ),
       describe(P::SortBy, "sort_by", [](S& s) -> auto& { return s.sort.field; }, {kSortFields}),
       describe(P::SortDescending, "sort_descending", [](S& s) -> auto& { return s.sort.descending; }),
       describe(P::DirectoriesFirst, "directories_first", [](S& s) -> auto& { return s.sort.directoriesFirst; }),
+      describe(P::HiddenLast, "hidden_last", [](S& s) -> auto& { return s.sort.hiddenLast; }),
       describe(P::ViewMode, "view_mode", [](S& s) -> auto& { return s.viewMode; }, {kViewModes}),
       describe(
           P::GridIconSize, "grid_icon_size", [](S& s) -> auto& { return s.gridIconSize; },
           {[](int value) { return std::ranges::contains(luciole::kGridIconSizes, value); },
            "expected integer icon size 32, 48, 64, 80, 96, 128, 160, 192, or 256"}
+      ),
+      describe(
+          P::ListIconSize, "list_icon_size", [](S& s) -> auto& { return s.listIconSize; },
+          {[](int value) { return value == 0 || std::ranges::contains(luciole::kListIconSizes, value); },
+           "expected 0 or integer icon size 16, 20, 24, 28, 32, 40, 48, or 64"}
       ),
       describe(P::Density, "density", [](S& s) -> auto& { return s.presentation.density; }, {kDensities}),
       describe(
@@ -230,6 +243,7 @@ namespace luciole::preference_schema {
       describe(P::ShowSidebar, "show_sidebar", [](S& s) -> auto& { return s.showSidebar; }),
       describe(P::SidebarTree, "sidebar_tree", [](S& s) -> auto& { return s.sidebarTree; }),
       describe(P::ShowDrives, "show_drives", [](S& s) -> auto& { return s.showDrives; }),
+      describe(P::ShowNetwork, "show_network", [](S& s) -> auto& { return s.showNetwork; }),
       describe(P::ExpandableFolders, "expandable_folders", [](S& s) -> auto& { return s.expandableFolders; }),
       describe(P::ShowPreview, "show_preview", [](S& s) -> auto& { return s.showPreview; }),
       describe(P::ChooserShowPreview, "chooser_show_preview", [](S& s) -> auto& { return s.chooserShowPreview; }),
@@ -304,7 +318,7 @@ namespace luciole::preference_schema {
       ),
       describe(
           P::ThumbnailCacheMib, "thumbnail_cache_mib", [](S& s) -> auto& { return s.thumbnails.cacheMiB; },
-          {between<16, 1024>, "expected an integer from 16 to 1024"}
+          {between<16, 8192>, "expected an integer from 16 to 8192"}
       ),
       describe(P::TerminalCommand, "terminal_command", [](S& s) -> auto& { return s.terminalCommand; }),
       describe(P::RecordVisits, "record_visits", [](S& s) -> auto& { return s.recordVisits; }),

@@ -91,12 +91,13 @@ void SubmenuController::show(
   m_menu->setOnActivate([this, action = std::move(action)](const ContextMenuControlEntry& entry) {
     const int id = entry.id;
     const std::weak_ptr<int> lifetime = m_lifetime;
-    m_page.dismissPopup();
+    // The action runs before the close: clipboard actions need the menu's keyboard focus for their serial.
     DeferredCall::callLater([lifetime, action, id] {
       if (!lifetime.expired()) {
         action(id);
       }
     });
+    m_page.dismissPopup();
   });
   m_scroll->setReserveScrollbarGutter(overflowing);
   m_scroll->setSize(width, height);
@@ -126,7 +127,7 @@ bool SubmenuController::create(float width, float height) {
       ui::scrollView({.out = &m_scroll, .viewportPaddingH = 0.0F, .viewportPaddingV = 0.0F, .flexGrow = 1.0F});
   scroll->content()->addChild(std::move(menu));
   m_root = ui::column(
-      {.fill = colorSpecFromRole(ColorRole::SurfaceContainerHigh), .radius = Style::radiusLg}, std::move(scroll)
+      {.fill = colorSpecFromRole(ColorRole::SurfaceContainerHigh), .styleRadius = Style::radiusLg}, std::move(scroll)
   );
   m_root->setAnimationManager(&m_animations);
   m_surface->setSceneRoot(m_root.get());

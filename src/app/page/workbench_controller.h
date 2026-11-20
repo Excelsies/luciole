@@ -66,6 +66,13 @@ public:
   void load(const luciole::BrowserSettings& settings);
   // The application's shared measures; the mode shows the view once they are set.
   void setServices(luciole::WorkbenchServices& services);
+  // Receives each folder the page's browser enters and each file it opens; unset, nothing is recorded.
+  void setVisitRecorder(std::function<void(const luciole::Location&)> record) { m_recordVisit = std::move(record); }
+  void recordVisit(const luciole::Location& location) const {
+    if (m_recordVisit) {
+      m_recordVisit(location);
+    }
+  }
 
   // Frame slot in BrowserPage::prepareFrame(): mounts or unmounts the view with the mode and feeds it.
   void onFrame();
@@ -83,7 +90,7 @@ public:
   // Axis hook in BrowserPage::dispatchPointer(), before the page's dispatcher: Ctrl with the wheel over the column
   // preview's content steps the preview size. True when taken.
   bool previewWheel(const PointerEvent& event, float x, float y);
-  // BrowserPage::pointerLeft(): the pointer went to another page or the tab strip, which ends the list's hover.
+  // The pointer went to another page or the tab strip, which ends the list's hover.
   void pointerLeft();
   // Keyboard hook in BrowserPage::keyboard(), before the page's shortcuts: the keys of the view's focused part, and
   // Escape to minimize an expanded instrument while no text field of the page has focus.
@@ -148,6 +155,7 @@ private:
   luciole::VisitService& m_visits;
   luciole::ViewPreferenceWriter& m_preferences;
   Hooks m_hooks;
+  std::function<void(const luciole::Location&)> m_recordVisit;
   luciole::WorkbenchServices* m_services = nullptr;
   luciole::BrowserSettings m_settings; // with the choices and geometry this page saved since
   luciole::FolderTrail m_trail;        // every folder this page entered while it lives, in any mode

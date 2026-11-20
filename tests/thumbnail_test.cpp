@@ -19,10 +19,12 @@
 #include <chrono>
 #include <fcntl.h>
 #include <filesystem>
+#include <format>
 #include <fstream>
 #include <gdk-pixbuf/gdk-pixbuf.h>
 #include <png.h>
 #include <print>
+#include <sstream>
 #include <stdexcept>
 #include <sys/stat.h>
 #include <thread>
@@ -248,7 +250,10 @@ namespace {
     TEST_CHECK(length > 0);
     decoded = luciole::decodeRasterImage({webp, length}, 128, 1000000, cancel.get());
     WebPFree(webp);
-    TEST_CHECK(decoded && decoded->rgba == original.rgba);
+    // Non-Glycin WebP loaders round-trip through premultiplied alpha, so translucent channels may drift by one.
+    TEST_CHECK(decoded && std::ranges::equal(decoded->rgba, original.rgba, [](std::uint8_t a, std::uint8_t b) {
+                 return std::abs(a - b) <= 1;
+               }));
     const GioPtr<GdkPixbuf> pixbuf(gdk_pixbuf_new(GDK_COLORSPACE_RGB, false, 8, 32, 16));
     gdk_pixbuf_fill(pixbuf.get(), 0xff3020ffU);
     gchar* jpeg = nullptr;
@@ -466,7 +471,14 @@ namespace {
     const std::array writes{
         luciole::ThumbnailCacheWrite{make(uri), 256}, luciole::ThumbnailCacheWrite{make(second), 512}
     };
+    const auto index = store.root().parent_path() / "luciole/thumbnail-index.json";
+    std::filesystem::create_directories(index.parent_path());
+    std::ofstream(index, std::ios::trunc) << R"([{"name":"../escape.png","bytes":1,"identity":"x"}])";
     store.writeBatch(writes, 16U * 1024U * 1024U, cancel.get());
+    std::stringstream ledger;
+    ledger << std::ifstream(index).rdbuf();
+    // A damaged entry is dropped instead of blocking every later batch.
+    TEST_CHECK(!ledger.str().contains("escape") && ledger.str().contains("large/"));
     const auto cached = store.read(uri, 128, 123, 42, "same");
     TEST_CHECK(
         cached
@@ -1065,7 +1077,10 @@ namespace {
   }
   void testCacheLanesAndCancellation(const Fixture& fixture) {
     Pump pump;
-    const auto firstPath = fixture.root / "slow-one.pdf";
+    // Every blocked copy of the first PDF shares one folder, so releasing it reaches the jobs started later.
+    const auto blocked = fixture.root / "blocked";
+    fs::create_directory(blocked);
+    const auto firstPath = blocked / "slow-one.pdf";
     const auto secondPath = fixture.root / "slow-two.pdf";
     fs::copy_file(fixture.root / "page.pdf", firstPath);
     fs::copy_file(fixture.root / "page.pdf", secondPath);
@@ -1091,32 +1106,52 @@ namespace {
     // The blocking pdftoppm shadows the real one; glycin still needs bwrap from the system PATH.
     ::setenv("PATH", (bin.native() + ":" + path).c_str(), 1);
     luciole::ThumbnailService service;
-    auto a = service.request(first, 128), b = service.request(second, 128);
-    TEST_CHECK(a && b);
-    pump.until([&] { return service.activeJobs() == 2; });
+    // Occupy every decoder with a blocked helper.
+    const auto decoders = luciole::ThumbnailService::decoders();
+    std::vector<std::shared_ptr<const luciole::FileIconImage>> busy{
+        service.request(first, 128), service.request(second, 128)
+    };
+    for (std::uint64_t id = 200; busy.size() < decoders; ++id) {
+      const auto copy = blocked / std::format("slow-{}.pdf", id);
+      fs::copy_file(firstPath, copy);
+      busy.push_back(service.request(source(copy, pump), 128));
+    }
+    TEST_CHECK(std::ranges::all_of(busy, [](const auto& image) { return image != nullptr; }));
+    pump.until([&] { return service.activeJobs() == decoders; });
     auto cached = service.request(warm, 128);
     TEST_CHECK(cached != nullptr);
     pump.until([&] { return cached->ready; });
-    TEST_CHECK(cached->pixels && service.activeJobs() == 2 && !a->ready && !b->ready);
+    TEST_CHECK(cached->pixels && service.activeJobs() == decoders && std::ranges::none_of(busy, [](const auto& image) {
+                 return image->ready;
+               }));
     // A preview takes the next free decoder ahead of thumbnails that queued before it.
     std::size_t completions = 0;
     service.setChangedCallback([&] { ++completions; });
     std::vector<std::shared_ptr<const luciole::FileIconImage>> queued;
     for (std::uint64_t id = 100; id < 103; ++id) {
-      auto blocked = first;
-      blocked.id = id;
-      queued.push_back(service.request(blocked, 128));
+      const auto copy = blocked / std::format("slow-{}.pdf", id);
+      fs::copy_file(firstPath, copy);
+      queued.push_back(service.request(source(copy, pump), 128));
     }
     const auto preview = service.request(warm, 512, true, luciole::ThumbnailPurpose::Preview);
     TEST_CHECK(preview != nullptr);
     pump.until([&] { return completions == queued.size() + 1; });
-    a.reset();
+    busy.erase(busy.begin());
     service.endFrame();
     pump.until([&] { return preview->ready; });
     TEST_CHECK(preview->pixels && std::ranges::none_of(queued, [](const auto& image) { return image->ready; }));
+    // Explicit removal cancels even borrowed images and waits for their actual helper completion. Reads from
+    // another location and their leases remain intact.
+    const auto blockedLocation = luciole::Location::fromPath(blocked.native());
+    service.releaseLocation(blockedLocation);
+    TEST_CHECK(service.readingLocation(blockedLocation));
+    TEST_CHECK(service.readingLocation(second.location()) && service.touch(busy.front(), true));
+    pump.until([&] { return !service.readingLocation(blockedLocation); });
+    TEST_CHECK(service.readingLocation(second.location()) && service.touch(busy.front(), true));
+    TEST_CHECK(cached->pixels && preview->pixels);
     service.setChangedCallback({});
     queued.clear();
-    b.reset();
+    busy.clear();
     service.endFrame();
     pump.until([&] { return service.activeJobs() == 0; });
     ::setenv("PATH", path.c_str(), 1);
@@ -1189,16 +1224,23 @@ namespace {
     luciole::ThumbnailService thumbnails;
     auto asset = thumbnails.request(entry, 48);
     TEST_CHECK(asset != nullptr);
+    ++entry.id;
+    TEST_CHECK(thumbnails.request(entry, 48) == asset);
     pump.until([&] { return asset->ready; });
     TEST_CHECK(asset->pixels && asset->pixels->width == 32 && asset->pixels->rgba[3] == 128);
     // A published image is charged its real size, not its size class's full square.
-    TEST_CHECK(thumbnails.activeJobs() <= 2 && thumbnails.reservedBytes() == asset->pixels->rgba.size());
+    TEST_CHECK(
+        thumbnails.activeJobs() <= luciole::ThumbnailService::decoders()
+        && thumbnails.reservedBytes() == asset->pixels->rgba.size()
+    );
     // A released thumbnail stays resident: scrolling back to it must not wait for the disk or a decoder.
     asset.reset();
     thumbnails.endFrame();
     pump.drain();
+    ++entry.id;
     asset = thumbnails.request(entry, 48);
     TEST_CHECK(asset && asset->ready && asset->pixels);
+    TEST_CHECK(thumbnails.prepared(entry) == asset && thumbnails.queuedJobs() == 0);
     const auto stampBefore = fs::last_write_time(path);
     auto replacement = picture();
     std::ranges::fill(replacement.rgba, 255);
@@ -1216,8 +1258,9 @@ namespace {
     thumbnails.setOptions(options);
     std::vector<std::shared_ptr<const luciole::FileIconImage>> held;
     for (std::uint64_t id = 1; id <= luciole::ThumbnailService::kMaxEntries + 1; ++id) {
-      entry.id = id;
-      if (auto image = thumbnails.request(entry, 48)) {
+      auto distinct = entry;
+      distinct.place = luciole::Location::fromPath((fixture.root / std::format("budget-{}.png", id)).native());
+      if (auto image = thumbnails.request(distinct, 48)) {
         held.push_back(std::move(image));
       }
     }
@@ -1228,20 +1271,25 @@ namespace {
     );
     asset.reset();
     held.clear();
+    thumbnails.endFrame();
+    pump.drain();
+    constexpr std::size_t kLarge = luciole::ThumbnailService::kResidentBudget / (1024U * 1024U * 4U);
+    std::vector<luciole::DirectoryEntry> largeEntries;
+    for (std::size_t i = 0; i <= kLarge; ++i) {
+      const auto copy = fixture.root / std::format("overscan-{}.png", i);
+      fs::copy_file(path, copy);
+      largeEntries.push_back(source(copy, pump));
+    }
     std::vector<std::shared_ptr<const luciole::FileIconImage>> overscan;
-    constexpr std::uint64_t kLarge = luciole::ThumbnailService::kResidentBudget / (1024U * 1024U * 4U);
-    for (std::uint64_t id = 1; id <= kLarge; ++id) {
-      entry.id = id;
-      overscan.push_back(thumbnails.request(entry, 1024, false));
+    for (std::size_t i = 0; i < kLarge; ++i) {
+      overscan.push_back(thumbnails.request(largeEntries[i], 1024, false));
       TEST_CHECK(overscan.back() != nullptr);
     }
-    entry.id = kLarge + 1;
-    auto visible = thumbnails.request(entry, 1024, true);
+    auto visible = thumbnails.request(largeEntries.back(), 1024, true);
     TEST_CHECK(visible && thumbnails.reservedBytes() == luciole::ThumbnailService::kResidentBudget);
-    entry.id = 1;
-    TEST_CHECK(!thumbnails.request(entry, 1024, false));
-    pump.until([&] { return thumbnails.activeJobs() == 2; });
-    TEST_CHECK(thumbnails.queuedJobs() == kLarge - 2);
+    TEST_CHECK(!thumbnails.request(largeEntries.front(), 1024, false));
+    pump.until([&] { return thumbnails.activeJobs() == luciole::ThumbnailService::decoders(); });
+    TEST_CHECK(thumbnails.queuedJobs() == kLarge - luciole::ThumbnailService::decoders());
     visible.reset();
     overscan.clear();
     thumbnails.endFrame();
@@ -1279,6 +1327,22 @@ namespace {
     pump.drain();
     TEST_CHECK(!retiring->pixels);
   }
+  void testNetworkFilesystemPolicy(const Fixture& fixture) {
+    Pump pump;
+    const auto path = fixture.root / "network.png";
+    write(path, png(picture()));
+    const auto entry = source(path, pump);
+    luciole::ThumbnailService thumbnails([](const std::string&) { return true; });
+    auto local = thumbnails.request(entry, 48);
+    pump.until([&] { return local->ready; });
+    TEST_CHECK(!local->pixels);
+    auto options = luciole::ThumbnailOptions{};
+    options.policy = luciole::ThumbnailPolicy::All;
+    thumbnails.setOptions(options);
+    auto all = thumbnails.request(entry, 48);
+    pump.until([&] { return all->ready; });
+    TEST_CHECK(static_cast<bool>(all->pixels));
+  }
 } // namespace
 
 int main(int argc, char** argv) {
@@ -1312,6 +1376,7 @@ int main(int argc, char** argv) {
     testCacheLanesAndCancellation(fixture);
     testPublicationAndSourceChanges(fixture);
     testService(fixture);
+    testNetworkFilesystemPolicy(fixture);
     std::println("thumbnail checks passed");
     return 0;
   } catch (const std::exception& error) {

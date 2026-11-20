@@ -1,6 +1,7 @@
 #include "ui/builders.h"
 #include "ui/controls/button.h"
 #include "ui/dialogs/settings_dialog.h"
+#include "ui/dialogs/settings_dialog_rows.h"
 
 #include <string>
 #include <utility>
@@ -37,7 +38,7 @@ void SettingsDialog::addWorkbenchCard(std::function<void()> clearVisits) {
        {"Visits", luciole::WorkbenchColor::Visits},
        {"Modified", luciole::WorkbenchColor::Modified}}
   );
-  addFraction(P::WorkbenchEmphasis, "Emphasis");
+  addFraction(P::WorkbenchEmphasis, "Emphasis", 1.0, 0.01);
   addChoice(
       P::WorkbenchPreviewPlace, "Preview placement",
       {{"Replace Jump ahead when it does not fit", luciole::WorkbenchPreviewPlace::JumpAheadWhenNarrow},

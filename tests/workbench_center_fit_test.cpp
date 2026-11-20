@@ -121,7 +121,6 @@ namespace {
       for (std::size_t i = 0; i < headers.size(); ++i) {
         auto header = std::make_unique<Button>();
         header->setText(kHeaderTexts[i]);
-        header->setFontSize(Style::fontSizeCaption);
         header->setControlHeight(Style::controlHeightSm);
         header->setContentAlign(ButtonContentAlign::Start);
         header->setVariant(ButtonVariant::Ghost);
@@ -274,7 +273,8 @@ namespace {
         continue;
       }
       TEST_CHECK(box(*label).right() <= list.x + viewport + 0.5F);
-      if (label->fontSize() == Style::fontSizeCaption) {
+      // The detail cells start where the name column ends.
+      if (box(*label).x >= list.x + columns.nameWidth - 0.5F) {
         ++values;
         if (measure.width(label->text(), *label) > label->width() + 0.5F) {
           std::println("  cut value: '{}' in {:.1f} px", label->text(), label->width());

@@ -33,7 +33,7 @@ std::unique_ptr<Flex> buildStatusPill(StatusPill& out) {
        .paddingV = Style::spaceXs,
        .paddingH = kPaddingH,
        .fill = colorSpecFromRole(ColorRole::SurfaceContainerHigh),
-       .radius = Style::radiusXl,
+       .styleRadius = Style::radiusXl,
        .border = colorSpecFromRole(ColorRole::OutlineVariant),
        .minHeight = Style::controlHeightSm,
        .visible = false,
