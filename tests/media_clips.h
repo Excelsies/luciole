@@ -22,6 +22,7 @@
 #include <gst/gst.h>
 #include <initializer_list>
 #include <netinet/in.h>
+#include <numbers>
 #include <poll.h>
 #include <span>
 #include <spawn.h>
@@ -174,7 +175,7 @@ namespace test::media {
     tag("data");
     put(samples * 2, 4);
     for (std::uint32_t i = 0; i < samples; ++i) {
-      const double wave = std::sin(2.0 * 3.141592653589793 * 440.0 * i / kRate);
+      const double wave = std::sin(2.0 * std::numbers::pi * 440.0 * i / kRate);
       put(static_cast<std::uint16_t>(static_cast<std::int16_t>(wave * 8000)), 2);
     }
     std::ofstream(path, std::ios::binary).write(reinterpret_cast<const char*>(bytes.data()), std::ssize(bytes));
@@ -307,8 +308,7 @@ namespace test::media {
   inline std::string audioSinksRankedOut() {
     std::string ranks;
     GList* sinks = gst_element_factory_list_get_elements(
-        static_cast<GstElementFactoryListType>(GST_ELEMENT_FACTORY_TYPE_SINK | GST_ELEMENT_FACTORY_TYPE_MEDIA_AUDIO),
-        GST_RANK_NONE
+        GST_ELEMENT_FACTORY_TYPE_SINK | GST_ELEMENT_FACTORY_TYPE_MEDIA_AUDIO, GST_RANK_NONE
     );
     for (const GList* item = sinks; item != nullptr; item = item->next) {
       const std::string_view name = GST_OBJECT_NAME(item->data);
@@ -335,6 +335,7 @@ namespace test::media {
     }
     kept.push_back(ranks);
     std::vector<char*> env;
+    env.reserve(kept.size() + 1);
     for (auto& entry : kept) {
       env.push_back(entry.data());
     }

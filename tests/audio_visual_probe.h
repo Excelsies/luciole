@@ -25,7 +25,7 @@ namespace test::audio {
       std::optional<AudioVisualPalette> palette = std::nullopt;
     };
 
-    ProbeVisual(AudioVisual& inner, Options options) : m_inner(inner), m_options(std::move(options)) {}
+    ProbeVisual(AudioVisual& inner, Options options) : m_inner(inner), m_options(options) {}
 
     void reset() override { m_inner.reset(); }
 

@@ -14,7 +14,7 @@ namespace test {
   struct FlatFrame {
     std::array<std::uint8_t, 4> rgba{};
     int delayMs = 100;
-    std::optional<std::array<std::uint8_t, 4>> lower{}; // the lower half's color; APNG only
+    std::optional<std::array<std::uint8_t, 4>> lower = std::nullopt; // the lower half's color; APNG only
   };
 
   // A GIF89a of opaque flat frames. `loopExtension` writes the NETSCAPE2.0 loop count; none plays once.

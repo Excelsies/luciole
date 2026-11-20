@@ -21,7 +21,7 @@ namespace luciole::test::preview {
   namespace fs = std::filesystem;
   using table::writeFile;
 
-  inline std::string cssText() {
+  inline std::string_view cssText() {
     return ":root {\n"
            "  --accent: #3584e4;\n"
            "  --warning: rgb(230, 97, 0);\n"
@@ -36,7 +36,7 @@ namespace luciole::test::preview {
            "}\n";
   }
 
-  inline std::string markdownText() {
+  inline std::string_view markdownText() {
     return "# Release notes\n\n"
            "Columns ahead now preview **tables**, *models* and `archives`.\n\n"
            "## Changes\n\n"
@@ -55,7 +55,7 @@ namespace luciole::test::preview {
   }
 
   // An ASCII STL of a tetrahedron, Z up.
-  inline std::string stlText() {
+  inline std::string_view stlText() {
     return "solid tetra\n"
            "facet normal 0 0 -1\n outer loop\n  vertex 0 0 0\n  vertex 1 0 0\n  vertex 0 1 0\n endloop\nendfacet\n"
            "facet normal 0 -1 0\n outer loop\n  vertex 0 0 0\n  vertex 0 0 1\n  vertex 1 0 0\n endloop\nendfacet\n"

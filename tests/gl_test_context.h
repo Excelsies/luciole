@@ -67,7 +67,7 @@ namespace test {
     s.blend = glIsEnabled(GL_BLEND);
     s.scissor = glIsEnabled(GL_SCISSOR_TEST);
     s.depthTest = glIsEnabled(GL_DEPTH_TEST);
-    glGetIntegerv(GL_BLEND_SRC_RGB, &s.blendFunc[0]);
+    glGetIntegerv(GL_BLEND_SRC_RGB, s.blendFunc.data());
     glGetIntegerv(GL_BLEND_DST_RGB, &s.blendFunc[1]);
     glGetIntegerv(GL_BLEND_SRC_ALPHA, &s.blendFunc[2]);
     glGetIntegerv(GL_BLEND_DST_ALPHA, &s.blendFunc[3]);

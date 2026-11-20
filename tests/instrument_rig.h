@@ -246,7 +246,10 @@ namespace luciole::test::instrument {
     for (std::size_t first = 0; first < lines.size(); ++first) {
       std::string joined;
       for (std::size_t last = first; last < lines.size() && joined.size() < note.size(); ++last) {
-        joined = joined.empty() ? lines[last] : joined + " " + lines[last];
+        if (!joined.empty()) {
+          joined += ' ';
+        }
+        joined += lines[last];
         if (joined == note) {
           ++written;
         }
