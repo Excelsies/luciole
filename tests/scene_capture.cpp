@@ -32,12 +32,16 @@ namespace test {
         : m_text(text), m_glyphs(glyphs), m_textures(textures) {}
 
     void setScale(float scale) noexcept { m_scale = scale; }
+    // The multiplier of every text size, as RenderContext applies the system font size.
+    void setTextScale(float scale) noexcept { m_textScale = scale; }
+    float textScale() const noexcept { return m_textScale; }
 
     TextMetrics measureText(
         std::string_view text, float fontSize, const TextFont& font, float maxWidth, int maxLines, TextAlign align,
         TextEllipsize ellipsize, bool useMarkup
     ) override {
-      const auto m = m_text.measure(m_scale, text, fontSize, font, maxWidth, maxLines, align, ellipsize, useMarkup);
+      const auto m =
+          m_text.measure(m_scale, text, fontSize * m_textScale, font, maxWidth, maxLines, align, ellipsize, useMarkup);
       return TextMetrics{
           .width = m.width,
           .left = m.left,
@@ -54,7 +58,7 @@ namespace test {
     }
 
     TextMetrics measureFont(float fontSize, const TextFont& font) override {
-      const auto m = m_text.measureFont(m_scale, fontSize, font);
+      const auto m = m_text.measureFont(m_scale, fontSize * m_textScale, font);
       return TextMetrics{
           .width = m.width,
           .left = m.left,
@@ -73,21 +77,21 @@ namespace test {
         std::string_view text, float fontSize, const std::vector<std::size_t>& byteOffsets,
         std::vector<float>& outStops, const TextFont& font
     ) override {
-      m_text.measureCursorStops(m_scale, text, fontSize, byteOffsets, outStops, font);
+      m_text.measureCursorStops(m_scale, text, fontSize * m_textScale, byteOffsets, outStops, font);
     }
 
     void measureTextCursorStopsWrapped(
         std::string_view text, float fontSize, const std::vector<std::size_t>& byteOffsets, float maxWidth,
         std::vector<TextCursorStop>& outStops, const TextFont& font
     ) override {
-      m_text.measureCursorStopsWrapped(m_scale, text, fontSize, byteOffsets, maxWidth, outStops, font);
+      m_text.measureCursorStopsWrapped(m_scale, text, fontSize * m_textScale, byteOffsets, maxWidth, outStops, font);
     }
 
     void measureTextCharSpans(
         std::string_view text, float fontSize, const std::vector<std::size_t>& byteOffsets,
         std::vector<TextCharSpan>& outSpans, const TextFont& font
     ) override {
-      m_text.measureCharSpans(m_scale, text, fontSize, byteOffsets, outSpans, font);
+      m_text.measureCharSpans(m_scale, text, fontSize * m_textScale, byteOffsets, outSpans, font);
     }
 
     TextMetrics measureGlyph(char32_t codepoint, float fontSize) override {
@@ -119,6 +123,7 @@ namespace test {
     CairoGlyphRenderer& m_glyphs;
     TextureManager& m_textures;
     float m_scale = 1;
+    float m_textScale = 1;
     std::uint64_t m_generation = 1;
   };
 
@@ -134,6 +139,7 @@ namespace test {
       CairoTextRenderer& text;
       CairoGlyphRenderer& glyphs;
       float scale = 1;
+      float textScale = 1;
       float surfaceWidth = 0; // logical
       float surfaceHeight = 0;
       float bufferWidth = 0;
@@ -196,8 +202,9 @@ namespace test {
       const auto draw = [&](Color color, const Mat3& transform) {
         color.a *= opacity;
         f.text.draw(
-            f.scale, f.surfaceWidth, f.surfaceHeight, 0.0F, 0.0F, text.text(), text.fontSize(), color, transform,
-            text.font(), text.maxWidth(), text.maxLines(), text.textAlign(), text.ellipsize(), text.useMarkup()
+            f.scale, f.surfaceWidth, f.surfaceHeight, 0.0F, 0.0F, text.text(), text.fontSize() * f.textScale, color,
+            transform, text.font(), text.maxWidth(), text.maxLines(), text.textAlign(), text.ellipsize(),
+            text.useMarkup()
         );
       };
       if (text.hasShadow()) {
@@ -416,6 +423,10 @@ namespace test {
   // Members go in reverse order: the renderers release their textures through the backend while the context lives.
   SceneCapture::~SceneCapture() { rigAlive = false; }
 
+  void SceneCapture::setTextScale(float scale) { m_renderer->setTextScale(scale); }
+
+  float SceneCapture::textScale() const { return m_renderer->textScale(); }
+
   GlPixels SceneCapture::capture(Node& root, int width, int height, float scale) {
     if (width <= 0 || height <= 0 || !std::isfinite(scale) || scale <= 0.0F) {
       return {};
@@ -449,6 +460,7 @@ namespace test {
           .text = m_text,
           .glyphs = m_glyphs,
           .scale = scale,
+          .textScale = m_renderer->textScale(),
           .surfaceWidth = static_cast<float>(width),
           .surfaceHeight = static_cast<float>(height),
           .bufferWidth = static_cast<float>(bufferWidth),

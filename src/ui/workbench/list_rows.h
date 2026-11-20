@@ -69,6 +69,11 @@ namespace luciole {
     ProgressBar* m_bar = nullptr;
   };
 
+  // The height of a Jump ahead row, which holds two lines of text.
+  inline constexpr float kJumpRowHeight = 38;
+  // Room above and below a Jump ahead row's two lines.
+  inline constexpr float kJumpRowInset = 6;
+
   // A Jump ahead row: the folder's name over its path below the current folder in smaller text, its value in the
   // measure entries are sized by, and a share bar. A row still being measured is faded.
   class JumpRowTile final : public Node {

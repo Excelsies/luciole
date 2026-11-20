@@ -3,6 +3,7 @@
 #include "model/details_columns.h"
 #include "png_writer.h"
 #include "scene_capture.h"
+#include "text_clear.h"
 #include "text_tile_view_rig.h"
 #include "thumbnails/thumbnail_service.h"
 #include "ui/browser/file_view.h"
@@ -186,6 +187,7 @@ namespace {
       m_label->setMaxLines(1);
     }
 
+    float textScale() const { return m_capture.textScale(); }
     float width(std::string_view value, const Label& like) { return width(value, like.fontSize(), like.font().weight); }
     float width(std::string_view value, float size, FontWeight weight = FontWeight::Normal) {
       constexpr int kRoom = 4000;
@@ -276,7 +278,8 @@ namespace {
       // The detail cells start where the name column ends.
       if (box(*label).x >= list.x + columns.nameWidth - 0.5F) {
         ++values;
-        if (measure.width(label->text(), *label) > label->width() + 0.5F) {
+        // Cells keep their pixel widths, as in the page's List view, so a larger system font may ellipsize a value.
+        if (measure.textScale() == 1.0F && measure.width(label->text(), *label) > label->width() + 0.5F) {
           std::println("  cut value: '{}' in {:.1f} px", label->text(), label->width());
           TEST_CHECK(false);
         }
@@ -362,6 +365,7 @@ namespace {
     expectColumnsFit(files, columns, measure);
     expectPillInside(files, *rig.view, body);
     expectTitlesFit(*rig.view, measure);
+    ::test::expectTextClear(body, measure.textScale());
   }
 
   // The row under a point of the list, as the view's hover reads it: a folder, a file, and none below the rows.
@@ -423,11 +427,17 @@ int main() {
   (void)rig.view->setPreview(std::make_unique<::Node>()); // the page's preview slot
   rig.view->setCursor(WorkbenchEntry{.location = Location::fromPath((folder / "notes.txt").native()), .folder = false});
   Body body(rig.root.removeChild(rig.view), files);
-  for (const float scale : {1.0F, 1.5F}) {
-    for (const auto window : kWindows) {
-      checkWindow(rig, files, body, *capture, window, scale);
+  // The system font at 16 pt is 21.33 px against the 14 px the toolkit's text sizes are written for.
+  for (const float textScale : {1.0F, 16.0F * 96.0F / 72.0F / 14.0F}) {
+    capture->setTextScale(textScale);
+    std::println("text scale {:.2f}", textScale);
+    for (const float scale : {1.0F, 1.5F}) {
+      for (const auto window : kWindows) {
+        checkWindow(rig, files, body, *capture, window, scale);
+      }
     }
   }
+  capture->setTextScale(1.0F);
   expectListEntries(files, folder);
   rig.root.addChild(body.release()); // the rig lets go of the view's sources
   std::println("workbench-center-fit: all checks passed");

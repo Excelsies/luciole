@@ -33,6 +33,10 @@ namespace test {
     // that is not positive, a scale that is not positive and finite, or a buffer larger than the GPU allows.
     GlPixels capture(Node& root, int width, int height, float scale);
 
+    // Multiplies every text size from now on, as the system font size does in the application; 1 by default.
+    void setTextScale(float scale);
+    float textScale() const;
+
     // Uploads textures for the image nodes of scenes this rig draws; the caller unloads them.
     TextureManager& textureManager();
 

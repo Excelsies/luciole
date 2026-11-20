@@ -228,6 +228,8 @@ test_table = [
   {'name': 'workbench-center-fit', 'deps': [app_workbench_dep, ui_dep, event_loop_dep, dependency('zlib')],
     'sources': files('scene_capture.cpp', 'png_writer.cpp'), 'timeout': 180,
     'env': gio_env + ['LUCIOLE_LIBRARY_ASSETS_DIR=' + (meson.project_source_root() / 'lib/assets')]},
+  {'name': 'workbench-rows-text-scale', 'deps': [ui_dep, dependency('zlib')], 'sources': files('scene_capture.cpp', 'png_writer.cpp'),
+    'timeout': 60, 'env': ['LUCIOLE_LIBRARY_ASSETS_DIR=' + (meson.project_source_root() / 'lib/assets')]},
   {'name': 'status-pill', 'deps': [ui_dep, dependency('zlib')], 'sources': files('scene_capture.cpp', 'png_writer.cpp'),
     'timeout': 60, 'env': ['LUCIOLE_LIBRARY_ASSETS_DIR=' + (meson.project_source_root() / 'lib/assets')]},
   {'name': 'table-view-pixels', 'deps': [ui_dep, libarchive, dependency('zlib')],

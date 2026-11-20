@@ -1,6 +1,7 @@
 #include "png_writer.h"
 #include "scene_capture.h"
 #include "test_check.h"
+#include "text_clear.h"
 #include "text_tile_view_rig.h"
 #include "ui/controls/button.h"
 #include "ui/controls/label.h"
@@ -37,8 +38,11 @@ namespace {
     view.setFacts("344.6 KiB · 2026-11-19 19:06");
     view.setSizeAvailable(!look.media, "Video and sound are always fitted to the pane.");
     view.setEditBar(look.bar);
-    const auto pixels = capture.capture(view, width, kHeight, 1);
-    TEST_CHECK(pixels.width == width && pixels.height == kHeight);
+    // The slot's height follows the text it holds.
+    const int height = static_cast<int>(static_cast<float>(kHeight) * capture.textScale());
+    const auto pixels = capture.capture(view, width, height, 1);
+    TEST_CHECK(pixels.width == width && pixels.height == height);
+    ::test::expectTextClear(view, capture.textScale());
     // The view fills its capture: nothing of the header is laid out past its right edge.
     for (const Node* part : std::array<const Node*, 3>{&view.openButton(), &view.nameLabel(), &view.largerButton()}) {
       float x = 0;
@@ -47,7 +51,8 @@ namespace {
       TEST_CHECK(x >= 0 && x + part->width() <= static_cast<float>(width) + 0.01F);
     }
     if (const char* dir = std::getenv("LUCIOLE_CAPTURE_DIR"); dir != nullptr && dir[0] != '\0') {
-      const auto path = std::filesystem::path(dir) / std::format("header_{}_{}.png", look.name, width);
+      const auto path =
+          std::filesystem::path(dir) / std::format("header_{}_{}_{:.2f}.png", look.name, width, capture.textScale());
       TEST_CHECK(::test::writePng(pixels, path));
       std::println("wrote {}", path.string());
     }
@@ -67,9 +72,13 @@ int main() {
       {"sound", true, {}},
       {"editing", false, {.shown = true, .editing = true, .saveAvailable = true, .unsaved = true}},
   }};
-  for (const auto& look : looks) {
-    for (const int width : {140, 165, 185}) {
-      drawn(*capture, look, width);
+  // The text scale of a 16 pt system font, 21.33 px over the 14 px body size.
+  for (const float textScale : {1.0F, 16.0F * 96.0F / 72.0F / 14.0F}) {
+    capture->setTextScale(textScale);
+    for (const auto& look : looks) {
+      for (const int width : {140, 165, 185}) {
+        drawn(*capture, look, width);
+      }
     }
   }
   std::println("column-preview-header-pixels: all checks passed");

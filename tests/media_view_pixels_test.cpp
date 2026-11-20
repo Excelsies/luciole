@@ -5,6 +5,7 @@
 #include "render/scene/input_dispatcher.h"
 #include "scene_capture.h"
 #include "test_check.h"
+#include "text_clear.h"
 #include "ui/controls/button.h"
 #include "ui/controls/flex.h"
 #include "ui/controls/label.h"
@@ -259,6 +260,14 @@ int main(int argc, char** argv) {
     TEST_CHECK(!near(stageAt(pixels, view, 0.25F, 0.02F, scale), 240, 140, 40, 60));
     TEST_CHECK(!near(stageAt(pixels, view, 0.25F, 0.98F, scale), 240, 140, 40, 60));
   }
+
+  // The control bar's times and buttons at the text scale of a 16 pt system font, 21.33 px over the 14 px body size.
+  capture->setTextScale(16.0F * 96.0F / 72.0F / 14.0F);
+  for (int i = 0; i < 4; ++i) {
+    (void)scene.frame(*capture, 1.0F);
+  }
+  TEST_CHECK(::test::expectTextClear(scene.root, capture->textScale()) > 0);
+  capture->setTextScale(1.0F);
 
   // Play from the button, then pause on a frame with a click on the picture, and draw it.
   scene.frame(*capture, 1);

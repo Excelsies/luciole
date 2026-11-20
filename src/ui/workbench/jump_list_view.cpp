@@ -20,8 +20,6 @@
 namespace {
   using luciole::JumpNotice;
 
-  constexpr float kRowHeight = 38;
-
   bool sameRow(const luciole::workbench::JumpRow& left, const luciole::workbench::JumpRow& right) {
     return left.id == right.id
         && left.path == right.path
@@ -138,7 +136,7 @@ luciole::JumpListView::JumpListView() : m_adapter(std::make_unique<Adapter>(*thi
       ui::virtualGridView(
           {.out = &m_grid,
            .columns = 1,
-           .cellHeight = kRowHeight,
+           .cellHeight = luciole::kJumpRowHeight,
            .squareCells = false,
            .columnGap = 0,
            .rowGap = 0,
@@ -323,12 +321,25 @@ void luciole::JumpListView::refresh(std::optional<std::size_t> index) {
 }
 
 // The pointer area follows the grid's rows after either pass.
+// A row holds two lines of text, which follow the system font size: the row grows with them past kJumpRowHeight.
+void luciole::JumpListView::fitRowHeight(Renderer& renderer) {
+  const auto line = [&renderer](float size) {
+    const auto metrics = renderer.measureFont(size, TextFont{});
+    return metrics.bottom - metrics.top;
+  };
+  m_grid->setCellHeight(
+      std::max(kJumpRowHeight, line(Style::fontSizeCaption) + line(Style::fontSizeMini) + kJumpRowInset)
+  );
+}
+
 void luciole::JumpListView::doLayout(Renderer& renderer) {
+  fitRowHeight(renderer);
   Flex::doLayout(renderer);
   m_pointer->fit();
 }
 
 void luciole::JumpListView::doArrange(Renderer& renderer, const LayoutRect& rect) {
+  fitRowHeight(renderer);
   Flex::doArrange(renderer, rect);
   m_pointer->fit();
 }
