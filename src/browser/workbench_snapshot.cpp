@@ -1,5 +1,7 @@
 #include "browser/workbench_snapshot.h"
 
+#include "browser/location_presentation.h"
+
 #include <algorithm>
 #include <span>
 #include <utility>
@@ -260,7 +262,8 @@ namespace {
         && a.lowerBound == b.lowerBound
         && a.unreadable == b.unreadable
         && a.truncated == b.truncated
-        && a.otherFilesystem == b.otherFilesystem;
+        && a.otherFilesystem == b.otherFilesystem
+        && a.notMeasured == b.notMeasured;
   }
 
   // Equal in everything but the time the tree was built.
@@ -381,5 +384,33 @@ luciole::finishSnapshot(const WorkbenchDraft& draft, const std::shared_ptr<const
       .shares = std::move(shares),
       .total = total,
       .error = draft.error,
+  });
+}
+
+bool luciole::measurable(const Location& location) {
+  return location.isNative() && !location.isTrash() && location.nativePath().has_value();
+}
+
+std::shared_ptr<const luciole::WorkbenchSnapshot>
+luciole::unmeasuredSnapshot(const Location& location, const workbench::LayoutSettings& settings, std::uint64_t serial) {
+  workbench::Node root;
+  root.name = locationTitle(location);
+  root.folder = true;
+  root.lowerBound = true; // totals that are not known read "not measured"
+  root.notMeasured = true;
+  workbench::Tree tree;
+  tree.nodes.push_back(std::move(root));
+  tree.root = 0;
+  return std::make_shared<const WorkbenchSnapshot>(WorkbenchSnapshot{
+      .serial = serial,
+      .location = location,
+      .settings = settings,
+      .tree = std::move(tree),
+      .jump = {},
+      .jumpLocations = {},
+      .shares = {},
+      .total = 0,
+      .error = FileError{.kind = FileErrorKind::Unsupported, .message = "This location is not a local folder."},
+      .notMeasured = true
   });
 }

@@ -49,6 +49,8 @@ namespace luciole::workbench {
         return {.title = "Not expanded in this snapshot", .hint = "Its totals are known, its contents are not"};
       case FlowEmpty::Unreadable:
         return {.title = "This folder could not be read", .hint = "The list shows what is known"};
+      case FlowEmpty::NotMeasured:
+        return {.title = "Not measured here", .hint = "This location is not a local folder."};
       case FlowEmpty::None:
         break;
       }

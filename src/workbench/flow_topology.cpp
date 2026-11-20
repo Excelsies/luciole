@@ -283,6 +283,9 @@ namespace luciole::workbench {
       case FolderState::Unreadable:
         topology.empty = FlowEmpty::Unreadable;
         break;
+      case FolderState::NotMeasured:
+        topology.empty = FlowEmpty::NotMeasured;
+        break;
       case FolderState::OtherFilesystem:
       case FolderState::NotExpanded:
         topology.empty = FlowEmpty::NotExpanded;

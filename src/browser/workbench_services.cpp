@@ -147,6 +147,12 @@ void luciole::WorkbenchWalks::walkFolderAgain() {
   }
 }
 
+void luciole::WorkbenchWalks::clear() {
+  stopTimer();
+  m_walks.clear();
+  m_jumpsPlanned = false;
+}
+
 void luciole::WorkbenchWalks::release(const Location& root) {
   std::erase_if(m_walks, [&root](const Walk& walk) { return locationWithin(walk.location, root); });
 }

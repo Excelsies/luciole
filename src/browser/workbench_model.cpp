@@ -84,6 +84,7 @@ struct luciole::WorkbenchModel::State : std::enable_shared_from_this<State> {
   bool refinish = false;
   bool building = false;
   bool detached = false;        // the model is gone: nothing more starts
+  bool unmeasured = false;      // the location is not a local folder: no walk, listing or build for it
   std::uint64_t generation = 0; // grows with each folder, so a build for a folder left behind is dropped
   GSource* timer = nullptr;
   Clock::time_point lastBuild;
@@ -115,7 +116,7 @@ struct luciole::WorkbenchModel::State : std::enable_shared_from_this<State> {
   // Runs after the cache changed, a walk was asked for, a listing arrived or a build finished. A call made while
   // one runs (the cache notifies from invalidate()) is folded into it.
   void pump() {
-    if (detached) {
+    if (detached || unmeasured) {
       return;
     }
     if (pumping) {
@@ -349,6 +350,16 @@ struct luciole::WorkbenchModel::State : std::enable_shared_from_this<State> {
     builtFrom.clear();
     ++generation;
     location = folder;
+    unmeasured = !measurable(folder);
+    if (unmeasured) {
+      levels = std::make_shared<const std::vector<MeasuredLevel>>();
+      walks.clear();
+      changes.watch(folder); // a location that is not local reports nothing and ends the watch of the one before
+      rebuild = false;
+      refinish = false;
+      publishUnmeasured();
+      return;
+    }
     std::vector<Location> ancestors;
     std::vector<MeasuredLevel> chain;
     auto parent = folder.parent();
@@ -365,9 +376,15 @@ struct luciole::WorkbenchModel::State : std::enable_shared_from_this<State> {
     rebuild = true;
   }
 
+  // The location is not measured: its snapshot says so at once, and nothing else is asked of it.
+  void publishUnmeasured() {
+    published = unmeasuredSnapshot(*location, settings, published ? published->serial + 1 : 1);
+    notify();
+  }
+
   // The folder itself changed on disk, or too many of its entries to walk each alone.
   void folderChanged() {
-    if (detached || !location) {
+    if (detached || unmeasured || !location) {
       return;
     }
     walks.walkFolderAgain();
@@ -436,6 +453,10 @@ void luciole::WorkbenchModel::setSettings(const workbench::LayoutSettings& setti
     return;
   }
   state.settings = settings;
+  if (state.unmeasured) {
+    state.publishUnmeasured();
+    return;
+  }
   state.refinish = state.draft.has_value();
   state.schedule();
 }
@@ -452,7 +473,7 @@ void luciole::WorkbenchModel::releaseLocation(const Location& root) { m_state->w
 
 void luciole::WorkbenchModel::invalidateChild(const std::string& name) {
   auto& state = *m_state;
-  if (!state.location || name.empty()) {
+  if (!state.location || state.unmeasured || name.empty()) {
     return;
   }
   state.invalidate(name);

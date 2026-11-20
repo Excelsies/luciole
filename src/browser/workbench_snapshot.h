@@ -34,6 +34,7 @@ namespace luciole {
     std::vector<WorkbenchShare> shares;  // the folder's entries, ordered by name bytes
     double total = 0;                    // the weight of the folder's visible entries, remainders included
     std::optional<FileError> error;      // the folder could not be measured
+    bool notMeasured = false;            // the location is not a local folder: nothing is measured, no walk runs
 
     // The share of an entry of the folder's listing: its node's share when the tree names it, otherwise the
     // weight of the listing's own values, with no visits, over the same total, as for an entry folded into a
@@ -85,6 +86,14 @@ namespace luciole {
   // The folder's tree and each refreshed child's levels, built from the view. Empty until the folder's own walk, or a
   // cached ancestor's table, lists its entries, its walk ends or it fails. Processor work only, for a worker.
   std::optional<WorkbenchDraft> buildDraft(const WorkbenchBuildInput& input);
+
+  // Whether a walk of `location` can measure anything: a local folder that is not the Trash.
+  bool measurable(const Location& location);
+
+  // The snapshot of a location that is not measured: a tree of one folder named as the location is, with no totals,
+  // and no Jump ahead rows. `serial` numbers it.
+  std::shared_ptr<const WorkbenchSnapshot>
+  unmeasuredSnapshot(const Location& location, const workbench::LayoutSettings& settings, std::uint64_t serial);
 
   // Grafts the refreshed children into one copy of the tree and adjusts the folder's totals, sets visit counts,
   // ranks Jump ahead and computes the shares. Null when the result equals `previous` in everything but the tree's

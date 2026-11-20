@@ -29,6 +29,7 @@ namespace luciole::workbench {
     bool unreadable = false;      // the folder could not be listed
     bool truncated = false;       // the folder's entries were not expanded in this snapshot
     bool otherFilesystem = false; // the folder is on another filesystem and was not scanned
+    bool notMeasured = false;     // the location is not a local folder, so nothing below it is measured
   };
 
   // One immutable snapshot that every layout reads.
@@ -100,12 +101,16 @@ namespace luciole::workbench {
   // What a folder's entries in the snapshot can be trusted for; the first flag set wins, in this order.
   enum class FolderState : std::uint8_t {
     Listed,          // the entries are all there
+    NotMeasured,     // the location is not a local folder and is not measured
     Unreadable,      // the folder could not be listed
     OtherFilesystem, // the folder is on another filesystem and was not scanned
     NotExpanded,     // the folder's entries were left out of this snapshot
   };
 
   inline FolderState folderState(const Node& node) {
+    if (node.notMeasured) {
+      return FolderState::NotMeasured;
+    }
     if (node.unreadable) {
       return FolderState::Unreadable;
     }

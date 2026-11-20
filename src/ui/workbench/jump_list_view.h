@@ -17,11 +17,12 @@ class VirtualGridView;
 namespace luciole {
   class GridPointer;
 
-  enum class JumpNotice : std::uint8_t { None, Empty, Measuring };
+  enum class JumpNotice : std::uint8_t { None, Empty, Measuring, NotMeasured };
 
   struct JumpListContent {
     workbench::JumpList list;
     workbench::NodeId linked = workbench::kNoNode; // the row another pane points at
+    bool notMeasured = false;                      // the location is not a local folder, so no row can exist
   };
 
   // The Jump ahead list: a virtualized row per folder worth jumping to, with its name, its path below the current

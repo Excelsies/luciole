@@ -344,7 +344,11 @@ namespace luciole {
     if (m_jumpDirty || linked != m_jumpLinked) {
       m_jumpDirty = false;
       m_jumpLinked = linked;
-      JumpListContent content{.list = m_placed.snapshot ? m_placed.snapshot->jump : wb::JumpList{}, .linked = linked};
+      JumpListContent content{
+          .list = m_placed.snapshot ? m_placed.snapshot->jump : wb::JumpList{},
+          .linked = linked,
+          .notMeasured = m_placed.snapshot && m_placed.snapshot->notMeasured
+      };
       m_jump->setContent(std::move(content), ++m_jumpSerial);
     }
 

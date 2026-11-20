@@ -26,7 +26,7 @@ namespace luciole::workbench {
 
   // Why column 1 is empty: the folder could not be read, its entries were not expanded in this snapshot or it lies
   // on another filesystem, it has no entries, or no visible folders among them.
-  enum class FlowEmpty : std::uint8_t { None, Unreadable, NotExpanded, Empty, NoFolders };
+  enum class FlowEmpty : std::uint8_t { None, Unreadable, NotExpanded, Empty, NoFolders, NotMeasured };
 
   // Summed values a record stands for; modified is the newest. `state` is the most doubtful state of the summed
   // folders.

@@ -52,6 +52,8 @@ namespace {
       return "Nothing two levels down";
     case JumpNotice::Measuring:
       return "Measuring…";
+    case JumpNotice::NotMeasured:
+      return "Not measured here";
     case JumpNotice::None:
       break;
     }
@@ -228,8 +230,16 @@ void luciole::JumpListView::setContent(JumpListContent content, std::uint64_t se
       refresh(m_cursor);
     }
   }
-  m_notice = !rows.empty() ? JumpNotice::None : m_content.list.partial ? JumpNotice::Measuring : JumpNotice::Empty;
+  m_notice = !rows.empty()     ? JumpNotice::None
+      : m_content.notMeasured  ? JumpNotice::NotMeasured
+      : m_content.list.partial ? JumpNotice::Measuring
+                               : JumpNotice::Empty;
   m_noticeLabel->setText(noticeText(m_notice));
+  if (m_notice == JumpNotice::NotMeasured) {
+    m_noticeLabel->setTooltip("This location is not a local folder.");
+  } else {
+    m_noticeLabel->clearTooltip();
+  }
   show(*m_noticeBox, m_notice != JumpNotice::None);
   show(*m_grid, m_notice == JumpNotice::None);
   markLayoutDirty();

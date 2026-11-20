@@ -293,6 +293,8 @@ namespace luciole::workbench::iris {
       return "Loading…";
     }
     switch (folderState(node)) {
+    case FolderState::NotMeasured:
+      return "Not measured here";
     case FolderState::Unreadable:
       return "This folder could not be read";
     case FolderState::OtherFilesystem:

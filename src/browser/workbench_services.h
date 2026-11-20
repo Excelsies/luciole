@@ -99,6 +99,8 @@ namespace luciole {
     // Drops the walks of `root` and of folders below it, started or not, so a started one is cancelled and none starts
     // again; the next enter() plans the walks of the folder the page goes to.
     void release(const Location& root);
+    // Drops every walk and stops waiting for one: the page is on a location that is not measured.
+    void clear();
     // Reads the started walks from the cache and starts what may start. The folder is walked again when a child
     // turned out to be a file, or when its finished table folds folders into a remainder and does not record a
     // refreshed child, since only the folder's walk measures those.
