@@ -283,6 +283,12 @@ namespace {
           std::println("  cut value: '{}' in {:.1f} px", label->text(), label->width());
           TEST_CHECK(false);
         }
+      } else if (
+          (label->text() == "Music" || label->text() == "notes.txt")
+          && measure.width(label->text(), *label) > label->width() + 0.5F
+      ) {
+        std::println("  cut name: '{}' in {:.1f} px", label->text(), label->width());
+        TEST_CHECK(false);
       }
     }
     TEST_CHECK(values > 0 || !columns.visible(DetailsColumn::Size));

@@ -29,7 +29,6 @@ namespace test {
     return box;
   }
 
-  // Labels that lie flat: a turned label's frame is not where its text is.
   // Where a label's glyphs lie: its em box, centered in its frame, which also holds the font's leading.
   inline TextBox glyphBoxOf(const Label& label, float textScale) {
     auto frame = textBoxOf(label);
@@ -39,6 +38,7 @@ namespace test {
     return frame;
   }
 
+  // Labels that lie flat: a turned label's frame is not where its text is.
   inline void collectLabels(const Node& node, std::vector<const Label*>& out) {
     if (!node.visible() || node.rotation() != 0.0F) {
       return;

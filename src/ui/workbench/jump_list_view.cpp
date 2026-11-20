@@ -320,7 +320,6 @@ void luciole::JumpListView::refresh(std::optional<std::size_t> index) {
   }
 }
 
-// The pointer area follows the grid's rows after either pass.
 // A row holds two lines of text, which follow the system font size: the row grows with them past kJumpRowHeight.
 void luciole::JumpListView::fitRowHeight(Renderer& renderer) {
   const auto line = [&renderer](float size) {
@@ -332,6 +331,8 @@ void luciole::JumpListView::fitRowHeight(Renderer& renderer) {
   );
 }
 
+// The pointer area follows the grid's rows after either pass; arrange() reaches Flex::doArrange without a layout
+// pass, so both fit the row height first.
 void luciole::JumpListView::doLayout(Renderer& renderer) {
   fitRowHeight(renderer);
   Flex::doLayout(renderer);
