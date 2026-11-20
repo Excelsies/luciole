@@ -2,6 +2,7 @@
 #include "media/gstreamer_pipeline.h"
 #include "media/gstreamer_runtime.h"
 #include "media/media_player.h"
+#include "media/pipeline_thread.h"
 
 #include <algorithm>
 #include <chrono>
@@ -294,6 +295,8 @@ luciole::MediaPlayer::MediaPlayer(AudioOutput audio) : m_state(std::make_unique<
 luciole::MediaPlayer::~MediaPlayer() { m_state->closePipeline(); }
 
 bool luciole::MediaPlayer::available() noexcept { return true; }
+
+bool luciole::MediaPlayer::stopsPending() noexcept { return media::pipelineThreadBusy(); }
 
 bool luciole::MediaPlayer::open(const std::string& path) {
   close();

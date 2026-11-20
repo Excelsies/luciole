@@ -34,6 +34,9 @@ namespace luciole {
 
     // Whether this build reads media at all; without it start() does nothing.
     static bool available() noexcept;
+    // A read of some file is still queued or running on the probe thread, and so may hold its file open, also after
+    // cancel(). The answer is for every probe, so it can be true for a file on another drive.
+    static bool readsPending() noexcept;
 
     // Reads the absolute path `path`, replacing a read in progress. `done` runs once on the default main context,
     // with the facts, or with none when the file is not media, cannot be read or takes longer than `limit`. It never

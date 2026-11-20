@@ -257,6 +257,8 @@ luciole::MediaProbe::~MediaProbe() { cancel(); }
 
 bool luciole::MediaProbe::available() noexcept { return true; }
 
+bool luciole::MediaProbe::readsPending() noexcept { return media::probeThreadBusy(); }
+
 void luciole::MediaProbe::start(
     const std::string& path, std::function<void(std::optional<MediaFacts>)> done, std::chrono::milliseconds limit
 ) {

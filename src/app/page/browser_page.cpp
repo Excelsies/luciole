@@ -19,6 +19,8 @@
 #include "core/ui_phase.h"
 #include "cursor-shape-v1-client-protocol.h"
 #include "fs/gio_ptr.h"
+#include "fs/location_within.h"
+#include "fs/open_path_guard.h"
 #include "model/details_columns.h"
 #include "operations/archive_service.h"
 #include "operations/batch_rename_service.h"
@@ -404,9 +406,7 @@ void BrowserPage::visitsChanged() {
 }
 
 void BrowserPage::leaveDrive(const luciole::Location& root) {
-  const auto inside = [&](const luciole::Location& location) {
-    return location == root || location.uri().starts_with(root.uri() + (root.uri().ends_with('/') ? "" : "/"));
-  };
+  const auto inside = [&](const luciole::Location& location) { return luciole::locationWithin(location, root); };
   const auto affected = [&](const luciole::BrowserController& controller) {
     const auto& location = controller.model().snapshot().location;
     return location
@@ -438,7 +438,9 @@ void BrowserPage::leaveDrive(const luciole::Location& root) {
 }
 
 bool BrowserPage::driveReadersBusy(const luciole::Location& root) const {
+  const auto path = root.nativePath();
   return m_thumbnails.readingLocation(root)
+      || (path && luciole::pathOpenWithin(*path))
       || (m_retiringPreview == root && m_preview.busy())
       || m_workbench.readingDrive(root);
 }

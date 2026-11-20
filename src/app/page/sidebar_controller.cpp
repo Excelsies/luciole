@@ -206,7 +206,26 @@ void SidebarController::removeDrive(const std::string& key) {
   auto verb = std::string(luciole::driveRemovalLabel(drive->removal));
   std::ranges::transform(verb, verb.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
   m_removingDrive = true;
-  m_page.jobs().leaveDrive(root);
+  // Unsaved edits of the drive's files are asked about first, while a Save can still reach the drive.
+  m_page.jobs().leaveDriveThen(
+      root,
+      [this, key, root, verb = std::move(verb), lifetime = std::weak_ptr(m_lifetime)] {
+        if (!lifetime.expired()) {
+          m_page.jobs().leaveDrive(root);
+          removeDriveWithoutAsking(key, root, std::move(verb));
+        }
+      },
+      [this, lifetime = std::weak_ptr(m_lifetime)] {
+        if (!lifetime.expired()) {
+          m_removingDrive = false;
+        }
+      }
+  );
+}
+
+void SidebarController::removeDriveWithoutAsking(
+    const std::string& key, const luciole::Location& root, std::string verb
+) {
   removeDriveAfterPreparation(
       [this, root, lifetime = std::weak_ptr(m_lifetime)](auto done) {
         if (lifetime.expired()) {

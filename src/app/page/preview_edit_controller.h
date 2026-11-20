@@ -117,6 +117,11 @@ namespace luciole {
     // An open table cell field commits first, so its text counts.
     bool unsaved();
     bool saving() const { return m_gate.saving(); }
+    // The file being edited, or none.
+    const std::optional<Location>& file() const noexcept { return m_file; }
+    // Changes to a file of the drive at `root` are not saved yet, or a save of one is running.
+    bool unsavedIn(const Location& root);
+    bool savingIn(const Location& root) const;
     // True when the page may go now; otherwise the question opens and `resume` runs once it is answered No, or
     // Save and the save succeeded.
     bool leave(std::function<void()> resume);

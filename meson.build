@@ -272,6 +272,7 @@ fs_lib = static_library('luciole-fs',
     'src/fs/location_mount.cpp',
     'src/fs/mount_interaction.cpp',
     'src/fs/native_listing.cpp',
+    'src/fs/open_path_guard.cpp',
     'src/fs/network_listing.cpp',
     'src/fs/ws_discovery.cpp',
     'src/fs/ws_discovery_metadata.cpp',
@@ -682,10 +683,11 @@ app_workbench_dep = declare_dependency(link_with: app_workbench_lib, include_dir
 
 # The order in which a close asks pages with unsaved changes, apart from the window so its test can link it.
 app_close_lib = static_library('luciole-app-close',
-  files('src/app/close_gate.cpp'),
+  files('src/app/close_gate.cpp', 'src/app/drive_leaving.cpp'),
   include_directories: src_inc,
+  dependencies: [fs_dep],
 )
-app_close_dep = declare_dependency(link_with: app_close_lib, include_directories: src_inc)
+app_close_dep = declare_dependency(link_with: app_close_lib, include_directories: src_inc, dependencies: [fs_dep])
 
 app = executable('luciole',
   files(

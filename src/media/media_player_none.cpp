@@ -18,6 +18,8 @@ luciole::MediaPlayer::~MediaPlayer() = default;
 
 bool luciole::MediaPlayer::available() noexcept { return false; }
 
+bool luciole::MediaPlayer::stopsPending() noexcept { return false; }
+
 bool luciole::MediaPlayer::open(const std::string& /*path*/) {
   m_state->state = MediaState::Error;
   m_state->error = "Playback is not available in this build.";

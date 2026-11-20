@@ -121,6 +121,8 @@ private:
   void resize(int width, bool persist);
   void openDrive(const std::string& key);
   void removeDrive(const std::string& key);
+  // The part of removeDrive() after the unsaved edits were asked about: leaving, preparing and removing.
+  void removeDriveWithoutAsking(const std::string& key, const luciole::Location& root, std::string verb);
   void openDriveMenu(const std::string& key, float x, float y);
   // Recounts the trash for the trash place's empty or full icon.
   void refreshTrashAvailability();

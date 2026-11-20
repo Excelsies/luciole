@@ -58,6 +58,9 @@ WorkspaceApplication::WorkspaceApplication(
       m_defaults(std::move(settings)), m_preferences(luciole::ConfigPaths::fromEnvironment()),
       m_pins(luciole::StateStore::pathFromEnvironment()), m_visits(luciole::VisitStore::pathFromEnvironment()) {
   m_visits.setEnabled(m_defaults.recordVisits);
+  m_hub.setDriveLeaveGate([this](const luciole::Location& root, auto action, auto abandoned) {
+    askBeforeDriveLeave(root, std::move(action), std::move(abandoned));
+  });
   m_preferences.setChangedCallback([this](const std::string& error) {
     if (m_preferences.settings()) {
       m_defaults = m_preferences.settings()->browser;

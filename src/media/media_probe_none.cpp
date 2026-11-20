@@ -9,6 +9,8 @@ luciole::MediaProbe::~MediaProbe() = default;
 
 bool luciole::MediaProbe::available() noexcept { return false; }
 
+bool luciole::MediaProbe::readsPending() noexcept { return false; }
+
 // NOLINTBEGIN(performance-unnecessary-value-param): the header's signature; no callback runs in this build.
 void luciole::MediaProbe::start(
     const std::string& /*path*/, std::function<void(std::optional<MediaFacts>)> /*done*/,

@@ -162,6 +162,18 @@ public:
   void shutdown();
   // Ask every pane to leave a drive before explicit removal.
   void leaveDrive(const luciole::Location& root);
+  // Runs `action` once every page holding unsaved changes to a file of the drive at `root` has answered, or at once
+  // when the application set no gate; `abandoned` runs instead when a page kept its changes.
+  using DriveLeaveGate =
+      std::function<void(const luciole::Location& root, std::function<void()> action, std::function<void()> abandoned)>;
+  void setDriveLeaveGate(DriveLeaveGate gate) { m_driveLeaveGate = std::move(gate); }
+  void leaveDriveThen(const luciole::Location& root, std::function<void()> action, std::function<void()> abandoned) {
+    if (m_driveLeaveGate) {
+      m_driveLeaveGate(root, std::move(action), std::move(abandoned));
+    } else {
+      action();
+    }
+  }
   // Inspect proofs on a worker and retire only history holding this mount. Retained-data cleanup can follow.
   void prepareDriveRemoval(const luciole::Location& root, std::function<void(std::optional<luciole::FileError>)> done);
   bool removalReady(const luciole::Location& root) const;
@@ -202,6 +214,7 @@ private:
   std::deque<luciole::JobActivity> m_finishedActivities;
   std::size_t m_historyProbes = 0;
   std::size_t m_historyRetirements = 0;
+  DriveLeaveGate m_driveLeaveGate;
   std::shared_ptr<int> m_lifetime = std::make_shared<int>(0);
 };
 
@@ -215,6 +228,9 @@ public:
   }
   void follow(const OperationJob& job) { m_hub.follow(job); }
   void leaveDrive(const luciole::Location& root) { m_hub.leaveDrive(root); }
+  void leaveDriveThen(const luciole::Location& root, std::function<void()> action, std::function<void()> abandoned) {
+    m_hub.leaveDriveThen(root, std::move(action), std::move(abandoned));
+  }
   void prepareDriveRemoval(const luciole::Location& root, std::function<void(std::optional<luciole::FileError>)> done) {
     m_hub.prepareDriveRemoval(root, std::move(done));
   }

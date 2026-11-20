@@ -1,6 +1,7 @@
 #include "fs/user_file_save.h"
 
 #include "fs/background_job.h"
+#include "fs/open_path_guard.h"
 #include "fs/posix_fd.h"
 
 #include <algorithm>
@@ -353,6 +354,7 @@ luciole::readUserFile(const Location& location, std::size_t limit, const CancelT
   if (!path) {
     return std::unexpected(readError(FileErrorKind::Unsupported, "Only local files are read."));
   }
+  const OpenPathGuard reading(*path);
   struct stat named{};
   if (::stat(path->c_str(), &named) != 0) {
     return std::unexpected(errnoError(errno));

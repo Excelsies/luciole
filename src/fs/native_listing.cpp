@@ -1,6 +1,7 @@
 #include "fs/native_listing.h"
 
 #include "fs/gio_interop.h"
+#include "fs/open_path_guard.h"
 
 #include <cerrno>
 #include <cstring>
@@ -223,6 +224,7 @@ bool luciole::remoteFilesystem(const struct statfs& info) {
 luciole::NativeListing
 luciole::listNativeFolder(const std::string& path, std::size_t entryLimit, GCancellable* cancellable, bool catalogue) {
   NativeListing result;
+  const OpenPathGuard reading(path); // declared first, so it ends after the folder is closed
   const int fd = ::open(path.c_str(), O_RDONLY | O_DIRECTORY | O_CLOEXEC);
   if (fd < 0) {
     result.unsupported = true;

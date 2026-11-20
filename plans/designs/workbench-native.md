@@ -177,6 +177,7 @@ One question, "Save changes to <name>?", with Save and No. Escape and the close 
 - A change of view mode would take the editor off the screen, so it waits for the answer: the Workbench view stays until Save has written the file or the answer is No, then the view changes with the file still selected.
 - While a file is being edited, a resting pointer does not retarget the preview. Only a deliberate action does.
 - Closing the tab, the pane or the window, and quitting, ask first and continue after the answer. A close request from the compositor is deferred the same way.
+- Removing a drive (the eject button or the drive's menu) asks first, before any pane leaves the drive and while a Save can still reach it. Every page of every window whose editor holds unsaved changes to a file of that drive is asked, one after the other, through the same gate as a close; edits of other files are not asked about. Save writes the file and the removal goes on; No, Escape and the close button drop the changes and it goes on. A save that fails keeps the question open and the drive mounted. The removal then waits for a running save, walk, listing, load or playback stop that still holds a file of the drive.
 - Switching to another tab asks nothing: the tab keeps its editor and its changes.
 - A termination signal does not ask.
 

@@ -99,6 +99,8 @@ public:
   // The Workbench shows or reads something inside the drive at `root`: a listing ahead, the previewed file, or the
   // page's walks. The page then leaves the drive, as it does when its own folder is inside it.
   bool inDrive(const luciole::Location& root) const;
+  // The editor holds unsaved changes to a file of the drive at `root`.
+  bool unsavedIn(const luciole::Location& root);
   // The drive at `root` is being removed: its walks, listings ahead and previewed file go.
   void releaseLocation(const luciole::Location& root);
   // Something of the Workbench still reads the drive at `root`: a walk of the shared service, which may outlive its

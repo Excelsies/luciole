@@ -13,6 +13,7 @@
 #include "core/input/key_symbols.h"
 #include "fs/location_within.h"
 #include "media/media_player.h"
+#include "media/media_probe.h"
 #include "platform/desktop_integration.h"
 #include "render/scene/input_dispatcher.h"
 #include "ui/browser/file_view.h"
@@ -424,6 +425,9 @@ void WorkbenchController::restAt() {
 }
 
 bool WorkbenchController::inDrive(const luciole::Location& root) const {
+  if (m_editor && m_editor->savingIn(root)) {
+    return true;
+  }
   if (!m_session) {
     return false;
   }
@@ -435,6 +439,8 @@ bool WorkbenchController::inDrive(const luciole::Location& root) const {
   }
   return m_columnPreview && m_columnPreview->reading(root);
 }
+
+bool WorkbenchController::unsavedIn(const luciole::Location& root) { return m_editor && m_editor->unsavedIn(root); }
 
 void WorkbenchController::releaseLocation(const luciole::Location& root) {
   if (!m_session) {
@@ -450,6 +456,9 @@ void WorkbenchController::releaseLocation(const luciole::Location& root) {
 bool WorkbenchController::readingDrive(const luciole::Location& root) const {
   return (m_services != nullptr && m_services->measureService().reading(root))
       || (m_session && m_session->lookahead().reading(root))
+      || (m_editor && m_editor->savingIn(root))
+      || luciole::MediaPlayer::stopsPending()
+      || luciole::MediaProbe::readsPending()
       || (m_columnPreview && m_columnPreview->reading(root));
 }
 

@@ -1,3 +1,4 @@
+#include "app/drive_leaving.h"
 #include "app/workspace_application.h"
 #include "core/deferred_call.h"
 
@@ -32,6 +33,36 @@ void WorkspaceApplication::leaveThen(std::vector<luciole::TabId> pages, std::fun
     );
   }
   m_leaving.request(std::move(asked), std::move(action));
+}
+
+void WorkspaceApplication::askBeforeDriveLeave(
+    const luciole::Location& root, std::function<void()> action, std::function<void()> abandoned
+) {
+  // The focused window's pages first, then those of the other windows.
+  auto windows = std::vector<luciole::WindowId>{};
+  for (const auto& [id, record] : m_model.windows()) {
+    (void)record;
+    windows.push_back(id);
+  }
+  std::ranges::stable_partition(windows, [this](auto id) { return id == m_focused; });
+  std::vector<luciole::DriveEditor> editors;
+  for (const auto window : windows) {
+    for (const auto page : windowPages(window)) {
+      editors.push_back(
+          {.unsavedIn =
+               [this, page](const luciole::Location& drive) {
+                 const auto found = m_pages.find(page);
+                 return found != m_pages.end() && found->second->workbench().unsavedIn(drive);
+               },
+           .ask =
+               [this, page](std::function<void()> resume) {
+                 reveal(page);
+                 return m_pages.at(page)->leave(std::move(resume));
+               }}
+      );
+    }
+  }
+  luciole::leaveDriveThen(m_leaving, root, std::move(editors), std::move(action), std::move(abandoned));
 }
 
 void WorkspaceApplication::executeAsked(

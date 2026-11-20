@@ -5,6 +5,7 @@
 #include "app/page/workbench_session.h"
 #include "browser/directory_model.h"
 #include "core/deferred_call.h"
+#include "fs/location_within.h"
 #include "render/scene/node.h"
 
 #include <stdexcept>
@@ -155,6 +156,14 @@ namespace luciole {
 
   bool PreviewEditController::key(const InputArea::KeyData& key) {
     return m_editorNode != nullptr && !leavesEditedFile(key.sym, key.modifiers) && m_session->key(key);
+  }
+
+  bool PreviewEditController::unsavedIn(const Location& root) {
+    return m_file && locationWithin(*m_file, root) && unsaved();
+  }
+
+  bool PreviewEditController::savingIn(const Location& root) const {
+    return m_file && locationWithin(*m_file, root) && saving();
   }
 
   bool PreviewEditController::leave(std::function<void()> resume) {

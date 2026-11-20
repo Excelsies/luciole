@@ -61,6 +61,9 @@ namespace luciole {
 
     // Whether this build can play media at all.
     static bool available() noexcept;
+    // A stop that closes a file is still queued or running on the pipeline thread. A file the stop is closing stays
+    // open until it ends; the answer is for every player, so it can be true for a file on another drive.
+    static bool stopsPending() noexcept;
 
     // Loads an absolute local path paused at its start, closing the file before. False, in state Error, for a
     // path that is not absolute or when playback is not available; later failures arrive as state Error.

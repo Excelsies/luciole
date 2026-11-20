@@ -130,6 +130,26 @@ namespace {
     TEST_CHECK(log.actions == 1);
   }
 
+  // `abandoned` runs instead of the action when a page keeps its changes, or when the request is ignored.
+  void abandonedRunsInsteadOfTheAction() {
+    luciole::CloseGate gate;
+    Log log;
+    int abandoned = 0;
+    auto a = fake("a", true);
+    auto b = fake("b", true);
+    a->answerSaves = false;
+    gate.request({pageOf(a, log)}, [&log] { ++log.actions; }, [&abandoned] { ++abandoned; });
+    int ignored = 0;
+    gate.request({pageOf(b, log)}, [&log] { ++log.actions; }, [&ignored] { ++ignored; });
+    TEST_CHECK(ignored == 1 && abandoned == 0 && b->asks == 0);
+    answer(*a);
+    TEST_CHECK(abandoned == 1 && log.actions == 0);
+    auto c = fake("c", true);
+    gate.request({pageOf(c, log)}, [&log] { ++log.actions; }, [&abandoned] { ++abandoned; });
+    answer(*c);
+    TEST_CHECK(log.actions == 1 && abandoned == 1);
+  }
+
   void pageThatMayGoAtOnceIsNotWaitedFor() {
     luciole::CloseGate gate;
     Log log;
@@ -343,6 +363,7 @@ int main() {
   asksInOrderOneAtATime();
   secondRequestWhileWaitingIsIgnored();
   failedSaveStopsTheRequest();
+  abandonedRunsInsteadOfTheAction();
   pageThatMayGoAtOnceIsNotWaitedFor();
   answerInsideAskIsTakenOnce();
   repeatedAndStaleResumesChangeNothing();
