@@ -1,24 +1,23 @@
 #include "media/decoder_threads.h"
 
 #include <algorithm>
-#include <cstdint>
+#include <cmath>
 #include <string_view>
 #include <thread>
 
 namespace {
-  // A software decoder runs at several hundred million pixels a second per thread even on hard streams (a 4K
-  // stream at 64 Mbit/s decodes at 35 frames a second on one thread of this machine, 291 Mpixel/s); this counts one
-  // thread for a fifth of that, so a stream always decodes with room to spare.
-  constexpr std::int64_t kPixelsPerThread = 60'000'000;
+  // The pixels a second one decoder thread is counted to handle; a hard H.264 stream decodes about five times faster.
+  constexpr double kPixelsPerThread = 60e6;
   constexpr int kMaxDecoderThreads = 16;
   constexpr int kAssumedRate = 60;
 
-  // The property that bounds a software decoder's threads, or null.
+  // The writable property that bounds a software decoder's threads, or null.
   GParamSpec* threadProperty(GstElement* element) {
     GObjectClass* klass = G_OBJECT_GET_CLASS(element);
     for (const char* name : {"max-threads", "n-threads"}) {
       GParamSpec* spec = g_object_class_find_property(klass, name);
-      if (spec != nullptr && (spec->value_type == G_TYPE_INT || spec->value_type == G_TYPE_UINT)) {
+      const bool writable = spec != nullptr && (spec->flags & G_PARAM_WRITABLE) != 0;
+      if (writable && (spec->value_type == G_TYPE_INT || spec->value_type == G_TYPE_UINT)) {
         return spec;
       }
     }
@@ -54,6 +53,7 @@ namespace {
       return GST_PAD_PROBE_OK;
     }
     (void)gst_structure_get_fraction(shape, "framerate", &numerator, &denominator);
+    // No count of cores (0) leaves the decoder to its own choice.
     const int threads = luciole::media::decoderThreads(
         width, height, numerator, denominator, static_cast<int>(std::thread::hardware_concurrency())
     );
@@ -73,14 +73,14 @@ namespace {
 } // namespace
 
 int luciole::media::decoderThreads(int width, int height, int rateNumerator, int rateDenominator, int cores) {
-  if (width <= 0 || height <= 0) {
+  if (width <= 0 || height <= 0 || cores <= 0) {
     return 0;
   }
   const double rate = rateNumerator > 0 && rateDenominator > 0 ? static_cast<double>(rateNumerator) / rateDenominator
                                                                 : kAssumedRate;
-  const auto pixelsPerSecond = static_cast<std::int64_t>(static_cast<double>(width) * height * rate);
-  const auto needed = static_cast<int>((pixelsPerSecond + kPixelsPerThread - 1) / kPixelsPerThread);
-  return std::clamp(needed, 1, std::clamp(cores, 1, kMaxDecoderThreads));
+  // In double, clamped before it becomes an int: a crafted stream can state any size and rate.
+  const double needed = std::ceil(static_cast<double>(width) * height * rate / kPixelsPerThread);
+  return static_cast<int>(std::clamp(needed, 1.0, static_cast<double>(std::min(cores, kMaxDecoderThreads))));
 }
 
 void luciole::media::limitDecoderThreads(GstElement* element) {

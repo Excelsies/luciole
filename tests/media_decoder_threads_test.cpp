@@ -1,9 +1,14 @@
 #include "media/decoder_threads.h"
+#include "media/gstreamer_runtime.h"
 #include "media/media_player.h"
 #include "media_clips.h"
 #include "test_check.h"
 
 #include <filesystem>
+#include <limits>
+#include <optional>
+#include <thread>
+#include <string_view>
 #include <format>
 #include <fstream>
 #include <print>
@@ -36,20 +41,72 @@ namespace {
     TEST_CHECK(decoderThreads(3840, 2160, 60, 1, 1) == 1);
   }
 
+  // A stream that states a size and a rate beyond what an integer or a double of pixels holds.
+  void survivesCraftedValues() {
+    constexpr int kMost = std::numeric_limits<int>::max();
+    TEST_CHECK(decoderThreads(kMost, kMost, kMost, 1, kCores) == 16);
+    TEST_CHECK(decoderThreads(kMost, kMost, kMost, 1, 4) == 4);
+    TEST_CHECK(decoderThreads(kMost, kMost, 1, kMost, kCores) >= 1);
+    TEST_CHECK(decoderThreads(kMost, 1, kMost, 1, kCores) == 16);
+  }
+
   void leavesUnknownStreamsToTheDecoder() {
     TEST_CHECK(decoderThreads(0, 0, 30, 1, kCores) == 0);
+    // No count of cores: the decoder keeps its own choice.
+    TEST_CHECK(decoderThreads(1920, 1080, 30, 1, 0) == 0);
     // No frame rate: counted as 60.
     TEST_CHECK(decoderThreads(1920, 1080, 0, 0, kCores) == 3);
   }
 
-  // The decoders' frame threads of this process, by their names.
-  int frameThreads() {
-    int found = 0;
-    for (const auto& entry : fs::directory_iterator("/proc/self/task")) {
-      std::string name;
-      std::ifstream(entry.path() / "comm") >> name;
-      found += name.starts_with("av:h264:df") ? 1 : 0;
+  struct Decoder {
+    std::string element;
+    int threads = -1; // what the element's thread property holds, -1 when it has none
+  };
+
+  // The software video decoder a playbin builds for the clip, and the value of its thread property once the caps
+  // reached it.
+  std::optional<Decoder> decoderOf(const fs::path& clip) {
+    GstElement* playbin = gst_element_factory_make("playbin", nullptr);
+    GstElement* video = gst_element_factory_make("fakesink", nullptr);
+    GstElement* audio = gst_element_factory_make("fakesink", nullptr);
+    TEST_CHECK(playbin != nullptr && video != nullptr && audio != nullptr);
+    gst_object_ref_sink(playbin);
+    gchar* converted = g_filename_to_uri(clip.c_str(), nullptr, nullptr);
+    const std::string uri = converted;
+    g_free(converted);
+    g_object_set(
+        playbin, "uri", uri.c_str(), "flags", 0x1U, "video-sink", video, "audio-sink",
+        audio, nullptr
+    );
+    luciole::media::refuseNetwork(playbin);
+    (void)gst_element_set_state(playbin, GST_STATE_PAUSED);
+    std::optional<Decoder> found;
+    if (gst_element_get_state(playbin, nullptr, nullptr, 30 * GST_SECOND) == GST_STATE_CHANGE_SUCCESS) {
+      GstIterator* items = gst_bin_iterate_recurse(GST_BIN(playbin));
+      GValue value = G_VALUE_INIT;
+      // A playbin holds a few dozen elements.
+      for (int step = 0; step < 4096 && gst_iterator_next(items, &value) == GST_ITERATOR_OK; ++step) {
+        auto* element = GST_ELEMENT(g_value_get_object(&value));
+        GstElementFactory* factory = gst_element_get_factory(element);
+        const char* klass = factory != nullptr ? gst_element_factory_get_metadata(factory, GST_ELEMENT_METADATA_KLASS) : "";
+        if (std::string_view(klass).contains("Decoder") && std::string_view(klass).contains("Video")) {
+          found = Decoder{.element = GST_OBJECT_NAME(factory)};
+          for (const char* name : {"max-threads", "n-threads", "threads"}) {
+            if (g_object_class_find_property(G_OBJECT_GET_CLASS(element), name) != nullptr) {
+              gint threads = 0;
+              g_object_get(element, name, &threads, nullptr);
+              found->threads = threads;
+              break;
+            }
+          }
+        }
+        g_value_reset(&value);
+      }
+      g_value_unset(&value);
+      gst_iterator_free(items);
     }
+    (void)gst_element_set_state(playbin, GST_STATE_NULL);
+    gst_object_unref(playbin);
     return found;
   }
 
@@ -63,30 +120,21 @@ namespace {
     );
   }
 
-  // Plays the clip until a frame arrives and counts the frame threads while it plays.
-  int threadsWhilePlaying(Pump& pump, const fs::path& clip) {
-    MediaPlayer player(AudioOutput::Silent);
-    TEST_CHECK(player.open(clip.string()));
-    player.play();
-    TEST_CHECK(pump.until([&] { return player.state() == MediaState::Playing && player.takeFrame().has_value(); }));
-    pump.run(std::chrono::milliseconds{300});
-    return frameThreads();
-  }
-
-  void playsWithTheThreadsTheStreamNeeds(Pump& pump, Scratch& scratch) {
+  // The decoder gets the count the pure function gives for the stream, read from the element itself.
+  void givesEachDecoderTheThreadsItsStreamNeeds(Scratch& scratch) {
     struct Case {
       int width;
       int height;
       int fps;
-      int threads;
     };
-    for (const Case& item : {Case{1920, 1080, 30, 2}, Case{3840, 2160, 30, 5}, Case{1280, 720, 10, 0}}) {
-      const auto clip = scratch.path(std::format("clip-{}.mp4", item.width).c_str());
-      TEST_CHECK(writeH264(clip, item.width, item.height, item.fps, item.fps * 3));
-      const int found = threadsWhilePlaying(pump, clip);
-      std::println("{}x{} at {}: {} frame threads", item.width, item.height, item.fps, found);
-      // One thread decodes on the streaming thread itself and has no frame threads of its own.
-      TEST_CHECK(found == (item.threads > 1 ? item.threads : 0));
+    for (const Case& item : {Case{1920, 1080, 30}, Case{3840, 2160, 30}, Case{1280, 720, 10}, Case{1920, 1080, 60}}) {
+      const auto clip = scratch.path(std::format("clip-{}-{}.mp4", item.width, item.fps).c_str());
+      TEST_CHECK(writeH264(clip, item.width, item.height, item.fps, item.fps));
+      const auto decoder = decoderOf(clip);
+      TEST_CHECK(decoder.has_value());
+      const int expected = decoderThreads(item.width, item.height, item.fps, 1, static_cast<int>(std::thread::hardware_concurrency()));
+      std::println("{}x{} at {}: {} has {} threads", item.width, item.height, item.fps, decoder->element, decoder->threads);
+      TEST_CHECK(decoder->threads == expected);
     }
   }
 } // namespace
@@ -94,19 +142,21 @@ namespace {
 int main() {
   countsThreadsFromThePixelRate();
   boundsThreadsByTheCoresAndTheDecoderLimit();
+  survivesCraftedValues();
   leavesUnknownStreamsToTheDecoder();
   if (!MediaPlayer::available()) {
     std::println("skipped: playback not built");
     return ::test::kSkipExitCode;
   }
   Scratch scratch;
+  // Starts GStreamer as the player does, which also puts decoders on a graphics device behind the software ones.
+  TEST_CHECK(luciole::media::startProblem().empty());
   if (const auto missing = missingElements({"videotestsrc", "x264enc", "h264parse", "mp4mux", "filesink",
                                             "avdec_h264", "playbin", "appsink", "videoconvertscale", "fakesink"});
       !missing.empty()) {
     std::println("skipped: GStreamer lacks {}", missing);
     return ::test::kSkipExitCode;
   }
-  Pump pump;
-  playsWithTheThreadsTheStreamNeeds(pump, scratch);
+  givesEachDecoderTheThreadsItsStreamNeeds(scratch);
   return 0;
 }
