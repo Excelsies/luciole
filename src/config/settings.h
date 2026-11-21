@@ -49,6 +49,7 @@ namespace luciole {
     bool showPreview = true;
     // File picker windows keep their own preview visibility and layout.
     bool chooserShowPreview = false;
+    ChooserStartFolder chooserStartFolder = ChooserStartFolder::Home;
     SortOptions chooserSort;
     ViewMode chooserViewMode = ViewMode::List;
     bool chooserShowHidden = false;
@@ -119,6 +120,7 @@ namespace luciole {
     ExpandableFolders,
     ShowPreview,
     ChooserShowPreview,
+    ChooserStartFolder,
     ChooserSortBy,
     ChooserSortDescending,
     ChooserDirectoriesFirst,
@@ -216,6 +218,7 @@ namespace luciole {
     static constexpr PreferenceKey<bool> ExpandableFolders{Id::ExpandableFolders};
     static constexpr PreferenceKey<bool> ShowPreview{Id::ShowPreview};
     static constexpr PreferenceKey<bool> ChooserShowPreview{Id::ChooserShowPreview};
+    static constexpr PreferenceKey<luciole::ChooserStartFolder> ChooserStartFolder{Id::ChooserStartFolder};
     static constexpr PreferenceKey<luciole::SortField> ChooserSortBy{Id::ChooserSortBy};
     static constexpr PreferenceKey<bool> ChooserSortDescending{Id::ChooserSortDescending};
     static constexpr PreferenceKey<bool> ChooserDirectoriesFirst{Id::ChooserDirectoriesFirst};
@@ -275,7 +278,7 @@ namespace luciole {
     BrowserPreferenceId m_preference;
     std::variant<
         std::monostate, bool, int, double, SortField, ViewMode, ViewDensity, FilenameTruncation, DetailsColumnOrder,
-        ActivationMode, TypingMode, DropAction, ThumbnailPolicy, std::string>
+        ActivationMode, TypingMode, DropAction, ThumbnailPolicy, ChooserStartFolder, std::string>
         m_value;
   };
 

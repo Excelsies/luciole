@@ -58,6 +58,9 @@ namespace {
   // File pickers have no Columns view: it enters folders on selection, which choosing a folder needs.
   constexpr auto kChooserViewModes =
       std::to_array<Named<luciole::ViewMode>>({{luciole::ViewMode::List, "list"}, {luciole::ViewMode::Grid, "grid"}});
+  constexpr auto kChooserStartFolders = std::to_array<Named<luciole::ChooserStartFolder>>(
+      {{luciole::ChooserStartFolder::Home, "home"}, {luciole::ChooserStartFolder::Last, "last"}}
+  );
   constexpr auto kDensities = std::to_array<Named<luciole::ViewDensity>>(
       {{luciole::ViewDensity::Compact, "compact"}, {luciole::ViewDensity::Comfortable, "comfortable"}}
   );
@@ -306,6 +309,10 @@ namespace {
       describe(P::ExpandableFolders, "expandable_folders", [](S& s) -> auto& { return s.expandableFolders; }),
       describe(P::ShowPreview, "show_preview", [](S& s) -> auto& { return s.showPreview; }),
       describe(P::ChooserShowPreview, "chooser_show_preview", [](S& s) -> auto& { return s.chooserShowPreview; }),
+      describe(
+          P::ChooserStartFolder, "chooser_start_folder", [](S& s) -> auto& { return s.chooserStartFolder; },
+          {kChooserStartFolders}
+      ),
       describe(P::ChooserSortBy, "chooser_sort_by", [](S& s) -> auto& { return s.chooserSort.field; }, {kSortFields}),
       describe(
           P::ChooserSortDescending, "chooser_sort_descending", [](S& s) -> auto& { return s.chooserSort.descending; }
@@ -640,6 +647,7 @@ template luciole::ViewDensity& luciole::preferenceValue(BrowserSettings&, Prefer
 template luciole::FilenameTruncation& luciole::preferenceValue(BrowserSettings&, PreferenceKey<FilenameTruncation>);
 template luciole::DetailsColumnOrder& luciole::preferenceValue(BrowserSettings&, PreferenceKey<DetailsColumnOrder>);
 template luciole::ThumbnailPolicy& luciole::preferenceValue(BrowserSettings&, PreferenceKey<ThumbnailPolicy>);
+template luciole::ChooserStartFolder& luciole::preferenceValue(BrowserSettings&, PreferenceKey<ChooserStartFolder>);
 template const bool& luciole::preferenceValue(const BrowserSettings&, PreferenceKey<bool>);
 template const int& luciole::preferenceValue(const BrowserSettings&, PreferenceKey<int>);
 template const double& luciole::preferenceValue(const BrowserSettings&, PreferenceKey<double>);
@@ -655,6 +663,8 @@ template const luciole::DetailsColumnOrder&
 luciole::preferenceValue(const BrowserSettings&, PreferenceKey<DetailsColumnOrder>);
 template const luciole::ThumbnailPolicy&
 luciole::preferenceValue(const BrowserSettings&, PreferenceKey<ThumbnailPolicy>);
+template const luciole::ChooserStartFolder&
+luciole::preferenceValue(const BrowserSettings&, PreferenceKey<ChooserStartFolder>);
 
 std::vector<luciole::OverrideEdit> luciole::inheritAllPreferences() {
   std::vector<OverrideEdit> edits;

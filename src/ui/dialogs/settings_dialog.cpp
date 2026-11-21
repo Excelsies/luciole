@@ -138,7 +138,6 @@ SettingsDialog::SettingsDialog(
   addNumber(P::SidebarWidth, "Sidebar Width", widths(luciole::kMinSidebarWidth, luciole::kMaxSidebarWidth));
   card("Preview");
   addBool(P::ShowPreview, "Show Preview");
-  addBool(P::ChooserShowPreview, "Show Preview in File Picker");
   addNumber(P::PreviewWidth, "Preview Width", widths(208, 800));
   section("Views", "layout-grid");
   card("View");
@@ -160,19 +159,19 @@ SettingsDialog::SettingsDialog(
   addBool(P::ShowHidden, "Show Hidden Files");
   addBool(P::ShowBackups, "Show Backup Files (*~)");
   card("Sorting");
-  addChoice(
-      P::SortBy, "Sort By",
-      {{"Name", luciole::SortField::Name},
-       {"Type", luciole::SortField::Type},
-       {"Size", luciole::SortField::Size},
-       {"Modified", luciole::SortField::Modified},
-       {"Accessed", luciole::SortField::Accessed},
-       {"Created", luciole::SortField::Created},
-       {"Owner", luciole::SortField::Owner},
-       {"Group", luciole::SortField::Group},
-       {"Permissions", luciole::SortField::Permissions},
-       {"Location", luciole::SortField::Location}}
-  );
+  const Choices<luciole::SortField> sortFields{
+      {"Name", luciole::SortField::Name},
+      {"Type", luciole::SortField::Type},
+      {"Size", luciole::SortField::Size},
+      {"Modified", luciole::SortField::Modified},
+      {"Accessed", luciole::SortField::Accessed},
+      {"Created", luciole::SortField::Created},
+      {"Owner", luciole::SortField::Owner},
+      {"Group", luciole::SortField::Group},
+      {"Permissions", luciole::SortField::Permissions},
+      {"Location", luciole::SortField::Location}
+  };
+  addChoice(P::SortBy, "Sort By", sortFields);
   addBool(P::SortDescending, "Reverse Order");
   addBool(P::DirectoriesFirst, "Folders First");
   addBool(P::HiddenLast, "Hidden Last");
@@ -217,6 +216,23 @@ SettingsDialog::SettingsDialog(
   addNumber(P::GroupColumnWidth, "Group", widths(64, 2048));
   addNumber(P::PermissionsColumnWidth, "Permissions", widths(64, 2048));
   addNumber(P::LocationColumnWidth, "Location", widths(64, 2048));
+  section("File Picker", "folder-search");
+  card("Opening");
+  addChoice(
+      P::ChooserStartFolder, "Start Folder",
+      {{"Home", luciole::ChooserStartFolder::Home}, {"Last Used Folder", luciole::ChooserStartFolder::Last}},
+      "When the application suggests no folder"
+  );
+  addBool(P::ChooserShowPreview, "Show Preview");
+  card("View");
+  addChoice(P::ChooserViewMode, "View", {{"Grid", luciole::ViewMode::Grid}, {"List", luciole::ViewMode::List}});
+  addNumber(P::ChooserGridIconSize, "Grid Icon Size", {luciole::kGridIconSizes.begin(), luciole::kGridIconSizes.end()});
+  addBool(P::ChooserShowHidden, "Show Hidden Files");
+  card("Sorting");
+  addChoice(P::ChooserSortBy, "Sort By", sortFields);
+  addBool(P::ChooserSortDescending, "Reverse Order");
+  addBool(P::ChooserDirectoriesFirst, "Folders First");
+  addBool(P::ChooserHiddenLast, "Hidden Last");
   section("Thumbnails", "photo");
   card("Generation");
   addChoice(

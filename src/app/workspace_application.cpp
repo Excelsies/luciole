@@ -290,6 +290,13 @@ void WorkspaceApplication::choose(
     luciole::FileChooserRequest request, const std::shared_ptr<luciole::FileChooserCall>& call
 ) {
   auto folder = request.currentFolder;
+  // The application's suggestion wins; the small private state file is read here like at startup.
+  if (!folder && m_defaults.chooserStartFolder == luciole::ChooserStartFolder::Last) {
+    luciole::StateStore state(luciole::StateStore::pathFromEnvironment());
+    if (state.load()) {
+      folder = state.state().chooserFolder;
+    }
+  }
   const auto window =
       newWindow(std::make_unique<FileChooserSession>(std::move(request), call, m_connection, m_renderer));
   if (!window) {
