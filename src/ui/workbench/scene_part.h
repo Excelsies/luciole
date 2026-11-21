@@ -117,6 +117,9 @@ namespace luciole {
     // Lays the scene out for `frame`. False when the layout finishes on a worker, which then reports it through the
     // ready callback the part was made with.
     virtual bool layout(const PartFrame& frame) = 0;
+    // True when a layout that finishes on a worker leaves shapes() drawing the earlier scene as it was laid out, until
+    // the reply; false when shapes() already draws at the size of the frame given.
+    virtual bool holdsSceneUntilReply() const { return false; }
     // Shapes of the last finished layout with `marks`, in view coordinates; empty before the first.
     virtual workbench::SceneShapes shapes(const workbench::ShapeMarks& marks) const = 0;
     // The snapshot of the last finished layout, whose node ids the shapes, the wheel and the keys use; empty before

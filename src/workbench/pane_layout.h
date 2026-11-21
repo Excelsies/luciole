@@ -63,18 +63,20 @@ namespace luciole::workbench {
     bool operator==(const RibbonLimits&) const = default;
   };
 
-  // What the panes need: the parts' body sizes, the height of a pane's header and the Jump ahead pane's least body.
-  // The last two grow with the text, so the owner of the panes sets them.
+  // What the panes need: the parts' body sizes, the height of a pane's header, the Jump ahead pane's least body and
+  // the center's least width. The last three grow with the text, so the owner of the panes sets them.
   struct PartLimits {
     InstrumentLimits instrument;
     RibbonLimits ribbon;
     double header = kPaneHeader;
     double jumpMinBody = kJumpMinBody;
+    double centerMinWidth = kCenterMinWidth;
     bool operator==(const PartLimits&) const = default;
   };
 
-  // The limits with every size that holds text multiplied by `scale`, the size of the system font over its default;
-  // the maximum height stays as it is. A scale that is not finite and positive changes nothing.
+  // The limits with every size that holds text multiplied by `scale`, the size of the system font over its default,
+  // in whole pixels, the ribbon's maximum height included; the center's least width is the list's floor beside the
+  // strips' least width at that scale. A scale that is not finite and positive changes nothing.
   PartLimits scaleLimits(const PartLimits& limits, double scale);
 
   // Limits for a pane whose part is not mounted yet.
@@ -154,9 +156,6 @@ namespace luciole::workbench {
   // Pane rectangles for a view. Too small a view closes the ribbon, then Jump ahead, then turns the left column
   // into the rail.
   PaneLayout layoutPanes(const PaneState& state, ViewSize view, const PartLimits& limits, RibbonKind kind);
-
-  // The part of a pane below its header; empty for a hidden or collapsed pane.
-  std::optional<PaneRect> paneBody(const std::optional<PaneRect>& pane, bool collapsed);
 
   // The divider's size set to a value the caller already clamped; the ribbon height is kept per kind.
   PaneState withDividerValue(const PaneState& state, DividerId id, double value, RibbonKind kind);

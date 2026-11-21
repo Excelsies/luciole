@@ -58,6 +58,8 @@ namespace luciole {
         return false;
       }
 
+      bool holdsSceneUntilReply() const override { return true; }
+
       workbench::SceneShapes shapes(const workbench::ShapeMarks& marks) const override;
 
       PartSnapshot shownSnapshot() const override {

@@ -149,11 +149,11 @@ namespace luciole::workbench {
       }
       const double leftMin = std::max(kLeftMin, instrumentOpen ? limits.instrument.minWidth : 0);
       bool forcedRibbon = false;
-      double rightMin = std::max(kCenterMinWidth, ribbonOpen ? limits.ribbon.minWidth : 0);
+      double rightMin = std::max(limits.centerMinWidth, ribbonOpen ? limits.ribbon.minWidth : 0);
       // a ribbon wider than the center is closed before the left column becomes the rail
-      if (width - rightMin < leftMin && ribbonOpen && limits.ribbon.minWidth > kCenterMinWidth) {
+      if (width - rightMin < leftMin && ribbonOpen && limits.ribbon.minWidth > limits.centerMinWidth) {
         forcedRibbon = true;
-        rightMin = kCenterMinWidth;
+        rightMin = limits.centerMinWidth;
       }
       const double leftMax = width - rightMin;
       if (leftMax < leftMin) {
@@ -239,7 +239,7 @@ namespace luciole::workbench {
           && small(rects.ribbon, limits.ribbon.minWidth, limits.header + limits.ribbon.minHeight)) {
         return true;
       }
-      return small(rects.center, kCenterMinWidth, kCenterMinHeight);
+      return small(rects.center, limits.centerMinWidth, kCenterMinHeight);
     }
 
     ForcedReason ribbonReason(bool room, bool narrow) {
@@ -320,15 +320,17 @@ namespace luciole::workbench {
     if (!std::isfinite(scale) || !(scale > 0)) {
       return limits;
     }
+    const auto whole = [scale](double value) { return std::round(value * scale); };
     PartLimits out = limits;
-    out.instrument.minWidth *= scale;
-    out.instrument.minHeight *= scale;
-    out.ribbon.minWidth *= scale;
-    out.ribbon.minHeight *= scale;
-    out.ribbon.preferredHeight *= scale;
-    out.ribbon.maxHeight *= scale;
-    out.header *= scale;
-    out.jumpMinBody *= scale;
+    out.instrument.minWidth = whole(out.instrument.minWidth);
+    out.instrument.minHeight = whole(out.instrument.minHeight);
+    out.ribbon.minWidth = whole(out.ribbon.minWidth);
+    out.ribbon.minHeight = whole(out.ribbon.minHeight);
+    out.ribbon.preferredHeight = whole(out.ribbon.preferredHeight);
+    out.ribbon.maxHeight = whole(out.ribbon.maxHeight);
+    out.header = whole(out.header);
+    out.jumpMinBody = whole(out.jumpMinBody);
+    out.centerMinWidth = kListFloor + stripsMinWidthAt(scale);
     return out;
   }
 
@@ -358,6 +360,7 @@ namespace luciole::workbench {
             },
         .header = valid(limits.header, defaults.header),
         .jumpMinBody = valid(limits.jumpMinBody, defaults.jumpMinBody),
+        .centerMinWidth = valid(limits.centerMinWidth, defaults.centerMinWidth),
     };
   }
 
@@ -392,13 +395,6 @@ namespace luciole::workbench {
     out.dividers.clear();
     out.squeezed = size.width < parts.instrument.minWidth || size.height < parts.header + parts.instrument.minHeight;
     return out;
-  }
-
-  std::optional<PaneRect> paneBody(const std::optional<PaneRect>& pane, bool collapsed) {
-    if (!pane || collapsed) {
-      return std::nullopt;
-    }
-    return makeRect(pane->x, pane->y + kPaneHeader, pane->width, pane->height - kPaneHeader);
   }
 
   PaneState withDividerValue(const PaneState& state, DividerId id, double value, RibbonKind kind) {

@@ -511,15 +511,6 @@ namespace {
     TEST_CHECK((planningRibbonLimits(static_cast<RibbonKind>(9)) == planningRibbonLimits(RibbonKind::Flame)));
   }
 
-  void testPaneBody() {
-    const PaneRect pane{.x = 10, .y = 20, .width = 100, .height = 50};
-    TEST_CHECK((paneBody(pane, false) == PaneRect{.x = 10, .y = 44, .width = 100, .height = 26}));
-    TEST_CHECK(!paneBody(pane, true).has_value());
-    TEST_CHECK(!paneBody(std::nullopt, false).has_value());
-    const PaneRect flat{.x = 10, .y = 20, .width = 100, .height = 10};
-    TEST_CHECK((paneBody(flat, false) == PaneRect{.x = 10, .y = 44, .width = 100, .height = 0}));
-  }
-
   void testDragsWithBadInput() {
     const ViewSize view{.width = 1400, .height = 700};
     const auto still = dragDivider({}, view, kLim, RibbonKind::Flame, DividerId::Left, 340, kNan);
@@ -710,7 +701,6 @@ int main() {
   testHostileLimits();
   testNormalizedLimits();
   testPlanningLimits();
-  testPaneBody();
   testDragsWithBadInput();
   testEmptyView();
   testGenerator();

@@ -7,6 +7,7 @@
 #include "ui/style.h"
 #include "ui/workbench/jump_list_view.h"
 #include "ui/workbench/list_rows.h"
+#include "ui/workbench/quiet_column_view.h"
 #include "workbench/column_plan.h"
 
 #include <algorithm>
@@ -67,14 +68,21 @@ namespace {
     entry.name = "Quarterly planning notes.txt";
     entry.type = FileType::Regular;
     for (std::size_t column = 0; column < workbench::kColumnsAhead; ++column) {
+      // the column lays its rows out at the height its line of text asks for
+      QuietColumnView view(icons, column, [] { return 0U; });
+      (void)capture.capture(view, static_cast<int>(kRowWidth), 400, 1.0F);
+      const float size = quietTextSize(Style::fontSizeBody, column);
+      const float line = capture.lineHeight(size);
+      std::println("  column {} row {} px for a {} px line", column, view.rowHeight(), line);
+      TEST_CHECK(view.rowHeight() >= line + 2);
+      TEST_CHECK(view.headerHeight() >= capture.lineHeight(size) + 8);
+      if (capture.textScale() == 1.0F) {
+        TEST_CHECK(view.rowHeight() == workbench::kColumnRowHeights[column]);
+        TEST_CHECK(view.headerHeight() == workbench::kColumnHeaderHeight);
+      }
       QuietRow row(icons, column);
-      row.bind(entry, {}, 0.5, quietTextSize(Style::fontSizeBody, column));
-      // a row grows with its line of text past its base height
-      const float line = 1.3F * quietTextSize(Style::fontSizeBody, column) * capture.textScale();
-      const auto height =
-          static_cast<int>(std::max(static_cast<float>(workbench::kColumnRowHeights[column]), std::ceil(line + 5.0F)));
-      (void)capture.capture(row, static_cast<int>(kRowWidth), height, 1.0F);
-      std::println("  column {} row {} px", column, height);
+      row.bind(entry, {}, 0.5, size);
+      (void)capture.capture(row, static_cast<int>(kRowWidth), static_cast<int>(view.rowHeight()), 1.0F);
       TEST_CHECK(::test::expectTextClear(row, capture.textScale()) == 1);
       ::test::expectTextWithin(row, capture.textScale());
     }

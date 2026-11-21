@@ -122,13 +122,15 @@ namespace luciole::workbench {
     return rounded;
   }
 
-  std::optional<double> resizeStrips(double width, double max) {
+  std::optional<double> resizeStrips(double width, double max, double least, double ceiling) {
     if (std::isnan(width)) {
       return std::nullopt;
     }
-    const double hi = std::isnan(max) ? kStripsMinWidth : clampLow(max, kStripsMinWidth, kStripsMaxWidth);
-    return roundWidth(clampLow(width, kStripsMinWidth, hi));
+    const double hi = std::isnan(max) ? least : clampLow(max, least, ceiling);
+    return roundWidth(clampLow(width, least, hi));
   }
+
+  double stripsMinWidthAt(double textScale) { return stripsMin(validScale(textScale)); }
 
   StripsDrag startStripsDrag(const ColumnPlan& plan, std::optional<double> saved) {
     return {
@@ -136,17 +138,23 @@ namespace luciole::workbench {
         .startX = plan.margin + plan.stripsWidth,
         .max = plan.stripsMax,
         .saved = saved,
-        .wanted =
-            normalizeStripsWidth(saved).value_or(plan.stripsDefault > 0 ? plan.stripsDefault : kStripsDefaultWidth),
+        .wanted = clampLow(
+            saved && std::isfinite(*saved) ? roundWidth(*saved)
+                                           : (plan.stripsDefault > 0 ? plan.stripsDefault : kStripsDefaultWidth),
+            plan.stripsMin > 0 ? plan.stripsMin : kStripsMinWidth,
+            plan.stripsCeiling > 0 ? plan.stripsCeiling : kStripsMaxWidth
+        ),
+        .min = plan.stripsMin > 0 ? plan.stripsMin : kStripsMinWidth,
+        .ceiling = plan.stripsCeiling > 0 ? plan.stripsCeiling : kStripsMaxWidth,
     };
   }
 
   std::optional<double> dragStrips(const StripsDrag& drag, double pointerX) {
-    return resizeStrips(drag.startWidth + (pointerX - drag.startX), drag.max);
+    return resizeStrips(drag.startWidth + (pointerX - drag.startX), drag.max, drag.min, drag.ceiling);
   }
 
   std::optional<double> stepStrips(const StripsDrag& drag, double edge) {
-    return resizeStrips(drag.wanted + (edge - drag.startX), kStripsMaxWidth);
+    return resizeStrips(drag.wanted + (edge - drag.startX), drag.ceiling, drag.min, drag.ceiling);
   }
 
   std::size_t columnCount(double room, const std::array<double, kColumnsAhead>& widths, double listMin, double floor) {
@@ -177,6 +185,8 @@ namespace luciole::workbench {
       plan.stripsWidth = stripsPaneWidth(options.stripsWidth, view, listMin, scale);
       plan.stripsMax = maxStripsWidth(view, listMin, scale);
       plan.stripsDefault = stripsDefault(scale);
+      plan.stripsMin = stripsMin(scale);
+      plan.stripsCeiling = stripsMax(scale);
       plan.strips = ancestorStrips(ancestors, plan.stripsWidth, scale);
     }
     const auto fit = columnCount(view - plan.stripsWidth, widths.columns, listMin, listFloor(widths, listMin));
@@ -253,16 +263,6 @@ namespace luciole::workbench {
     next.columns[drag.column] = value;
     const double min = validListMin(listMin);
     return withFloor(drag.widths, next, drag.spare + min - (value - drag.startWidth), min);
-  }
-
-  std::size_t rowsFit(double height, std::size_t column) {
-    const double rowHeight = kColumnRowHeights[std::min(column, kColumnsAhead - 1)];
-    const double rows =
-        std::floor((height - kColumnHeaderHeight - kColumnFooterHeight - kColumnPadding * 2) / rowHeight);
-    if (!(rows >= 1)) {
-      return 1;
-    }
-    return rows >= static_cast<double>(kMaxColumnRows) ? kMaxColumnRows : static_cast<std::size_t>(rows);
   }
 
   double columnFont(double listFont, std::size_t column) {

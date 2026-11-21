@@ -23,17 +23,13 @@ namespace luciole {
   namespace {
     namespace wb = workbench;
 
-    // What a band of one width carries: an icon (0 for none) and a name at a font size.
+    // What a band carries: an icon (0 for none) and a name at a font size.
     struct Face {
-      double width = 0;
       float icon = 0;
       float font = 0;
     };
     constexpr std::array<Face, 4> kFaces{
-        {{.width = 44, .icon = 18, .font = 13},
-         {.width = 34, .icon = 16, .font = 13},
-         {.width = 26, .icon = 0, .font = 13},
-         {.width = 20, .icon = 0, .font = 11}}
+        {{.icon = 18, .font = 13}, {.icon = 16, .font = 13}, {.icon = 0, .font = 13}, {.icon = 0, .font = 11}}
     };
     constexpr float kStackFont = 11;
     constexpr float kTopPadding = 14;
@@ -43,10 +39,10 @@ namespace luciole {
     constexpr std::string_view kEdgeTip =
         "Resize the ancestor strips; Left/Right adjusts, Home or a double-click resets";
 
-    // The face of a band by its level; its width is the plan's, which grows with the text size.
+    // The face of a band by its level.
     std::optional<Face> faceOf(const wb::Strip& strip) {
       if (strip.kind == wb::StripKind::Stack) {
-        return Face{.width = strip.width, .icon = 0, .font = kStackFont};
+        return Face{.icon = 0, .font = kStackFont};
       }
       if (strip.level == 0) {
         return std::nullopt;
@@ -96,7 +92,7 @@ namespace luciole {
   void AncestorStrips::setTextScale(float scale) {
     if (scale != m_textScale && scale > 0) {
       m_textScale = scale;
-      bind(); // sizes the icons again
+      bind();
     }
   }
 
@@ -237,7 +233,7 @@ namespace luciole {
     slot.background->setFrameSize(stripWidth, stripHeight);
     const float radius = Style::radiusSm; // rounded on the side away from the list
     slot.background->setStyleRadii(rtl ? Radii(0, radius, radius, 0) : Radii(radius, 0, 0, radius));
-    const float scale = m_textScale; // what holds text grows with it: the paddings, the icon, the least room for a name
+    const float scale = m_textScale;
     float top = kTopPadding * scale;
     if (slot.count->visible()) {
       const auto size = slot.count->Node::measure(renderer, LayoutConstraints::available(stripWidth, stripHeight));

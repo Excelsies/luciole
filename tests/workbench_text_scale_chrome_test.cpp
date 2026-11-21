@@ -100,8 +100,8 @@ namespace {
 
   void headerHoldsItsTitle(SceneCapture& capture, float scale) {
     PaneShell shell;
-    shell.setSize(900, 700);
-    (void)capture.capture(shell, 900, 700, 1.0F);
+    shell.setSize(1600, 1200);
+    (void)capture.capture(shell, 1600, 1200, 1.0F);
     auto& header = shell.header(wb::Pane::Instrument);
     const float line = header.titleLabel()->height();
     std::println("header {:.1f} px for a {:.1f} px line at {:.2f}", header.height(), line, scale);

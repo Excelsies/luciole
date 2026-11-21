@@ -3,6 +3,12 @@
 #include <cmath>
 
 namespace luciole::workbench {
+  // The zoom below names every field it scales. A new field in one of these changes its size: scale it in the
+  // matching function, or leave it unscaled on purpose, then update the size here.
+  static_assert(sizeof(void*) != 8 || sizeof(Shape) == 188, "zoomShape lists the fields of Shape");
+  static_assert(sizeof(void*) != 8 || sizeof(ShapeLabel) == 200, "zoomLabel lists the fields of ShapeLabel");
+  static_assert(sizeof(void*) != 8 || sizeof(LabelTrail) == 64, "zoomLabel lists the fields of LabelTrail");
+
   namespace {
     void zoomPoint(ShapePoint& point, float f) {
       point.x *= f;

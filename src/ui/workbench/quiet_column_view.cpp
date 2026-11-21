@@ -26,7 +26,7 @@ namespace {
 
   constexpr auto kHeaderHeight = static_cast<float>(luciole::workbench::kColumnHeaderHeight);
   // Room above and below a row's line and the header's, which hold text that follows the system font size.
-  constexpr float kRowInset = 5;
+  constexpr float kRowInset = 3;
   constexpr float kHeaderInset = 2 * Style::spaceSm;
 
   QuietNotice noticeOf(const luciole::DirectoryModel& listing) {
@@ -372,12 +372,11 @@ void luciole::QuietColumnView::applyHeader() {
 void luciole::QuietColumnView::fitHeights(Renderer& renderer) {
   const auto metrics = renderer.measureFont(m_textSize, TextFont{});
   const float line = metrics.bottom - metrics.top;
-  m_grid->setCellHeight(
-      std::max(static_cast<float>(workbench::kColumnRowHeights[m_column]), std::ceil(line + kRowInset))
-  );
-  const float header = std::max(kHeaderHeight, std::ceil(line + kHeaderInset));
-  m_header->setMinHeight(header);
-  m_header->setMaxHeight(header);
+  m_rowHeight = std::max(static_cast<float>(workbench::kColumnRowHeights[m_column]), std::ceil(line + kRowInset));
+  m_headerHeight = std::max(kHeaderHeight, std::ceil(line + kHeaderInset));
+  m_grid->setCellHeight(m_rowHeight);
+  m_header->setMinHeight(m_headerHeight);
+  m_header->setMaxHeight(m_headerHeight);
 }
 
 // The pointer area follows the grid's rows after either pass.

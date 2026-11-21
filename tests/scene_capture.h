@@ -42,6 +42,9 @@ namespace test {
     // Advance of `text` at `fontSize` as the rig draws it: the text scale applied, one line, no wrapping.
     float textWidth(std::string_view text, float fontSize, FontWeight weight = FontWeight::Normal);
 
+    // The height of one line of text at `fontSize` as the rig measures it: the text scale applied.
+    float lineHeight(float fontSize);
+
     // Uploads textures for the image nodes of scenes this rig draws; the caller unloads them.
     TextureManager& textureManager();
 

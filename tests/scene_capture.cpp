@@ -432,6 +432,11 @@ namespace test {
 
   float SceneCapture::textScale() const { return m_renderer->textScale(); }
 
+  float SceneCapture::lineHeight(float fontSize) {
+    const auto metrics = m_renderer->measureFont(fontSize, TextFont{});
+    return metrics.bottom - metrics.top;
+  }
+
   float SceneCapture::textWidth(std::string_view text, float fontSize, FontWeight weight) {
     const TextFont font{.weight = weight, .family = {}, .features = {}};
     return m_renderer->measureText(text, fontSize, font, 0.0F, 0, TextAlign::Start, TextEllipsize::End, false).width;

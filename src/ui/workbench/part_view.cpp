@@ -88,8 +88,8 @@ namespace luciole {
         return false;
       }
       ShapeWheel inScene = wheel;
-      inScene.x /= m_textScale;
-      inScene.y /= m_textScale;
+      inScene.x /= m_sceneScale;
+      inScene.y /= m_sceneScale;
       const auto reaction = m_part->wheel(inScene);
       react(reaction);
       return reaction.handled;
@@ -105,8 +105,8 @@ namespace luciole {
         return false;
       }
       ShapeDrag inScene = drag;
-      inScene.x /= m_textScale;
-      inScene.y /= m_textScale;
+      inScene.x /= m_sceneScale;
+      inScene.y /= m_sceneScale;
       const auto reaction = m_part->drag(inScene);
       react(reaction);
       if (reaction.handled) {
@@ -137,6 +137,10 @@ namespace luciole {
   }
 
   void PartView::partReady() {
+    if (m_awaiting) {
+      m_sceneScale = m_pendingScale;
+      m_awaiting = false;
+    }
     m_reshape = true;
     m_fresh = true;
     needFrame();
@@ -194,8 +198,15 @@ namespace luciole {
         .trail = m_inputs.trail,
     };
     if (m_part->layout(frame)) {
+      m_sceneScale = m_textScale;
+      m_awaiting = false;
       m_reshape = true;
       m_fresh = true;
+    } else if (m_part->holdsSceneUntilReply()) {
+      m_pendingScale = m_textScale; // the scene shown stays at its own scale until the worker's reply
+      m_awaiting = true;
+    } else {
+      m_sceneScale = m_textScale;
     }
   }
 
@@ -204,8 +215,8 @@ namespace luciole {
     PartSnapshot shown;
     std::string note = "Loading…";
     // The scene lives in the view as the text scale shrinks it; zoomScene brings it to the real one.
-    const float sceneWidth = m_builtWidth / m_textScale;
-    const float sceneHeight = m_builtHeight / m_textScale;
+    const float sceneWidth = m_builtWidth / m_sceneScale;
+    const float sceneHeight = m_builtHeight / m_sceneScale;
     std::optional<workbench::ShapeRect> box =
         workbench::ShapeRect{.x = 0, .y = 0, .width = sceneWidth, .height = sceneHeight, .radius = 0};
     if (!m_loading) {
@@ -221,7 +232,7 @@ namespace luciole {
     if (!note.empty() && box && !written) {
       scene.labels.insert(scene.labels.begin(), noteLabel(std::move(note), *box, m_inputs.palette));
     }
-    workbench::zoomScene(scene, m_textScale);
+    workbench::zoomScene(scene, m_sceneScale);
     fitLabels(scene.labels, m_metrics);
     const float redrawn = std::exchange(m_redrawMs, 0.0F);
     float transition = m_fresh ? std::exchange(m_transitionMs, 0.0F) : redrawn;
@@ -256,8 +267,8 @@ namespace luciole {
       needFrame();
     }
     for (auto each : reaction.requests) {
-      each.x *= m_textScale; // the part works in the view the scene was laid out in
-      each.y *= m_textScale;
+      each.x *= m_sceneScale; // the part works in the view the scene was laid out in
+      each.y *= m_sceneScale;
       request(each);
     }
   }

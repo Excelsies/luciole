@@ -47,10 +47,7 @@ namespace luciole::workbench {
   inline constexpr double kListPreferred = 470; // Name, Size and Modified, kept before a second column
   inline constexpr double kListMax = 1272;
   inline constexpr std::array<double, kColumnsAhead> kColumnRowHeights{26, 24, 22};
-  inline constexpr std::size_t kMaxColumnRows = 30;
   inline constexpr double kColumnHeaderHeight = 36;
-  inline constexpr double kColumnFooterHeight = 30;
-  inline constexpr double kColumnPadding = 8;
 
   enum class StripKind : std::uint8_t { Ancestor, Stack };
 
@@ -102,6 +99,8 @@ namespace luciole::workbench {
     double stripsWidth = 0; // the strip pane; 0 without strips
     double stripsMax = 0;   // the widest the strip pane may be made while the list keeps its minimum; 0 without strips
     double stripsDefault = 0; // the pane's default width at the plan's text scale; 0 without strips
+    double stripsMin = 0;     // the pane's least width at that scale; 0 without strips
+    double stripsCeiling = 0; // the pane's greatest width at that scale, whatever the room; 0 without strips
     double spare = 0;         // what the list can still give up before it reaches its minimum
   };
 
@@ -121,7 +120,9 @@ namespace luciole::workbench {
     double startX = 0;
     double max = 0;
     std::optional<double> saved;
-    double wanted = 0; // the saved width, or the default without one: where a key step starts
+    double wanted = 0; // the saved width, or the default without one, held to the range: where a key step starts
+    double min = kStripsMinWidth; // the pane's range at the plan's text scale
+    double ceiling = kStripsMaxWidth;
   };
 
   // What the three columns show: `file` alone when a file is the subject, else folders in a, b and c, where b or
@@ -153,6 +154,9 @@ namespace luciole::workbench {
   // limit, NaN as 70.
   std::vector<Strip> ancestorStrips(std::size_t count, double paneWidth, double textScale = 1);
 
+  // The pane's least width at a text scale; kStripsMinWidth at 1. A scale that is not finite and positive reads as 1.
+  double stripsMinWidthAt(double textScale);
+
   // The strip pane's width in a center `viewWidth` px wide: `width`, or the default when it is none or not finite,
   // rounded and held within 70 to 321, and narrower where the list would fall under `listMin`, down to 70.
   double stripsPaneWidth(std::optional<double> width, double viewWidth, double listMin, double textScale = 1);
@@ -162,7 +166,8 @@ namespace luciole::workbench {
 
   // The strip pane width a drag or a key asks for, rounded and held within 70 and `max`, itself at most 321; a `max`
   // under 70 or NaN reads as 70. Empty for a NaN width, which changes nothing.
-  std::optional<double> resizeStrips(double width, double max);
+  std::optional<double>
+  resizeStrips(double width, double max, double least = kStripsMinWidth, double ceiling = kStripsMaxWidth);
 
   // A drag of the strip pane's divider from `plan`, whose pane was drawn from the saved width `saved`.
   StripsDrag startStripsDrag(const ColumnPlan& plan, std::optional<double> saved);
@@ -197,9 +202,6 @@ namespace luciole::workbench {
 
   // One frame of a drag: the start width plus the pointer travel, where moving left widens.
   ColumnWidths dragColumn(const ColumnDrag& drag, double pointerX, double listMin);
-
-  // Rows a column of `height` shows: 1 to 30. A column past the third uses the third's row height.
-  std::size_t rowsFit(double height, std::size_t column);
 
   // Text size of a column: smaller than the list's and never under 11.
   double columnFont(double listFont, std::size_t column);

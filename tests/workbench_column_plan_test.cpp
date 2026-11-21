@@ -223,18 +223,6 @@ namespace {
     TEST_CHECK(columnFont(kNan, 0) == 11);
   }
 
-  void testRowsFit() {
-    TEST_CHECK(rowsFit(5000, 0) == 30);
-    TEST_CHECK(rowsFit(10, 2) == 1);
-    TEST_CHECK(rowsFit(560, 0) < 30);
-    TEST_CHECK(rowsFit(560, 0) == 18); // (560 - 82) / 26
-    TEST_CHECK(rowsFit(560, 2) == 21); // (560 - 82) / 22
-    TEST_CHECK(rowsFit(560, 7) == 21);
-    TEST_CHECK(rowsFit(kNan, 0) == 1);
-    TEST_CHECK(rowsFit(kInfinity, 0) == 30);
-    TEST_CHECK(rowsFit(-kInfinity, 0) == 1);
-  }
-
   // Ids: 0 root, 1 a, 2 f.txt, 3 b, 4 a1, 5 a2, 6 x, 7 f, 8 g, 9 .h (hidden).
   std::vector<luciole::test::WorkbenchRow> chainRows() {
     return {
@@ -477,7 +465,6 @@ int main() {
   testResizeSweepHasNoCliff();
   testResizeRemembersNarrowList();
   testColumnFont();
-  testRowsFit();
   testChainFollowsTrail();
   testChainCursorAndPointer();
   testChainFileUnderCursor();

@@ -65,6 +65,9 @@ namespace luciole {
     QuietNotice notice() const noexcept { return m_notice; }
     // True while the column has no listing and no sentence to say: it draws neither its fill nor its header.
     bool blank() const noexcept { return m_blank; }
+    // The heights of a row and of the header, as laid out last.
+    float rowHeight() const noexcept { return m_rowHeight; }
+    float headerHeight() const noexcept { return m_headerHeight; }
     float textSize() const noexcept { return m_textSize; }
 
     // The bar's share of an entry, 0 to 1, read when its row binds; none, or no callback, shows no bar.
@@ -87,6 +90,8 @@ namespace luciole {
 
   private:
     void fitHeights(Renderer& renderer);
+    float m_rowHeight = 0;
+    float m_headerHeight = 0;
     class Adapter;
     friend class Adapter;
 
