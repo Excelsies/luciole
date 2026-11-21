@@ -374,7 +374,7 @@ struct luciole::ThumbnailService::State : std::enable_shared_from_this<State> {
     if (!alive || clearing || writing || writeTimer || writes.empty()) {
       return;
     }
-    // Gather nearby completions into one ledger rewrite without holding up decoded-pixel publication.
+    // Gather nearby completions into one cache batch without holding up decoded-pixel publication.
     writeTimer = g_timeout_source_new(250);
     g_source_set_callback(
         writeTimer,
@@ -732,7 +732,7 @@ void luciole::ThumbnailService::setOptions(ThumbnailOptions options) {
     g_task_run_in_thread(task.get(), [](GTask* task, gpointer, gpointer data, GCancellable*) {
       try {
         std::scoped_lock lock(diskMutex);
-        (void)ThumbnailStore{}.prune(*static_cast<std::uint64_t*>(data));
+        ThumbnailStore{}.prune(*static_cast<std::uint64_t*>(data));
       } catch (const std::exception&) {
       }
       g_task_return_boolean(task, true);
