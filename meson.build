@@ -517,7 +517,7 @@ media_lib = static_library('luciole-media',
       'src/media/bink2_pull_reader.cpp', 'src/media/bink2_slice_pool.cpp',
       'src/media/bink2_stream.cpp', 'src/media/decoder_threads.cpp', 'src/media/frame_sink.cpp', 'src/media/gstreamer_pipeline.cpp',
       'src/media/gstreamer_runtime.cpp', 'src/media/media_player_gstreamer.cpp',
-      'src/media/media_probe_gstreamer.cpp', 'src/media/pipeline_thread.cpp')
+      'src/media/media_probe_gstreamer.cpp', 'src/media/pipeline_thread.cpp', 'src/media/playback_stats.cpp')
     : files('src/media/bink2_poster_none.cpp', 'src/media/media_player_none.cpp', 'src/media/media_probe_none.cpp'),
   include_directories: src_inc,
   dependencies: (media_playback ? gstreamer_deps : []) + bink2_deps,

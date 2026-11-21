@@ -460,6 +460,7 @@ if media_playback
     {'name': 'bink2-stream', 'deps': [media_dep], 'timeout': 180},
     {'name': 'media-network-refusal', 'deps': [media_dep, event_loop_dep], 'timeout': 60},
     {'name': 'media-decoder-threads', 'deps': [media_dep, event_loop_dep], 'timeout': 120, 'parallel': false},
+    {'name': 'media-playback-stats', 'deps': [media_dep, event_loop_dep], 'timeout': 60, 'parallel': false},
     {'name': 'media-pipeline-thread', 'deps': [media_dep], 'timeout': 30},
     {'name': 'media-player', 'deps': [media_dep, event_loop_dep], 'timeout': 90},
     {'name': 'media-drive-stop', 'deps': [media_dep, event_loop_dep], 'timeout': 90, 'parallel': false},

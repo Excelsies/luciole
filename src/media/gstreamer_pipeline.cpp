@@ -240,6 +240,7 @@ namespace {
     gst_object_unref(bus);
     (void)gst_element_set_state(element, GST_STATE_NULL);
     gst_object_unref(element);
+    tracePlayback(pipeline->stats);
     // The streaming threads freed into heaps of their own, which only a trim gives back.
     (void)::malloc_trim(0);
   }

@@ -2,6 +2,7 @@
 
 #include "media/audio_tap.h"
 #include "media/media_player.h"
+#include "media/playback_stats.h"
 
 #include <atomic>
 #include <cstdint>
@@ -56,6 +57,7 @@ namespace luciole::media {
     std::atomic<bool> video{false};          // a video stream reached the frame sink
     std::atomic<bool> soundMissing{false};   // the system's output did not open, so sound plays nowhere
     std::atomic<bool> refitWanted{false};    // the frame size changed while paused and its frame was not decoded again
+    PlaybackStats stats;
     std::atomic<std::int64_t> frameTime{-1}; // stream time in nanoseconds of the newest frame; -1 before the first
 
     // Main context only: what the owner hears, each called through a copy so it may stop the pipeline. stop()

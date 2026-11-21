@@ -32,6 +32,9 @@ namespace {
   GstPadProbeReturn sourceCaps(GstPad* /*pad*/, GstPadProbeInfo* info, gpointer data) {
     GstEvent* event = gst_pad_probe_info_get_event(info);
     const auto pipeline = locked(data);
+    if (event != nullptr && pipeline && GST_EVENT_TYPE(event) == GST_EVENT_SEGMENT) {
+      pipeline->stats.lastTime = -1; // a seek or a new segment: the next picture is not one after the last
+    }
     if (event == nullptr || GST_EVENT_TYPE(event) != GST_EVENT_CAPS || !pipeline) {
       return GST_PAD_PROBE_OK;
     }
@@ -49,6 +52,11 @@ namespace {
       pipeline->parD = GST_VIDEO_INFO_PAR_D(&video);
     }
     pipeline->video = true;
+    if (GST_VIDEO_INFO_FPS_N(&video) > 0) {
+      pipeline->stats.frameLength = gst_util_uint64_scale(
+          GST_SECOND, static_cast<guint64>(GST_VIDEO_INFO_FPS_D(&video)), static_cast<guint64>(GST_VIDEO_INFO_FPS_N(&video))
+      );
+    }
     (void)luciole::media::fitFrames(*pipeline);
     return GST_PAD_PROBE_OK;
   }
@@ -74,12 +82,17 @@ namespace {
       return GST_FLOW_OK;
     }
     GstSample* old = nullptr;
-    pipeline->frameTime = streamTime(sample);
+    const std::int64_t time = streamTime(sample);
+    pipeline->frameTime = time;
+    pipeline->stats.delivered++;
+    pipeline->stats.missed += luciole::media::missedFrames(pipeline->stats.lastTime, time, pipeline->stats.frameLength);
+    pipeline->stats.lastTime = time;
     {
       const std::scoped_lock lock(pipeline->lock);
       old = std::exchange(pipeline->latest, sample);
     }
     if (old != nullptr) {
+      pipeline->stats.replaced++;
       gst_sample_unref(old);
     }
     if (!pipeline->framePosted.exchange(true)) {
@@ -193,6 +206,7 @@ std::optional<luciole::MediaFrame> luciole::media::takeFrame(Pipeline& pipeline)
   if (sample == nullptr) {
     return std::nullopt;
   }
+  pipeline.stats.taken++;
   auto held = std::make_shared<MappedSample>(sample);
   GstVideoInfo info;
   GstCaps* caps = gst_sample_get_caps(sample);
