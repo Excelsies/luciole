@@ -7,7 +7,7 @@
 // a paused one holds little.
 
 bool MediaView::idleVideo() const {
-  if (!m_player || m_dragging || m_player->seeking() || !m_player->hasVideo()) {
+  if (!m_player || m_dragging || m_player->seeking() || !m_player->hasVideo() || !m_player->reopensInPlace()) {
     return false;
   }
   const auto state = m_player->state();

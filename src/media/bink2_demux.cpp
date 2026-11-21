@@ -119,7 +119,7 @@ namespace {
         != FALSE;
     gst_caps_unref(caps);
     return typefinder
-        && gst_element_register(plugin, "luciolebink2demux", GST_RANK_PRIMARY + 1, luciole_bink2_demux_get_type())
+        && gst_element_register(plugin, kDemuxName, GST_RANK_PRIMARY + 1, luciole_bink2_demux_get_type())
         != FALSE;
   }
 } // namespace

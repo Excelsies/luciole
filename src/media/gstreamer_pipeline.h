@@ -85,6 +85,10 @@ namespace luciole::media {
   // A new reference to the pipeline element for queries, or null before it is built and after it is freed.
   GstElement* elementRef(Pipeline& pipeline);
 
+  // Whether the file can be opened again at the same place without a visible wait: false while a Bink 2 demuxer is in
+  // the pipeline, whose exact seek decodes forward from a key frame.
+  bool reopensInPlace(Pipeline& pipeline);
+
   // The video branch: scale and convert to RGBA at the fitted size, into a sink that queues one frame and drops
   // older ones. Returns a floating bin and its caps filter, or null.
   GstElement* frameSink(const std::shared_ptr<Pipeline>& pipeline, GstElement*& filter);

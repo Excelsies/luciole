@@ -1,5 +1,6 @@
 #include "media/gstreamer_pipeline.h"
 
+#include "media/bink2_demux.h"
 #include "media/gstreamer_runtime.h"
 #include "media/pipeline_thread.h"
 
@@ -281,4 +282,34 @@ void luciole::media::stop(const std::shared_ptr<Pipeline>& pipeline) {
 GstElement* luciole::media::elementRef(Pipeline& pipeline) {
   const std::scoped_lock lock(pipeline.lock);
   return pipeline.element != nullptr ? GST_ELEMENT(gst_object_ref(pipeline.element)) : nullptr;
+}
+
+bool luciole::media::reopensInPlace(Pipeline& pipeline) {
+  GstElement* element = elementRef(pipeline);
+  if (element == nullptr || !GST_IS_BIN(element)) {
+    if (element != nullptr) {
+      gst_object_unref(element);
+    }
+    return true;
+  }
+  bool bink = false;
+  GstIterator* items = gst_bin_iterate_recurse(GST_BIN(element));
+  GValue value = G_VALUE_INIT;
+  // A pipeline holds a few dozen elements; the count bounds the walk if the iterator keeps resyncing.
+  for (int step = 0; step < 4096 && !bink; ++step) {
+    const GstIteratorResult next = gst_iterator_next(items, &value);
+    if (next == GST_ITERATOR_RESYNC) {
+      gst_iterator_resync(items);
+    } else if (next != GST_ITERATOR_OK) {
+      break;
+    } else {
+      GstElementFactory* factory = gst_element_get_factory(GST_ELEMENT(g_value_get_object(&value)));
+      bink = factory != nullptr && std::string_view(GST_OBJECT_NAME(factory)) == bink2::kDemuxName;
+      g_value_reset(&value);
+    }
+  }
+  g_value_unset(&value);
+  gst_iterator_free(items);
+  gst_object_unref(element);
+  return !bink;
 }

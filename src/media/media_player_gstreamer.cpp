@@ -487,6 +487,10 @@ bool luciole::MediaPlayer::hasVideo() const noexcept { return m_state->video; }
 
 bool luciole::MediaPlayer::soundDeviceMissing() const noexcept { return m_state->soundMissing; }
 
+bool luciole::MediaPlayer::reopensInPlace() const {
+  return !m_state->pipeline || media::reopensInPlace(*m_state->pipeline);
+}
+
 bool luciole::MediaPlayer::seeking() const noexcept { return m_state->seeking; }
 
 void luciole::MediaPlayer::setChangedCallback(std::function<void()> callback) {

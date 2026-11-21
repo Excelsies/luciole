@@ -75,6 +75,8 @@ bool luciole::MediaPlayer::hasVideo() const noexcept { return false; }
 
 bool luciole::MediaPlayer::soundDeviceMissing() const noexcept { return false; }
 
+bool luciole::MediaPlayer::reopensInPlace() const { return true; }
+
 bool luciole::MediaPlayer::seeking() const noexcept { return false; }
 
 // NOLINTBEGIN(performance-unnecessary-value-param): the header's signatures; no callback runs in this build.

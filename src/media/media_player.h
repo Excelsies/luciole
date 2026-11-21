@@ -111,6 +111,9 @@ namespace luciole {
     // The system's sound output did not open, so the file plays silent; a file with sound only ends in Error. Known
     // once the state left Loading.
     bool soundDeviceMissing() const noexcept;
+    // Whether the file can be closed and opened again at the same place without a visible wait: false for a format
+    // whose exact seek decodes forward from a key frame for about a second. Known once the state left Loading.
+    bool reopensInPlace() const;
     // A seek is in flight: asked of the pipeline and not yet settled, refused or dropped by close().
     bool seeking() const noexcept;
 

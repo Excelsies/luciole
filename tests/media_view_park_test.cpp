@@ -1,4 +1,5 @@
 #include "media_clips.h"
+#include "bink2_sample.h"
 #include "media_view_rig.h"
 #include "scene_capture.h"
 #include "test_check.h"
@@ -30,6 +31,7 @@ namespace {
     TEST_CHECK(rig.until([&] { return rig.position() >= 2.0; }));
     rig.click(rig.view->stageArea());
     TEST_CHECK(rig.state() == MediaState::Paused);
+    TEST_CHECK(rig.view->player()->reopensInPlace());
   }
 
   void parksAPausedVideoAndKeepsWhatItShowed(ViewRig& rig, const fs::path& clip) {
@@ -103,6 +105,20 @@ namespace {
     TEST_CHECK(rig.until([&] { return rig.state() == MediaState::Paused && !rig.view->parked(); }));
     TEST_NEAR(rig.position(), 9.0, 0.3);
     TEST_CHECK(tooltipOf(rig.view->playButton()) == "Play");
+  }
+
+  // Reopening a Bink 2 file in place decodes forward from a key frame, which costs about a second at 4K: such a
+  // video keeps its player however long it sits paused.
+  void aBink2VideoNeverParks(ViewRig& rig, const fs::path& sample) {
+    rig.view->setIdleRelease(kIdle);
+    rig.view->setSource(sample.string());
+    rig.click(rig.view->stageArea());
+    rig.playing();
+    rig.click(rig.view->stageArea());
+    TEST_CHECK(rig.state() == MediaState::Paused);
+    rig.pump.run(4 * kIdle);
+    TEST_CHECK(rig.view->player() != nullptr && !rig.view->parked());
+    TEST_CHECK(!rig.view->player()->reopensInPlace());
   }
 
   void aSoundFileNeverParks(ViewRig& rig, const fs::path& tone) {
@@ -208,6 +224,12 @@ int main() {
     timesTheResume(scratch, *capture, 1920, 1080, 30);
     timesTheResume(scratch, *capture, 3840, 2160, 30);
     timesTheResume(scratch, *capture, 3840, 2160, 250);
+  }
+  if (const auto sample = test::bink2::sampleFrom(test::bink2::kSampleVariable)) {
+    ViewRig rig(*capture);
+    aBink2VideoNeverParks(rig, *sample);
+  } else {
+    std::println("a Bink 2 video is not checked: {} names no file", test::bink2::kSampleVariable);
   }
   std::println("media-view-park: all checks passed");
   return 0;
