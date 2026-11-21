@@ -18,8 +18,11 @@ void MediaView::watchSeek() {
 }
 
 void MediaView::seekTick() {
-  const bool inFlight = m_player && m_player->seeking() && m_player->state() != luciole::MediaState::Error;
-  const bool late = inFlight && std::chrono::steady_clock::now() - m_seekSince >= kSeekNoticeDelay;
+  // A parked file opening again has its seek pending until it has loaded.
+  const bool inFlight = m_player
+      && (m_player->seeking() || (m_parked && m_player->state() == luciole::MediaState::Loading))
+      && m_player->state() != luciole::MediaState::Error;
+  const bool late = inFlight && std::chrono::steady_clock::now() - m_seekSince >= m_seekNoticeDelay;
   if (late != m_seekShown) {
     m_seekShown = late;
     refreshControls();

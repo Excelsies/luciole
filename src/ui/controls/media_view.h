@@ -81,6 +81,8 @@ public:
     m_firstLimit = first;
     m_retryLimit = retry;
   }
+  // How long a seek takes before "Seeking..." shows; for tests.
+  void setSeekNoticeDelay(std::chrono::milliseconds delay) { m_seekNoticeDelay = delay; }
   // How long a paused or ended video waits before it gives its pipeline back; for tests.
   void setIdleRelease(std::chrono::milliseconds idle) { m_idleRelease = idle; }
   // The pipeline was given back and the view shows the last frame; Play or a seek opens the file again.
@@ -123,7 +125,7 @@ private:
   void start();
   void stop();
   bool idleVideo() const;
-  void watchIdle(bool restart);
+  void watchIdle();
   void park();
   bool wake();
   double knownDuration() const;
@@ -198,6 +200,7 @@ private:
   std::optional<Parked> m_parked;
   Timer m_idle; // waits kIdleRelease after the video paused or ended
   std::chrono::milliseconds m_idleRelease = kIdleRelease;
+  std::chrono::milliseconds m_seekNoticeDelay = kSeekNoticeDelay;
   bool m_shown = true;
   bool m_muted = false;
   bool m_looping = false;

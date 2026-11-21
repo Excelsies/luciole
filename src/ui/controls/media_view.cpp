@@ -267,6 +267,7 @@ void MediaView::start() {
   }
   if (m_parked && !m_parked->ended) {
     m_player->seek(m_parked->at);
+    watchSeek();
   }
   m_playRequested = true;
   m_player->play();
@@ -286,18 +287,22 @@ void MediaView::stop() {
 }
 
 void MediaView::seekBy(double seconds) {
-  if (m_parked && wake()) {
-    m_player->seek(m_parked->at + seconds);
-    watchSeek();
-    refreshPosition();
+  if (!wake()) {
     return;
   }
-  if (m_player && m_player->state() != MediaState::Loading && m_player->state() != MediaState::Error) {
-    m_player->seek(m_player->position() + seconds);
-    watchSeek();
-    refreshPosition();
-    watchIdle(true);
+  const auto state = m_player->state();
+  if (state == MediaState::Error || (state == MediaState::Loading && !m_parked)) {
+    return;
   }
+  // From where the player stands, which while a parked file opens is the place it was asked for last.
+  double target = m_player->position() + seconds;
+  if (const double length = knownDuration(); length > 0) {
+    target = std::min(target, length);
+  }
+  m_player->seek(std::max(target, 0.0));
+  watchSeek();
+  refreshPosition();
+  watchIdle(); // the seek is use: it drops the old deadline, and its settling starts a new one
 }
 
 void MediaView::scrub(double fraction, SeekMode mode, bool done) {
@@ -313,13 +318,13 @@ void MediaView::scrub(double fraction, SeekMode mode, bool done) {
   m_player->seek(m_dragSeconds, mode);
   watchSeek();
   refreshPosition();
-  watchIdle(true);
+  watchIdle();
 }
 
 // The player's state, duration or error changed; the player is never destroyed from here.
 void MediaView::playerChanged() {
   const auto state = m_player->state();
-  if (state != MediaState::Loading) {
+  if (m_parked && state != MediaState::Loading && !m_player->seeking()) {
     m_parked.reset();
   }
   if (state == MediaState::Ended || state == MediaState::Error) {
@@ -436,7 +441,7 @@ void MediaView::followClock() {
   } else if (!m_clock.active()) {
     m_clock.startRepeating(kClockInterval, [this] { onScreen() ? refreshPosition() : stop(); });
   }
-  watchIdle(false);
+  watchIdle();
 }
 
 void MediaView::scheduleCatchUp() {
@@ -462,7 +467,8 @@ void MediaView::catchUp() {
     m_askedPixels = m_stagePixels;
     m_player->setFrameSize(m_stagePixels.first, m_stagePixels.second);
   }
-  if (const auto frame = m_player->takeFrame()) {
+  // A parked file opening again shows its kept frame until the one at the place it goes on from arrives.
+  if (const auto frame = m_parked ? std::nullopt : m_player->takeFrame()) {
     const bool first = !m_showingFrame;
     showFrame(*frame);
     if (first) {

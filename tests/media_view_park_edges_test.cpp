@@ -1,0 +1,246 @@
+#include "media_clips.h"
+#include "media_view_rig.h"
+#include "scene_capture.h"
+#include "test_check.h"
+#include "ui/controls/button.h"
+#include "ui/controls/label.h"
+#include "ui/controls/media_position_bar.h"
+#include "ui/controls/media_view.h"
+
+#include <chrono>
+#include <cstdlib>
+#include <filesystem>
+#include <format>
+#include <print>
+#include <string>
+#include <xkbcommon/xkbcommon-keysyms.h>
+
+// The edges of a parked video: keys and bars while it reopens, the end of the file, the notice and the picture shown
+// meanwhile, and every way a parked view can be left or its file can change.
+namespace {
+  using luciole::MediaState;
+  using namespace test::media;
+  using namespace std::chrono_literals;
+
+  constexpr auto kIdle = 400ms;
+
+  void playsPausesAndParks(ViewRig& rig, const fs::path& clip, double from = 2.0) {
+    rig.view->setIdleRelease(kIdle);
+    rig.view->setSource(clip.string());
+    rig.click(rig.view->stageArea());
+    rig.playing();
+    TEST_CHECK(rig.until([&] { return rig.position() >= from; }));
+    rig.click(rig.view->stageArea());
+    TEST_CHECK(rig.state() == MediaState::Paused);
+    TEST_CHECK(rig.until([&] { return rig.view->parked() && rig.view->player() == nullptr; }, 5000ms));
+  }
+
+  bool settledAndOpen(ViewRig& rig) { return rig.view->player() != nullptr && !rig.view->parked(); }
+
+  void repeatedKeysWhileTheFileReopensAccumulate(ViewRig& rig, const fs::path& clip) {
+    playsPausesAndParks(rig, clip);
+    const double parkedAt = rig.view->positionBar().fraction() * 30.0;
+    rig.key(XKB_KEY_Right);
+    rig.key(XKB_KEY_Right);
+    rig.key(XKB_KEY_Right);
+    TEST_CHECK(rig.until([&] { return settledAndOpen(rig) && rig.state() == MediaState::Paused; }));
+    TEST_NEAR(rig.position(), parkedAt + 3 * MediaView::kSeekStep, 0.6);
+  }
+
+  void anEndedVideoNeverShowsATimePastItsEnd(ViewRig& rig, const fs::path& shortClip) {
+    rig.view->setIdleRelease(kIdle);
+    rig.view->setSource(shortClip.string());
+    rig.click(rig.view->stageArea());
+    TEST_CHECK(rig.until([&] { return rig.state() == MediaState::Ended; }, 10000ms));
+    TEST_CHECK(rig.until([&] { return rig.view->parked(); }, 5000ms));
+    rig.key(XKB_KEY_Right);
+    rig.key(XKB_KEY_Right);
+    for (int i = 0; i < 300; ++i) {
+      (void)rig.frame();
+      TEST_CHECK(rig.view->elapsedLabel().text() != "0:08" && rig.view->elapsedLabel().text() != "0:13");
+      TEST_CHECK(rig.view->positionBar().fraction() <= 1.0);
+    }
+    // At the end still, and parked again after the wait.
+    TEST_NEAR(rig.view->positionBar().fraction(), 1.0, 0.05);
+    TEST_CHECK(rig.view->elapsedLabel().text() == "0:03");
+  }
+
+  void leftWhileParkedSeeksBack(ViewRig& rig, const fs::path& clip) {
+    playsPausesAndParks(rig, clip, 3.0);
+    rig.key(XKB_KEY_Left);
+    TEST_CHECK(rig.until([&] { return settledAndOpen(rig) && rig.state() == MediaState::Paused; }));
+    TEST_NEAR(rig.position(), 0.0, 0.3);
+  }
+
+  // The picture on the stage while a parked file opens again is the one that was kept, then a frame at the target:
+  // never the first frame of the file.
+  void neverShowsTheFirstFrameWhileResuming(::test::SceneCapture& capture, const fs::path& clip) {
+    ::test::GlPixels first;
+    {
+      ViewRig rig(capture);
+      rig.view->setSource(clip.string());
+      rig.click(rig.view->stageArea());
+      rig.playing();
+      rig.click(rig.view->stageArea());
+      rig.click(rig.view->positionBar(), 0.0F);
+      TEST_NEAR(rig.position(), 0.0, 0.3);
+      first = drawn(rig);
+    }
+    ViewRig rig(capture);
+    playsPausesAndParks(rig, clip, 4.0);
+    const auto kept = drawn(rig);
+    TEST_CHECK(differing(kept, first, rig.view->stageArea()) > 40);
+    rig.click(rig.view->stageArea());
+    for (int i = 0; i < 400; ++i) {
+      const auto shown = rig.frame();
+      TEST_CHECK(differing(shown, first, rig.view->stageArea()) > 40);
+      if (settledAndOpen(rig) && rig.state() == MediaState::Playing && rig.position() > 4.5) {
+        break;
+      }
+    }
+    TEST_CHECK(rig.state() == MediaState::Playing);
+  }
+
+  // A reopen shows the notice a seek shows. The notice waits for a seek to take long; here it shows at the first look,
+  // and a 4K clip takes a few looks to reach its place again.
+  void aReopenShowsTheSeekingNotice(ViewRig& rig, const fs::path& slow) {
+    rig.view->setSeekNoticeDelay(0ms);
+    playsPausesAndParks(rig, slow, 7.0);
+    rig.key(XKB_KEY_Right);
+    bool seen = false;
+    for (int i = 0; i < 2000 && !(settledAndOpen(rig) && rig.state() == MediaState::Paused); ++i) {
+      (void)rig.frame();
+      seen = seen || rig.view->messageLabel().text().starts_with("Seeking");
+    }
+    TEST_CHECK(seen);
+  }
+
+  void aNewSourceWhileParkedLeavesNothingBehind(ViewRig& rig, const fs::path& clip, const fs::path& other) {
+    playsPausesAndParks(rig, clip);
+    rig.view->setSource(other.string());
+    TEST_CHECK(!rig.view->parked() && rig.view->player() == nullptr && !rig.view->showsFrame());
+    rig.click(rig.view->stageArea());
+    rig.playing();
+    TEST_CHECK(rig.position() < 3.0 && !rig.view->parked());
+  }
+
+  void hidingAParkedViewClearsIt(ViewRig& rig, const fs::path& clip) {
+    playsPausesAndParks(rig, clip);
+    rig.view->setShown(false);
+    TEST_CHECK(!rig.view->parked() && !rig.view->showsFrame());
+    rig.view->setShown(true);
+    rig.pump.run(2 * kIdle);
+    TEST_CHECK(rig.view->player() == nullptr && !rig.view->parked());
+  }
+
+  void aFileDeletedWhileParkedEndsInAnErrorWithNoStaleFrame(ViewRig& rig, const fs::path& copy) {
+    playsPausesAndParks(rig, copy);
+    TEST_CHECK(fs::remove(copy));
+    rig.click(rig.view->stageArea());
+    TEST_CHECK(rig.until([&] { return !rig.view->messageLabel().text().empty(); }));
+    TEST_CHECK(!rig.view->showsFrame());
+    TEST_CHECK(!rig.view->parked() || rig.view->player() != nullptr);
+  }
+
+  void loopAndMuteChosenWhileParkedApplyOnResume(ViewRig& rig, const fs::path& clip) {
+    playsPausesAndParks(rig, clip);
+    rig.view->setLoop(true);
+    rig.click(rig.view->muteButton());
+    TEST_CHECK(rig.view->player() == nullptr);
+    rig.click(rig.view->stageArea());
+    rig.playing();
+    TEST_CHECK(rig.view->player()->loop() && rig.view->player()->muted());
+  }
+
+  // The cover picture of an MP3 is a tag, not a video stream: GStreamer plays it as sound, so the player has no
+  // video and the view never parks it.
+  void aSoundFileWithACoverTagNeverParks(ViewRig& rig, const fs::path& cover) {
+    rig.view->setIdleRelease(kIdle);
+    rig.view->setSource(cover.string());
+    rig.click(rig.view->playButton());
+    TEST_CHECK(rig.until([&] { return rig.state() == MediaState::Playing; }));
+    rig.click(rig.view->playButton());
+    TEST_CHECK(rig.state() == MediaState::Paused);
+    TEST_CHECK(!rig.view->player()->hasVideo());
+    rig.pump.run(4 * kIdle);
+    TEST_CHECK(rig.view->player() != nullptr && !rig.view->parked());
+  }
+
+  bool writeH264(const fs::path& path, int width, int height, int seconds, int keyInterval) {
+    return writeLaunched(
+        std::format(
+            "videotestsrc num-buffers={} pattern=ball ! video/x-raw,format=I420,width={},height={},framerate=30/1 ! "
+            "x264enc speed-preset=ultrafast key-int-max={} ! h264parse ! mp4mux ! filesink location=\"{}\"",
+            30 * seconds, width, height, keyInterval, path.string()
+        )
+    );
+  }
+
+  // An MP3 with a cover picture, made with ffmpeg when it is there.
+  bool writeCoverFile(const fs::path& path) {
+    const auto cover = path.parent_path() / "cover.png";
+    const auto make = std::format(
+        "ffmpeg -hide_banner -loglevel error -y -f lavfi -i color=c=red:s=64x64 -frames:v 1 \"{}\" && "
+        "ffmpeg -hide_banner -loglevel error -y -f lavfi -i sine=d=3 -i \"{}\" -map 0:a -map 1:v -c:a libmp3lame "
+        "-c:v mjpeg -id3v2_version 3 -disposition:v attached_pic \"{}\"",
+        cover.string(), cover.string(), path.string()
+    );
+    return std::system(make.c_str()) == 0 && fs::exists(path);
+  }
+} // namespace
+
+int main() {
+  Scratch scratch;
+  if (const auto missing = missingElements(
+          {"videotestsrc", "audiotestsrc", "avimux", "filesink", "capsfilter", "avidemux", "playbin", "appsink",
+           "videoconvertscale", "fakesink", "x264enc", "h264parse", "mp4mux", "qtdemux", "avdec_h264"}
+      );
+      !missing.empty() || !luciole::MediaPlayer::available()) {
+    std::println("skipped: GStreamer lacks {}", missing);
+    return ::test::kSkipExitCode;
+  }
+  std::string reason;
+  const auto capture = ::test::SceneCapture::create(reason);
+  if (!capture) {
+    std::println("skipped: {}", reason);
+    return ::test::kSkipExitCode;
+  }
+  const auto clip30 = scratch.path("clip30.avi");
+  const auto ball = scratch.path("ball.avi");
+  const auto other = scratch.path("other.avi");
+  const auto shortClip = scratch.path("short3.avi");
+  const auto copy = scratch.path("copy.avi");
+  const auto slow = scratch.path("slow.mp4");
+  TEST_CHECK(writeClip(clip30, {.width = 64, .height = 48, .seconds = 30}));
+  TEST_CHECK(writeClip(ball, {.width = 64, .height = 48, .seconds = 12, .pattern = "ball"}));
+  TEST_CHECK(writeClip(other, {.width = 64, .height = 48, .seconds = 12}));
+  TEST_CHECK(writeClip(shortClip, {.width = 64, .height = 48, .seconds = 3}));
+  TEST_CHECK(writeClip(copy, {.width = 64, .height = 48, .seconds = 12}));
+  TEST_CHECK(writeH264(slow, 3840, 2160, 15, 250));
+  { ViewRig rig(*capture); repeatedKeysWhileTheFileReopensAccumulate(rig, clip30); }
+  { ViewRig rig(*capture); anEndedVideoNeverShowsATimePastItsEnd(rig, shortClip); }
+  { ViewRig rig(*capture); leftWhileParkedSeeksBack(rig, clip30); }
+  neverShowsTheFirstFrameWhileResuming(*capture, ball);
+  { ViewRig rig(*capture); aReopenShowsTheSeekingNotice(rig, slow); }
+  { ViewRig rig(*capture); aNewSourceWhileParkedLeavesNothingBehind(rig, clip30, other); }
+  { ViewRig rig(*capture); hidingAParkedViewClearsIt(rig, clip30); }
+  { ViewRig rig(*capture); aFileDeletedWhileParkedEndsInAnErrorWithNoStaleFrame(rig, copy); }
+  { ViewRig rig(*capture); loopAndMuteChosenWhileParkedApplyOnResume(rig, clip30); }
+  {
+    // Destroyed while parked: the file is closed and nothing waits.
+    {
+      ViewRig rig(*capture);
+      playsPausesAndParks(rig, clip30);
+    }
+    Pump pump;
+    TEST_CHECK(pump.until([&] { return !holdsOpen(clip30); }));
+  }
+  if (const auto cover = scratch.path("cover.mp3"); writeCoverFile(cover)) {
+    ViewRig rig(*capture);
+    aSoundFileWithACoverTagNeverParks(rig, cover);
+  } else {
+    std::println("a cover picture is not checked: ffmpeg made no file");
+  }
+  std::println("media-view-park-edges: all checks passed");
+  return 0;
+}

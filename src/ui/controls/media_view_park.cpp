@@ -14,12 +14,12 @@ bool MediaView::idleVideo() const {
   return state == luciole::MediaState::Ended || (state == luciole::MediaState::Paused && !m_playRequested);
 }
 
-// Starts the wait when the video went idle, keeps it running while it stays so, and stops it otherwise. `restart`
-// is for use of the view: a seek.
-void MediaView::watchIdle(bool restart) {
+// Starts the wait when the video went idle, keeps it running while it stays so, and stops it otherwise. A seek in
+// flight is not idle, so asking after one drops the old deadline, also when the seek ends where the video was.
+void MediaView::watchIdle() {
   if (!idleVideo()) {
     m_idle.stop();
-  } else if (restart || !m_idle.active()) {
+  } else if (!m_idle.active()) {
     m_idle.start(m_idleRelease, [this] { park(); });
   }
 }
@@ -45,10 +45,14 @@ double MediaView::knownDuration() const {
   return m_parked ? m_parked->duration : 0;
 }
 
-// Opens the parked file again, paused at its start; the caller says where it goes on.
+// The player, opening a parked file again if need be, paused at the place it was parked.
 bool MediaView::wake() {
-  if (!m_parked || m_player) {
-    return m_player != nullptr;
+  if (m_player) {
+    return true;
   }
-  return openPlayer();
+  if (!m_parked || !openPlayer()) {
+    return false;
+  }
+  m_player->seek(m_parked->at);
+  return true;
 }
