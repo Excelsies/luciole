@@ -273,6 +273,10 @@ namespace {
         caption->setColor(colorSpecFromRole(ColorRole::OnSurfaceVariant));
       }
       m_name->setText(entry.displayName());
+      m_name->setEllipsize(
+          presentation.filenameTruncation == luciole::FilenameTruncation::Middle ? TextEllipsize::Middle
+                                                                                 : TextEllipsize::End
+      );
       m_parent->setText(entry.parentDisplayName());
       m_parent->setMaxWidth(std::max(0.0F, width() - Style::spaceSm * 2));
       m_parent->setVisible(!entry.parentDisplayName().empty());

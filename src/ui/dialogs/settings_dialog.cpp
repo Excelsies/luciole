@@ -154,8 +154,7 @@ SettingsDialog::SettingsDialog(
   addChoice(
       P::FilenameTruncation, "Long Filenames",
       {{"Shorten in the Middle", luciole::FilenameTruncation::Middle},
-       {"Shorten at the End", luciole::FilenameTruncation::End}},
-      "List and column views"
+       {"Shorten at the End", luciole::FilenameTruncation::End}}
   );
   card("Files");
   addBool(P::ShowHidden, "Show Hidden Files");
