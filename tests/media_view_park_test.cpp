@@ -58,8 +58,9 @@ namespace {
     // While the file opens again the bar stays where it was.
     TEST_NEAR(rig.view->positionBar().fraction(), fraction, 0.01);
     TEST_CHECK(tooltipOf(rig.view->playButton()) == "Pause");
+    // The view keeps its kept frame and place until the seek to them has settled.
+    TEST_CHECK(rig.until([&] { return !rig.view->parked(); }));
     rig.playing();
-    TEST_CHECK(!rig.view->parked());
     const double parkedAt = fraction * 12.0;
     TEST_CHECK(rig.position() >= parkedAt - 0.05);
     TEST_CHECK(rig.position() <= parkedAt + 2.0);
@@ -68,21 +69,23 @@ namespace {
   }
 
   void neverParksWhilePlayingOrWhileBusy(ViewRig& rig, const fs::path& clip) {
-    rig.view->setIdleRelease(kIdle);
+    // A long wait, so a stall of a second on a busy machine cannot park a video the test means to keep busy.
+    constexpr auto kLongIdle = 2000ms;
+    rig.view->setIdleRelease(kLongIdle);
     rig.view->setSource(clip.string());
     rig.click(rig.view->stageArea());
     rig.playing();
-    rig.pump.run(3 * kIdle);
+    rig.pump.run(kLongIdle + 500ms);
     TEST_CHECK(rig.state() == MediaState::Playing && !rig.view->parked());
     rig.click(rig.view->stageArea());
     TEST_CHECK(rig.state() == MediaState::Paused);
-    // A seek is use: the wait starts again.
+    // A seek is use: each one, and the settling after it, starts the wait again. Four of them take longer than one wait.
     for (int i = 0; i < 4; ++i) {
-      rig.pump.run(kIdle / 2);
+      rig.pump.run(kLongIdle / 3);
       rig.key(XKB_KEY_Right);
       TEST_CHECK(!rig.view->parked());
     }
-    TEST_CHECK(rig.until([&] { return rig.view->parked(); }, 3000ms));
+    TEST_CHECK(rig.until([&] { return rig.view->parked(); }, 10000ms));
   }
 
   void anEndedVideoParksAndPlaysFromTheStart(ViewRig& rig, const fs::path& shortClip) {
@@ -143,7 +146,7 @@ namespace {
   }
 
   // How long Play takes after a long pause on a real H.264 clip: from the click to the position moving on from where
-  // the video was parked. Printed for the record; only a hang fails.
+  // the video was parked. Printed for the record; only the position failing to move on fails.
   void timesTheResume(Scratch& scratch, ::test::SceneCapture& capture, int width, int height, int keyInterval) {
     const auto clip = scratch.path(std::format("h264-{}-{}.mp4", width, keyInterval).c_str());
     TEST_CHECK(writeH264(clip, width, height, 30, 15, keyInterval));
@@ -164,12 +167,12 @@ namespace {
     // Playing from where it stood: once it has moved a fifth of a second on, which takes that long to play.
     TEST_CHECK(rig.until([&] { return rig.view->player()->position() > parkedAt + 0.2; }));
     const double moving = since();
+    // Timing is printed for the record, not asserted: it is software decoding of 4K on whatever machine runs this.
     std::println(
         "resume of {}x{} with a key frame every {} frames, parked at {:.2f} s: playing after {:.3f} s, "
         "0.2 s further on after {:.3f} s",
         width, height, keyInterval, parkedAt, loaded, moving
     );
-    TEST_CHECK(moving < 5.0);
   }
 } // namespace
 

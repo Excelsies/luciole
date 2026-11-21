@@ -83,11 +83,13 @@ namespace {
     TEST_CHECK(rig.state() == MediaState::Playing);
     rig.key(XKB_KEY_space);
     TEST_CHECK(rig.state() == MediaState::Paused);
-    // Paused, the clock stops; only the wait that gives the pipeline back is left, and it is long.
+    // Paused, the clock stops: the nearest timer is the wait that gives the pipeline back, which lies a whole
+    // kIdleRelease ahead (a repeating clock or a seek watch would be due within a second).
     TEST_CHECK(rig.until(
         [] {
           const int due = TimerManager::instance().pollTimeoutMs();
-          return due < 0 || due > MediaView::kClockInterval.count();
+          return due > (MediaView::kIdleRelease - std::chrono::milliseconds(5000)).count()
+              && due <= MediaView::kIdleRelease.count();
         },
         std::chrono::milliseconds(2000)
     ));
