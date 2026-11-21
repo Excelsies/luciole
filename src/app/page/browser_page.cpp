@@ -1693,6 +1693,19 @@ void BrowserPage::openTargets(const std::vector<luciole::DirectoryEntry>& target
     if (m_miller.enter()) {
       m_millerFocusPending = true;
     }
+  } else if (
+      targets.size() == 1
+      && targets.front().location().isNative()
+      && !targets.front().location().isTrash()
+      && (targets.front().type == luciole::FileType::Regular || targets.front().symlink)
+  ) {
+    m_programs.open(requestFor(targets), [this, target = targets.front()] {
+      if (target.type == luciole::FileType::Regular && !target.symlink) {
+        m_launcher.open(target.location());
+      } else {
+        browser().activate(target.id);
+      }
+    });
   } else {
     std::vector<luciole::Location> files;
     for (const auto& target : targets) {
