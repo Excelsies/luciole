@@ -123,6 +123,27 @@ namespace {
     gst_sample_unref(again);
   }
 
+  // A reader that keeps every picture it is given gets only a few before the element waits for one back: the pictures
+  // are 12 MB each at 4K.
+  void handsOutOnlyAFewPictures(const fs::path& path) {
+    constexpr int kMostHeld = 5;
+    Rig rig(path);
+    TEST_CHECK(rig.paused());
+    rig.play();
+    std::vector<GstSample*> held;
+    // Each pull that comes keeps its picture; the first pull that finds nothing waiting means the element is waiting.
+    while (GstSample* sample = rig.pull(2s)) {
+      held.push_back(sample);
+      TEST_CHECK(held.size() < 32);
+    }
+    std::println("the element handed out {} pictures to a reader that kept them", held.size());
+    TEST_CHECK(held.size() >= 2);
+    TEST_CHECK(std::ssize(held) <= kMostHeld);
+    for (GstSample* sample : held) {
+      gst_sample_unref(sample);
+    }
+  }
+
   // The pictures in order, timed by the frame rate and laid out as the element says, and the end after the last: the
   // start of the file, then, past a seek, its last frames.
   void deliversEveryPictureInOrder(const fs::path& path) {
@@ -341,6 +362,7 @@ int main() {
   const auto frames = static_cast<std::uint32_t>(info.frames);
   opened->reset();
   startsAgainAfterStopping(path);
+  handsOutOnlyAFewPictures(path);
   deliversEveryPictureInOrder(path);
   picturesAreTheLibrarysPictures(path, keys, frames);
   keyFrameSeeksLandOnKeyFrames(path, keys, frames, fps);

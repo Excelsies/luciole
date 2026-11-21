@@ -112,12 +112,16 @@ namespace {
     GstElement* pipeline = pipelineOn(sample, sink, true);
     gst_element_set_state(pipeline, GST_STATE_PLAYING);
     std::vector<GstSample*> held;
-    // More than the pool holds in the element and the sink together: the pull that would be the next never comes.
-    for (int i = 0; i < 7; ++i) {
-      GstSample* picture = gst_app_sink_try_pull_sample(GST_APP_SINK(sink), 60 * GST_SECOND);
-      TEST_CHECK(picture != nullptr);
+    // The first picture takes as long as the file needs; then every pull keeps its picture until one finds nothing
+    // waiting, which is when the pool is empty and the task waits.
+    GstSample* first = gst_app_sink_try_pull_sample(GST_APP_SINK(sink), 60 * GST_SECOND);
+    TEST_CHECK(first != nullptr);
+    held.push_back(first);
+    while (GstSample* picture = gst_app_sink_try_pull_sample(GST_APP_SINK(sink), 2 * GST_SECOND)) {
       held.push_back(picture);
+      TEST_CHECK(held.size() < 32);
     }
+    TEST_CHECK(held.size() >= 2);
     std::this_thread::sleep_for(500ms); // the task is now waiting for a buffer
     auto stopped = std::async(std::launch::async, [&] { return gst_element_set_state(pipeline, GST_STATE_NULL); });
     TEST_CHECK(stopped.wait_for(20s) == std::future_status::ready);
