@@ -168,16 +168,17 @@ namespace {
     TEST_CHECK(all[7].value(BrowserPreference::WorkbenchThirdColumnWidth) == 141);
   }
 
-  // The strips pane's width is saved like the other pane sizes: 0 is the default, and 70 to 321 a chosen width.
+  // The strips pane's width is saved like the other pane sizes: 0 is the default, and 70 to 963 a chosen width: a width
+  // past what the pane holds at the system font size is drawn at that most.
   void stripsWidthIsSaved() {
     TEST_CHECK(!luciole::workbenchGeometry(WorkbenchSettings{}).strips);
     WorkbenchSettings settings;
-    for (const int width : {70, 200, 321}) {
+    for (const int width : {70, 200, 321, 450, 963}) {
       settings.stripsWidth = width;
       TEST_NEAR(luciole::workbenchGeometry(settings).strips, static_cast<double>(width), 0.0);
       TEST_CHECK(luciole::withWorkbenchGeometry({}, luciole::workbenchGeometry(settings)).stripsWidth == width);
     }
-    for (const int refused : {-1, 69, 322, 100000}) {
+    for (const int refused : {-1, 69, 964, 100000}) {
       settings.stripsWidth = refused;
       TEST_CHECK(!luciole::workbenchGeometry(settings).strips);
     }
@@ -187,8 +188,8 @@ namespace {
     TEST_CHECK(luciole::withWorkbenchGeometry({}, geometry).stripsWidth == 240);
     geometry.strips = 20;
     TEST_CHECK(luciole::withWorkbenchGeometry({}, geometry).stripsWidth == 70);
-    geometry.strips = 900;
-    TEST_CHECK(luciole::withWorkbenchGeometry({}, geometry).stripsWidth == 321);
+    geometry.strips = 2000;
+    TEST_CHECK(luciole::withWorkbenchGeometry({}, geometry).stripsWidth == 963);
     geometry.strips = std::numeric_limits<double>::quiet_NaN();
     TEST_CHECK(luciole::withWorkbenchGeometry({}, geometry).stripsWidth == 0);
     WorkbenchSettings before;

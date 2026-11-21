@@ -68,8 +68,6 @@ namespace luciole {
     LabelMetrics m_sceneMetrics; // the same, for the scene laid out in the view shrunk by the text scale
     float m_textScale = 1;
     float m_sceneScale = 1;   // the scale the part's scene was laid out at
-    float m_pendingScale = 1; // the scale of the layout a worker is making
-    bool m_awaiting = false;
     std::uint64_t m_metricsGeneration = 0;
     std::uint64_t m_metricsEpoch = 0;
     PartInputs m_inputs;

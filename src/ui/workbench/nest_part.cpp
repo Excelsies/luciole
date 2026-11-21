@@ -59,6 +59,10 @@ namespace luciole {
       }
 
       bool holdsSceneUntilReply() const override { return true; }
+      std::optional<float> shownTextScale() const override {
+        const auto& shown = m_work.shown();
+        return shown.scene != nullptr ? std::optional(shown.textScale) : std::nullopt;
+      }
 
       workbench::SceneShapes shapes(const workbench::ShapeMarks& marks) const override;
 

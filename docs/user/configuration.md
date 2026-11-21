@@ -163,7 +163,7 @@ Workbench writes these keys itself: a size when you let go of its divider, a col
 | `workbench_second_column_width` | `190` | Integer `140` through `640` |
 | `workbench_third_column_width` | `140` | Integer `140` through `640` |
 | `workbench_list_width` | `0` | `0` (none) or an integer `320` through `469`: the narrower list width a second column ahead may leave, below the default `470` |
-| `workbench_strips_width` | `0` | `0` (the default, `153`) or an integer `70` through `321`: the width of the ancestor strips pane |
+| `workbench_strips_width` | `0` | `0` (the default, `153`) or an integer `70` through `963`: the width of the ancestor strips pane, in pixels; a width past what the pane can hold at the system font size is drawn at that most |
 | `workbench_preview_size` | `100` | `70`, `80`, `90`, `100`, `110`, `125`, `150`, `175`, `200`, `250` or `300`: the size in percent of every preview's content |
 
 ### Thumbnails

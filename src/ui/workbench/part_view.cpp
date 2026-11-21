@@ -137,10 +137,6 @@ namespace luciole {
   }
 
   void PartView::partReady() {
-    if (m_awaiting) {
-      m_sceneScale = m_pendingScale;
-      m_awaiting = false;
-    }
     m_reshape = true;
     m_fresh = true;
     needFrame();
@@ -194,18 +190,15 @@ namespace luciole {
         .width = width / m_textScale,
         .height = height / m_textScale,
         .metrics = m_sceneMetrics,
+        .textScale = m_textScale,
         .metricsEpoch = m_metricsEpoch,
         .trail = m_inputs.trail,
     };
     if (m_part->layout(frame)) {
       m_sceneScale = m_textScale;
-      m_awaiting = false;
       m_reshape = true;
       m_fresh = true;
-    } else if (m_part->holdsSceneUntilReply()) {
-      m_pendingScale = m_textScale; // the scene shown stays at its own scale until the worker's reply
-      m_awaiting = true;
-    } else {
+    } else if (!m_part->holdsSceneUntilReply()) {
       m_sceneScale = m_textScale;
     }
   }
@@ -214,6 +207,10 @@ namespace luciole {
     workbench::SceneShapes scene;
     PartSnapshot shown;
     std::string note = "Loading…";
+    // A scene a worker laid out keeps the scale of the frame it was made for, whatever the view's scale is now.
+    if (!m_loading && m_part->holdsSceneUntilReply()) {
+      m_sceneScale = m_part->shownTextScale().value_or(m_sceneScale);
+    }
     // The scene lives in the view as the text scale shrinks it; zoomScene brings it to the real one.
     const float sceneWidth = m_builtWidth / m_sceneScale;
     const float sceneHeight = m_builtHeight / m_sceneScale;

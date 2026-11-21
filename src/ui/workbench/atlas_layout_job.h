@@ -27,6 +27,7 @@ namespace luciole {
     workbench::Camera camera;
     std::uint64_t cwdMoves = 0; // the part's count of folder changes when the job started
     double margin = 0;          // share of each side the scene reaches beyond the view
+    float textScale = 1;        // the frame's, which the scene is laid out for
   };
 
   // How the camera reached a new snapshot's frame.

@@ -80,6 +80,16 @@ namespace luciole {
         return false;
       }
 
+      // The scene is drawn against the view as it is now while the camera maps it; without a camera the old scene is
+      // drawn as it was laid out.
+      bool holdsSceneUntilReply() const override { return true; }
+      std::optional<float> shownTextScale() const override {
+        if (m_tree == nullptr) {
+          return std::nullopt;
+        }
+        return m_builtCamera ? m_frame.textScale : m_sceneTextScale;
+      }
+
       void connect(const std::function<void()>& /*ready*/, const std::function<void(float)>& redraw) override {
         m_redraw = redraw;
       }
@@ -339,6 +349,7 @@ namespace luciole {
             .camera = m_camera,
             .cwdMoves = m_cwdMoves,
             .margin = moving() || m_dragging ? workbench::kAtlasMarginShare : 0.0,
+            .textScale = m_frame.textScale,
         };
         if (job.adopt && m_tree != nullptr) {
           job.names = atlasNamesTo(*m_tree, m_cwd);
@@ -404,6 +415,7 @@ namespace luciole {
         m_settings = job.settings;
         m_scene = std::move(built.scene);
         m_sceneMargin = job.margin;
+        m_sceneTextScale = job.textScale;
         ++m_sceneSerial;
         m_builtCamera = job.camera;
         if (job.cwd != m_cwd) {
@@ -465,6 +477,7 @@ namespace luciole {
       std::uint64_t m_sceneSerial = 0;                // counts scenes taken
       double m_sceneMargin = 0;                       // how far beyond the view the scene reaches
       std::optional<workbench::Camera> m_builtCamera; // the scene's camera in m_cwd's frame
+      float m_sceneTextScale = 1;                     // of the frame the scene was laid out for
       NodeId m_cwd = workbench::kNoNode;
       workbench::Camera m_camera;
       std::uint64_t m_cwdMoves = 0;           // counts changes of m_cwd

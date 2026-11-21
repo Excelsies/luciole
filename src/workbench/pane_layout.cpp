@@ -317,8 +317,8 @@ namespace luciole::workbench {
   }
 
   PartLimits scaleLimits(const PartLimits& limits, double scale) {
-    if (!std::isfinite(scale) || !(scale > 0)) {
-      return limits;
+    if (!std::isfinite(scale) || !(scale > 0) || scale == 1.0) {
+      return limits; // at the default size the limits are the part's own, whole or not
     }
     const auto whole = [scale](double value) { return std::round(value * scale); };
     PartLimits out = limits;

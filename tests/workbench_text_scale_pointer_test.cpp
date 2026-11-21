@@ -8,10 +8,13 @@
 #include "workbench/shape.h"
 #include "workbench_fixture.h"
 
+#include <chrono>
 #include <cmath>
 #include <format>
+#include <glib.h>
 #include <linux/input-event-codes.h>
 #include <string>
+#include <thread>
 #include <vector>
 #include <xkbcommon/xkbcommon-keysyms.h>
 
@@ -104,6 +107,23 @@ namespace {
     release(rig, {.x = from.x + 40, .y = from.y});
   }
 
+  float pieceSize(const Rig& rig, NodeId node) {
+    const auto* piece = shapeOf(rig.view->shapeView(), node);
+    if (piece == nullptr) {
+      return -1;
+    }
+    return piece->kind == ShapeKind::Circle ? piece->circle.radius : piece->rect.width;
+  }
+
+  // The size the piece of `node` settles at, in a pane made at text scale `scale`.
+  float settledSize(WorkbenchInstrument kind, const PartInputs& inputs, NodeId node, float scale) {
+    ::test::setSystemTextScale(scale);
+    Rig rig(kind, 560, 520);
+    rig.show(inputs);
+    settle(rig, inputs);
+    return pieceSize(rig, node);
+  }
+
   // Until the worker's reply the Nest's scene stays as it was laid out, whichever frames show it.
   void fontChangeLeavesTheShownSceneUntilTheReply(WorkbenchInstrument kind) {
     ::test::setSystemTextScale(1.0F);
@@ -112,28 +132,101 @@ namespace {
     rig.show(inputs);
     settle(rig, inputs);
     const auto& view = rig.view->shapeView();
-    const auto* const before = shapeOf(view, 1);
-    TEST_CHECK(before != nullptr);
-    const auto kept = *before;
+    const float wasSize = pieceSize(rig, 1);
+    TEST_CHECK(wasSize > 0);
     ::test::setSystemTextScale(kLarge);
     const auto over = pointOf(view, 2);
     rig.frame(inputs);                               // the view takes the new scale and asks for a layout
     rig.dispatcher.pointerMotion(over.x, over.y, 1); // the hover asks to show the scene again
     rig.frame(inputs);
-    const auto* during = shapeOf(view, 1);
-    TEST_CHECK(during != nullptr);
-    // the size of the piece, not its place: the Atlas follows a new size with its camera at once
-    const float wasSize = kept.kind == ShapeKind::Circle ? kept.circle.radius : kept.rect.width;
-    const float nowSize = during->kind == ShapeKind::Circle ? during->circle.radius : during->rect.width;
+    const float nowSize = pieceSize(rig, 1);
     std::println("kind {}: piece size {:.1f} before, {:.1f} during", static_cast<int>(kind), wasSize, nowSize);
-    TEST_CHECK(during->kind == kept.kind);
     TEST_CHECK(std::abs(nowSize - wasSize) < 0.01F);
     // after the reply the scene is the one for the new scale
     rig.show(inputs);
     settle(rig, inputs);
-    const auto* after = shapeOf(view, 1);
-    TEST_CHECK(after != nullptr);
-    TEST_CHECK(std::abs((after->kind == ShapeKind::Circle ? after->circle.radius : after->rect.width) - wasSize) > 1);
+    TEST_CHECK(std::abs(pieceSize(rig, 1) - wasSize) > 1);
+  }
+
+  // The Nest keeps its scene at the scale it was laid out for, and a reply to the layout made before the font changed
+  // is shown at that scale while the layout for the new one runs. The first reply waits, undelivered, until the new
+  // layout is asked for.
+  void nestKeepsSceneScaleThroughTwoReplies() {
+    const auto inputs = inputsFor(balancedTree(), 1);
+    const float sizeA = settledSize(WorkbenchInstrument::Nest, inputs, 1, 1.0F);
+    const float sizeB = settledSize(WorkbenchInstrument::Nest, inputs, 1, kLarge);
+    TEST_CHECK(
+        std::abs(sizeA * kLarge - sizeB) > 20 && std::abs(sizeA * kLarge - sizeA) > 20
+    ); // a wrong scale stands out
+    ::test::setSystemTextScale(1.0F);
+    Rig rig(WorkbenchInstrument::Nest, 560, 520);
+    rig.frame(inputs); // the view takes scale 1 and measures its labels
+    rig.frame(inputs); // the layout for scale 1 starts on a worker
+    ::test::setSystemTextScale(kLarge);
+    rig.frame(inputs); // the view takes the new scale
+    for (int wait = 0; wait < 5000 && g_main_context_pending(nullptr) == FALSE; ++wait) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    TEST_CHECK(g_main_context_pending(nullptr) != FALSE); // the reply to the first layout is waiting
+    rig.frame(inputs);                                    // the layout for the new scale is asked for, queued behind it
+    g_main_context_iteration(nullptr, FALSE);             // the first reply, one at a time
+    rig.frame(inputs);
+    const float first = pieceSize(rig, 1);
+    std::println(
+        "after the first reply: piece {:.1f} (laid out at 1: {:.1f}, at {:.2f}: {:.1f})", first, sizeA, kLarge, sizeB
+    );
+    TEST_CHECK(std::abs(first - sizeA) < 0.5F);
+    int steady = 0;
+    for (int turn = 0; turn < 3000 && steady < 40; ++turn) {
+      g_main_context_iteration(nullptr, FALSE);
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
+      rig.frame(inputs);
+      const float size = pieceSize(rig, 1);
+      TEST_CHECK(std::abs(size - sizeA) < 0.5F || std::abs(size - sizeB) < 0.5F);
+      steady = std::abs(size - sizeB) < 0.5F ? steady + 1 : 0;
+    }
+    TEST_CHECK(steady >= 40); // the second reply shows the scene for the new scale
+  }
+
+  // The Atlas draws its scene against the view as it is at once, so its size follows the font before the reply.
+  void atlasFollowsAtOnce() {
+    const auto inputs = inputsFor(balancedTree(), 1);
+    const float sizeB = settledSize(WorkbenchInstrument::Atlas, inputs, 1, kLarge);
+    const float sizeA = settledSize(WorkbenchInstrument::Atlas, inputs, 1, 1.0F);
+    Rig rig(WorkbenchInstrument::Atlas, 560, 520);
+    ::test::setSystemTextScale(1.0F);
+    rig.show(inputs);
+    settle(rig, inputs);
+    ::test::setSystemTextScale(kLarge);
+    rig.frame(inputs);
+    const auto over = pointOf(rig.view->shapeView(), 2);
+    rig.dispatcher.pointerMotion(over.x, over.y, 1);
+    rig.frame(inputs);
+    const float during = pieceSize(rig, 1);
+    std::println("atlas piece {:.1f} at 1, {:.1f} during, {:.1f} at {:.2f}", sizeA, during, sizeB, kLarge);
+    TEST_CHECK(std::abs(during - sizeB) < std::abs(during - sizeA));
+  }
+
+  // Another folder asked for while the font changes: whether the old scene is mapped to the new view or drawn as it
+  // was laid out, it is never drawn larger than the font change makes it.
+  void atlasFolderChangeThenFontChange(NodeId folder) {
+    ::test::setSystemTextScale(1.0F);
+    const auto first = inputsFor(balancedTree(), 1);
+    Rig rig(WorkbenchInstrument::Atlas, 560, 520);
+    rig.show(first);
+    settle(rig, first);
+    const float before = pieceSize(rig, 2);
+    TEST_CHECK(before > 0);
+    const auto next = inputsFor(enteredAt(folder), 2);
+    rig.frame(next); // the layout for the other folder starts
+    ::test::setSystemTextScale(kLarge);
+    rig.frame(next);
+    const auto over = pointOf(rig.view->shapeView(), 2);
+    rig.dispatcher.pointerMotion(over.x, over.y, 1);
+    rig.frame(next);
+    const float during = pieceSize(rig, 2);
+    std::println("atlas folder {}: piece {:.1f} before, {:.1f} during", folder, before, during);
+    TEST_CHECK(during < 0 || during < before * 1.3F);
   }
 } // namespace
 
@@ -142,8 +235,12 @@ int main() {
   wheelReachesTheScenePoint();
   anchoredRequestComesBackOnTheView();
   dragMovesTheMapByTheTravel();
-  // the Nest shows its scene as laid out until the worker's reply; the Atlas draws at the new size at once
   fontChangeLeavesTheShownSceneUntilTheReply(WorkbenchInstrument::Nest);
+  nestKeepsSceneScaleThroughTwoReplies();
+  atlasFollowsAtOnce();
+  for (const NodeId folder : {1, 5, 4}) {
+    atlasFolderChangeThenFontChange(folder);
+  }
   std::println("workbench-text-scale-pointer: all checks passed");
   return 0;
 }

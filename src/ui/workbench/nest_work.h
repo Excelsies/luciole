@@ -24,6 +24,7 @@ namespace luciole {
     workbench::LayoutSettings settings;
     workbench::ColorPalette palette;
     std::shared_ptr<const workbench::NestScene> scene;
+    float textScale = 1;                                    // of the frame the scene was laid out for
     std::vector<std::vector<workbench::NestPatch>> texture; // by piece index; empty until built
   };
 

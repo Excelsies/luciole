@@ -36,7 +36,7 @@ namespace luciole::workbench {
   // The most bands the widest pane shows: thirteen named ones fit it without folding.
   inline constexpr std::size_t kMaxStrips = 13;
   static_assert(stripBandsWidth(kMaxStrips) <= kStripsMaxWidth && stripBandsWidth(kMaxStrips + 1) > kStripsMaxWidth);
-  static_assert(kStripsMinWidth == kMinWorkbenchStripsWidth && kStripsMaxWidth == kMaxWorkbenchStripsWidth);
+  static_assert(kStripsMinWidth == kMinWorkbenchStripsWidth && kStripsMaxWidth * 3 == kMaxWorkbenchStripsWidth);
 
   inline constexpr std::size_t kColumnsAhead = 3;
   inline constexpr std::array<double, kColumnsAhead> kDefaultColumnWidths{260, 190, 140};
@@ -161,7 +161,8 @@ namespace luciole::workbench {
   // rounded and held within 70 to 321, and narrower where the list would fall under `listMin`, down to 70.
   double stripsPaneWidth(std::optional<double> width, double viewWidth, double listMin, double textScale = 1);
 
-  // A saved strip pane width: rounded when it is from 70 to 321 after rounding, else none, the default.
+  // A saved strip pane width: rounded when it is from 70 to kMaxWorkbenchStripsWidth (321 at the largest text scale)
+  // after rounding, else none, the default. What the pane draws is held to its range at the text scale.
   std::optional<double> normalizeStripsWidth(std::optional<double> width);
 
   // The strip pane width a drag or a key asks for, rounded and held within 70 and `max`, itself at most 321; a `max`

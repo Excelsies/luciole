@@ -92,9 +92,6 @@ namespace luciole {
 
   private:
     void fitHeights(Renderer& renderer);
-    int m_listIcon = 0;
-    float m_rowHeight = 0;
-    float m_headerHeight = 0;
     class Adapter;
     friend class Adapter;
 
@@ -112,6 +109,9 @@ namespace luciole {
     QuietNotice m_notice = QuietNotice::None;
     bool m_blank = true;
     float m_textSize;
+    int m_listIcon = 0;
+    float m_rowHeight = 0;
+    float m_headerHeight = 0;
     std::optional<EntryId> m_hovered;
     std::size_t m_hoveredIndex = 0;
     Label* m_title = nullptr;

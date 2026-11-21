@@ -116,7 +116,7 @@ namespace luciole::workbench {
       return std::nullopt;
     }
     const double rounded = roundWidth(*width);
-    if (rounded < kStripsMinWidth || rounded > kStripsMaxWidth) {
+    if (rounded < kStripsMinWidth || rounded > kMaxWorkbenchStripsWidth) {
       return std::nullopt;
     }
     return rounded;

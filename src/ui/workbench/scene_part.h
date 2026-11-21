@@ -93,6 +93,7 @@ namespace luciole {
     double width = 0;
     double height = 0;
     LabelMetrics metrics;
+    float textScale = 1;            // the system font's scale the scene is laid out for, in view size over `width`
     std::uint64_t metricsEpoch = 0; // changes whenever `metrics` is measured again
     PartTrail trail{};
   };
@@ -120,6 +121,8 @@ namespace luciole {
     // True when a layout that finishes on a worker leaves shapes() drawing the earlier scene as it was laid out, until
     // the reply; false when shapes() already draws at the size of the frame given.
     virtual bool holdsSceneUntilReply() const { return false; }
+    // For such a part, the text scale of the frame the scene shapes() draws was laid out for; none before the first.
+    virtual std::optional<float> shownTextScale() const { return std::nullopt; }
     // Shapes of the last finished layout with `marks`, in view coordinates; empty before the first.
     virtual workbench::SceneShapes shapes(const workbench::ShapeMarks& marks) const = 0;
     // The snapshot of the last finished layout, whose node ids the shapes, the wheel and the keys use; empty before

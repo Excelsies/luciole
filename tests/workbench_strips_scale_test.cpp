@@ -88,6 +88,31 @@ namespace {
       }
     }
   }
+  // A width past the pane's range at the text size is kept as saved and drawn at the most: 450 at 1.52, 321 at 1.
+  void aWideSavedWidth(double scale) {
+    const auto plan = planAt(scale, 450);
+    TEST_CHECK(plan.stripsWidth == std::min(450.0, plan.stripsCeiling));
+    const auto drag = startStripsDrag(plan, 450);
+    TEST_CHECK(drag.wanted == plan.stripsWidth);
+    const auto next = dragStrips(drag, drag.startX - 10);
+    TEST_CHECK(next && *next == plan.stripsWidth - 10);
+    TEST_CHECK(normalizeStripsWidth(450) == 450.0);
+    if (scale > 1.0) {
+      // dragged to 450 and saved, the pane draws 450 and keeps it
+      const auto wide = dragStrips(drag, drag.startX + 5000);
+      const auto set = resizeStrips(450, plan.stripsMax, plan.stripsMin, plan.stripsCeiling);
+      TEST_CHECK(wide && *wide >= 450 && set == 450.0 && planAt(scale, set).stripsWidth == 450);
+    }
+  }
+
+  // At the default size the limits are the part's own, fractional or not.
+  void limitsAtTheDefaultSizeAreUntouched() {
+    PartLimits limits;
+    limits.ribbon.minHeight = 76.5;
+    limits.ribbon.preferredHeight = 160.25;
+    limits.instrument.minWidth = 240.4;
+    TEST_CHECK(scaleLimits(limits, 1.0) == limits);
+  }
 } // namespace
 
 int main() {
@@ -96,6 +121,8 @@ int main() {
     keysReachBothEndsWithoutDeadPresses(scale);
     aSavedWidthOutsideTheRangeStartsFromTheDrawnOne(scale);
     theCenterKeepsTheList(scale);
+    aWideSavedWidth(scale);
   }
+  limitsAtTheDefaultSizeAreUntouched();
   return 0;
 }

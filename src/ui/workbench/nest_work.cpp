@@ -167,6 +167,7 @@ namespace luciole {
         .settings = reply.frame.settings,
         .palette = reply.frame.palette,
         .scene = std::move(reply.scene),
+        .textScale = reply.frame.textScale,
         .texture = std::move(reply.texture),
     };
     if (!reply.textured) {
