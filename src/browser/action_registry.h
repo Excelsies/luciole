@@ -7,6 +7,7 @@
 #include <functional>
 #include <optional>
 #include <span>
+#include <string>
 #include <string_view>
 #include <utility>
 
@@ -138,6 +139,16 @@ namespace luciole {
     std::string_view reason;
     int checked = -1;
   };
+  // What Open decides on for one file: whether it shows the archive browser. A page's listing row gives it with
+  // archiveFacts(); a file the page's listing does not hold, a column ahead's row or a shape, supplies its own.
+  struct ArchiveFacts {
+    Location location;
+    FileType type = FileType::Unknown;
+    bool symlink = false;
+    std::optional<bool> readable; // unknown reads as readable
+    std::string mime;
+  };
+
   // Runs after the scope checks in ActionRegistry::state(); nullptr means always enabled.
   using ActionRule = ActionState (*)(const ActionContext& context, const ActionRequest& request);
   struct ActionDefinition {
@@ -173,5 +184,11 @@ namespace luciole {
     // The action Open performs: Browse Archive for one browsable archive, otherwise Open. Running jobs do not change
     // the choice; state() still refuses Browse Archive meanwhile.
     static BrowserAction openAction(const ActionContext& context, const ActionRequest& request);
+    static ArchiveFacts archiveFacts(const DirectoryEntry& entry);
+    // One readable native regular file that Browse Archive and Extract accept: the rule openAction() applies to a row.
+    static bool browsableFile(const ArchiveFacts& file);
+    // What Browse Archive says of one file: running jobs and an unreadable or unsupported file refuse it, with the
+    // reason the action gives for a row.
+    static ActionState browseArchiveState(bool operationsBusy, const ArchiveFacts& file);
   };
 } // namespace luciole

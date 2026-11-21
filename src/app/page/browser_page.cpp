@@ -122,7 +122,17 @@ BrowserPage::BrowserPage(
       m_settingsController(*this, m_preferences, m_thumbnails, m_visits, [this] { m_thumbnails.clearCache(); }),
       m_workbench(
           *this, m_menuController, m_previewController, m_listAdapter, m_icons, m_visits, m_preferences,
-          {.launch = [this](const luciole::Location& location) { launch(location); },
+          {.launch = [this](const luciole::Location& location) { m_launcher.open(location); },
+           .browseArchive =
+               [this](const luciole::ArchiveFacts& archive) {
+                 const auto state = luciole::ActionRegistry::browseArchiveState(operationsBusy(), archive);
+                 if (!state.enabled) {
+                   actionError(std::string(state.reason));
+                   return;
+                 }
+                 m_statusBar.clearMessage();
+                 m_archiveController.browse(archive.location);
+               },
            .modifiers = [this] { return m_connection.keyboardModifiers(); },
            .editing = [this] { return m_locationBar.textFocused() || editorFocused(); }}
       ),

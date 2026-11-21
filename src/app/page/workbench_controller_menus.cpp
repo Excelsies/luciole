@@ -52,8 +52,8 @@ void WorkbenchController::contextMenu(const luciole::WorkbenchContextRequest& re
           openInNewTab(location, 0);
         } else if (isFolder) {
           m_page.browser().open(location);
-        } else if (m_hooks.launch) {
-          m_hooks.launch(location);
+        } else {
+          openFile(location);
         }
       },
       {request.sceneX, request.sceneY, 1, 1}

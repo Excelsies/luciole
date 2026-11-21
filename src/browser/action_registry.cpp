@@ -166,14 +166,15 @@ namespace {
   // One readable native regular archive: what Browse Archive and Extract accept, regardless of running jobs.
   bool browsableArchive(const C& c, const R& r) {
     return single(r) && all(c, r, [](const DirectoryEntry& entry) {
-             return entry.type == FileType::Regular
-                 && !entry.symlink
-                 && entry.location().nativePath().has_value()
-                 && entry.access.read.value_or(true)
-                 && luciole::isSupportedArchive(entry.location(), entry.contentType.value_or(""));
+             return luciole::ActionRegistry::browsableFile(luciole::ActionRegistry::archiveFacts(entry));
            });
   }
   State archive(const C& c, const R& r, bool compress) {
+    if (!compress && single(r)) {
+      return luciole::ActionRegistry::browseArchiveState(
+          c.operationsBusy, luciole::ActionRegistry::archiveFacts(*c.model.entry(r.targets.front().id))
+      );
+    }
     if (c.operationsBusy) {
       return unavailable("Another file operation is still finishing.");
     }
@@ -644,6 +645,34 @@ bool luciole::ActionRegistry::current(const ActionContext& context, const Action
            return context.model.location(target.id) == target.location && context.model.visible(target.id);
          });
 }
+luciole::ArchiveFacts luciole::ActionRegistry::archiveFacts(const DirectoryEntry& entry) {
+  return {
+      .location = entry.location(),
+      .type = entry.type,
+      .symlink = entry.symlink,
+      .readable = entry.access.read,
+      .mime = std::string(entry.contentType.value_or(""))
+  };
+}
+
+bool luciole::ActionRegistry::browsableFile(const ArchiveFacts& file) {
+  return file.type == FileType::Regular
+      && !file.symlink
+      && file.location.nativePath().has_value()
+      && file.readable.value_or(true)
+      && isSupportedArchive(file.location, file.mime);
+}
+
+luciole::ActionState luciole::ActionRegistry::browseArchiveState(bool operationsBusy, const ArchiveFacts& file) {
+  if (operationsBusy) {
+    return unavailable("Another file operation is still finishing.");
+  }
+  if (!file.location.nativePath().has_value() || !file.readable.value_or(true)) {
+    return unavailable("Archives require readable native items.");
+  }
+  return require(browsableFile(file), "Select one ZIP or TAR archive.");
+}
+
 luciole::BrowserAction luciole::ActionRegistry::openAction(const ActionContext& context, const ActionRequest& request) {
   return !context.chooser && current(context, request, ActionScope::Targets) && browsableArchive(context, request)
       ? A::BrowseArchive

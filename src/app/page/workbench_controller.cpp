@@ -2,6 +2,7 @@
 
 #include "app/page/page_context.h"
 #include "app/page/preview_controller.h"
+#include "app/page/workbench_open.h"
 #include "app/page/workbench_preview.h"
 #include "app/page/workbench_session.h"
 #include "app/workspace_command.h"
@@ -117,7 +118,7 @@ void WorkbenchController::mount() {
       m_session->previewSlot(), m_services->previewWorkers(), luciole::MediaPlayer::available(),
       luciole::WorkbenchPreview::Hooks{
           .frameNeeded = [this] { frameNeeded(); },
-          .open = [this](const luciole::DirectoryEntry& entry) { m_hooks.launch(entry.location()); },
+          .open = [this](const luciole::DirectoryEntry& entry) { openFile(entry.location()); },
           .overlay = [this](const auto& placement, float textSize) { overlay(placement, textSize); },
           .previewSizeChosen =
               [this](int percent) {
@@ -168,8 +169,8 @@ void WorkbenchController::wire() {
   view.onGo = [this](const luciole::WorkbenchEntryRequest& request) { go(request); };
   view.onSelect = [this](const luciole::WorkbenchEntryRequest& request) { select(request); };
   view.onActivate = [this](const luciole::WorkbenchEntryRequest& request) {
-    if (request.button != BTN_MIDDLE && m_hooks.launch) {
-      m_hooks.launch(request.location);
+    if (request.button != BTN_MIDDLE) {
+      openFile(request.location);
     }
   };
   view.onContextMenu = [this](const luciole::WorkbenchContextRequest& request) { contextMenu(request); };
@@ -422,6 +423,21 @@ void WorkbenchController::restAt() {
     m_restDeadline.reset();
     frameNeeded();
   });
+}
+
+void WorkbenchController::openFile(const luciole::Location& location) {
+  std::vector<const luciole::DirectoryModel*> models{&m_page.browser().model()};
+  if (m_session) {
+    for (std::size_t column = 0; column < m_session->lookahead().count(); ++column) {
+      models.push_back(&m_session->lookahead().model(column));
+    }
+  }
+  luciole::openWorkbenchFile(
+      location, models, m_page.choosing(),
+      {.visited = [this](const luciole::Location& visited) { recordVisit(visited); },
+       .launch = m_hooks.launch,
+       .browseArchive = m_hooks.browseArchive}
+  );
 }
 
 bool WorkbenchController::inDrive(const luciole::Location& root) const {

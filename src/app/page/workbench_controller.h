@@ -2,6 +2,7 @@
 
 #include "app/page/preview_edit_page.h"
 #include "app/page/workbench_session.h"
+#include "browser/action_registry.h"
 #include "browser/directory_model.h"
 #include "config/settings.h"
 #include "core/timer_manager.h"
@@ -44,10 +45,11 @@ class PreviewController;
 // file a column previews.
 class WorkbenchController {
 public:
-  // What only the page can do: open a file the way its launcher does, read the keyboard modifiers, and tell whether
-  // one of its text fields has focus. All are required.
+  // What only the page can do: hand a file to its program, show the archive browser, read the keyboard modifiers, and
+  // tell whether one of its text fields has focus. All are required.
   struct Hooks {
     std::function<void(const luciole::Location&)> launch;
+    std::function<void(const luciole::ArchiveFacts&)> browseArchive;
     std::function<std::uint32_t()> modifiers;
     std::function<bool()> editing;
   };
@@ -99,6 +101,8 @@ public:
   // The Workbench shows or reads something inside the drive at `root`: a listing ahead, the previewed file, or the
   // page's walks. The page then leaves the drive, as it does when its own folder is inside it.
   bool inDrive(const luciole::Location& root) const;
+  // Opens a file of the view as Open does in the list: an archive shows the archive browser, else its program.
+  void openFile(const luciole::Location& location);
   // The editor holds unsaved changes to a file of the drive at `root`.
   bool unsavedIn(const luciole::Location& root);
   // The drive at `root` is being removed: its walks, listings ahead and previewed file go.

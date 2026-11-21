@@ -106,7 +106,7 @@ Each instrument and ribbon is one batched shape node plus a bounded pool of text
 
 `ViewMode::Workbench` is a fourth mode with its own action and shortcut. `WorkbenchController` owns the pane shell and the parts, adopts the page's existing file pane as the center list, and keeps `browser()` pointing at the list's controller. Columns ahead are read-only controllers that follow the cursor or a resting pointer and never become the active browser. The docked preview pane is not shown in this mode: previews live in the columns ahead.
 
-A click on a folder piece in an instrument or a ribbon enters that folder, and a click on a file piece selects it, whatever the activation setting says. The list, the columns ahead and Jump ahead follow the activation setting.
+Opening a file from a column ahead, a piece, the preview's Open button or the menu of an entry outside the list goes through `openWorkbenchFile`: it records the visit, then shows the archive browser for one browsable archive, by the rule `ActionRegistry::browsableFile` that `Open` applies to a list row (and with its refusal while a file job runs), and otherwise launches the file. The facts come from the row of the page's listing or of a column ahead, else from the file itself. A click on a folder piece in an instrument or a ribbon enters that folder, and a click on a file piece selects it, whatever the activation setting says. The list, the columns ahead and Jump ahead follow the activation setting.
 
 ### Ancestor strips
 
