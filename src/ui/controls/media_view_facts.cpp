@@ -30,9 +30,9 @@ void MediaView::factsArrived(std::optional<luciole::MediaFacts> facts) {
   if (facts) {
     facts->seconds = facts->seconds > 0 ? facts->seconds : m_facts.seconds;
     m_facts = *facts;
-    refreshControls();
-    if (onFactsChanged) {
-      onFactsChanged();
-    }
+  }
+  refreshControls(); // also clears "still reading" when the retry ends with nothing
+  if (facts && onFactsChanged) {
+    onFactsChanged();
   }
 }

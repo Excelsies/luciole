@@ -53,6 +53,21 @@ namespace {
     TEST_CHECK(!rig.view->detailsUnread() && rig.view->messageLabel().text().empty());
   }
 
+  // The first read times out and the retry ends with nothing and no timeout, as when the file is no media after all:
+  // the message about reading goes, and the view shows what it shows for any file that is not media.
+  void aRetryThatEndsWithNothingClearsTheMessage(::test::SceneCapture& capture, const fs::path& garbage) {
+    ViewRig rig(capture);
+    rig.view->setProbeLimits(milliseconds(0), luciole::MediaProbe::kRetryLimit);
+    rig.view->setSource(garbage.string());
+    TEST_CHECK(rig.until([&] {
+      return rig.view->messageLabel().visible() && rig.view->messageLabel().text() == kReading;
+    }));
+    TEST_CHECK(rig.until([] { return !luciole::MediaProbe::readsPending(); }));
+    TEST_CHECK(rig.until([&] { return !rig.view->messageLabel().visible(); }));
+    TEST_CHECK(rig.view->messageLabel().text().empty() && !rig.view->detailsUnread());
+    TEST_CHECK(!rig.view->facts().audio && !rig.view->facts().video);
+  }
+
   // Not a media file: the read ends at once, says nothing and is not repeated.
   void aTextFileIsNotMediaAndIsNotRetried(::test::SceneCapture& capture, const fs::path& text) {
     ViewRig rig(capture);
@@ -89,10 +104,13 @@ int main() {
   }
   const auto tone = scratch.path("tone.wav");
   const auto text = scratch.path("notes.txt");
+  const auto garbage = scratch.path("garbage.wav");
   writeTone(tone, 2);
+  TEST_CHECK((std::ofstream(garbage) << "this is no sound\n").good());
   TEST_CHECK((std::ofstream(text) << "just some words\n").good());
   aTimeoutIsTriedOnceMoreAndTheFactsArrive(*capture, tone);
   aSourceThatNeverAnswersEndsInAMessage(*capture, tone);
+  aRetryThatEndsWithNothingClearsTheMessage(*capture, garbage);
   aTextFileIsNotMediaAndIsNotRetried(*capture, text);
   std::println("media-view-facts: all checks passed");
   return 0;

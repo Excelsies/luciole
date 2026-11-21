@@ -173,7 +173,9 @@ namespace luciole::workbench {
       return kStripsMinWidth; // the least pane, which the band widths can make wider than 70 times the scale
     }
     // the least saved width that draws `drawn` or more, so a pane held at its greatest is saved as the least that does
-    return clampLow(std::ceil((drawn - 0.5) / scale - 1e-9), kStripsMinWidth, kStripsMaxWidth);
+    // rounding noise here is about 6e-14, and a real non-tie at a float scale is at least about 4e-8 from an integer
+    constexpr double kTieSlack = 1e-9;
+    return clampLow(std::ceil((drawn - 0.5) / scale - kTieSlack), kStripsMinWidth, kStripsMaxWidth);
   }
 
   std::optional<double> dragStrips(const StripsDrag& drag, double pointerX) {
