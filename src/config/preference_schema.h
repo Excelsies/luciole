@@ -401,7 +401,7 @@ namespace luciole::preference_schema {
       describe(
           P::WorkbenchStripsWidth, "workbench_strips_width", [](S& s) -> auto& { return s.workbench.stripsWidth; },
           {zeroOrBetween<luciole::kMinWorkbenchStripsWidth, luciole::kMaxWorkbenchStripsWidth>,
-           "expected 0 (the default) or an integer width from 70 to 963"}
+           "expected 0 (the default) or an integer width from 70 to 321"}
       ),
       describe(
           P::WorkbenchPreviewSize, "workbench_preview_size", [](S& s) -> auto& { return s.workbench.previewSize; },

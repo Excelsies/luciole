@@ -36,7 +36,7 @@ namespace luciole::workbench {
   // The most bands the widest pane shows: thirteen named ones fit it without folding.
   inline constexpr std::size_t kMaxStrips = 13;
   static_assert(stripBandsWidth(kMaxStrips) <= kStripsMaxWidth && stripBandsWidth(kMaxStrips + 1) > kStripsMaxWidth);
-  static_assert(kStripsMinWidth == kMinWorkbenchStripsWidth && kStripsMaxWidth * 3 == kMaxWorkbenchStripsWidth);
+  static_assert(kStripsMinWidth == kMinWorkbenchStripsWidth && kStripsMaxWidth == kMaxWorkbenchStripsWidth);
 
   inline constexpr std::size_t kColumnsAhead = 3;
   inline constexpr std::array<double, kColumnsAhead> kDefaultColumnWidths{260, 190, 140};
@@ -101,7 +101,8 @@ namespace luciole::workbench {
     double stripsDefault = 0; // the pane's default width at the plan's text scale; 0 without strips
     double stripsMin = 0;     // the pane's least width at that scale; 0 without strips
     double stripsCeiling = 0; // the pane's greatest width at that scale, whatever the room; 0 without strips
-    double spare = 0;         // what the list can still give up before it reaches its minimum
+    double textScale = 1;
+    double spare = 0; // what the list can still give up before it reaches its minimum
   };
 
   // Captured once at pointer down; every frame of the drag reads only this.
@@ -123,6 +124,7 @@ namespace luciole::workbench {
     double wanted = 0; // the saved width, or the default without one, held to the range: where a key step starts
     double min = kStripsMinWidth; // the pane's range at the plan's text scale
     double ceiling = kStripsMaxWidth;
+    double scale = 1; // the plan's text scale: a saved width times it is the drawn one
   };
 
   // What the three columns show: `file` alone when a file is the subject, else folders in a, b and c, where b or
@@ -157,12 +159,15 @@ namespace luciole::workbench {
   // The pane's least width at a text scale; kStripsMinWidth at 1. A scale that is not finite and positive reads as 1.
   double stripsMinWidthAt(double textScale);
 
+  // The width to save for a drawn pane `drawn` px wide at `textScale`: in pixels at the default size, from 70 to 321.
+  double savedStripsWidth(double drawn, double textScale);
+
   // The strip pane's width in a center `viewWidth` px wide: `width`, or the default when it is none or not finite,
   // rounded and held within 70 to 321, and narrower where the list would fall under `listMin`, down to 70.
   double stripsPaneWidth(std::optional<double> width, double viewWidth, double listMin, double textScale = 1);
 
-  // A saved strip pane width: rounded when it is from 70 to kMaxWorkbenchStripsWidth (321 at the largest text scale)
-  // after rounding, else none, the default. What the pane draws is held to its range at the text scale.
+  // A saved strip pane width: rounded when it is from 70 to 321 after rounding, else none, the default. It is in
+  // pixels at the default text size, and the pane draws it times the text scale, held to its range at that scale.
   std::optional<double> normalizeStripsWidth(std::optional<double> width);
 
   // The strip pane width a drag or a key asks for, rounded and held within 70 and `max`, itself at most 321; a `max`

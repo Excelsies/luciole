@@ -58,6 +58,7 @@ namespace luciole {
     void show();
     void request(const PartRequest& request);
     void react(const PartReaction& reaction);
+    float partScale() const;
     void needFrame();
     // The part asks to show its shapes again.
     void redraw(float transitionMs);
@@ -67,7 +68,7 @@ namespace luciole {
     LabelMetrics m_metrics;      // advances at the real text size
     LabelMetrics m_sceneMetrics; // the same, for the scene laid out in the view shrunk by the text scale
     float m_textScale = 1;
-    float m_sceneScale = 1;   // the scale the part's scene was laid out at
+    float m_sceneScale = 1; // the scale the part's scene was laid out at
     std::uint64_t m_metricsGeneration = 0;
     std::uint64_t m_metricsEpoch = 0;
     PartInputs m_inputs;

@@ -173,12 +173,12 @@ namespace {
   void stripsWidthIsSaved() {
     TEST_CHECK(!luciole::workbenchGeometry(WorkbenchSettings{}).strips);
     WorkbenchSettings settings;
-    for (const int width : {70, 200, 321, 450, 963}) {
+    for (const int width : {70, 200, 321}) {
       settings.stripsWidth = width;
       TEST_NEAR(luciole::workbenchGeometry(settings).strips, static_cast<double>(width), 0.0);
       TEST_CHECK(luciole::withWorkbenchGeometry({}, luciole::workbenchGeometry(settings)).stripsWidth == width);
     }
-    for (const int refused : {-1, 69, 964, 100000}) {
+    for (const int refused : {-1, 69, 322, 100000}) {
       settings.stripsWidth = refused;
       TEST_CHECK(!luciole::workbenchGeometry(settings).strips);
     }
@@ -188,8 +188,8 @@ namespace {
     TEST_CHECK(luciole::withWorkbenchGeometry({}, geometry).stripsWidth == 240);
     geometry.strips = 20;
     TEST_CHECK(luciole::withWorkbenchGeometry({}, geometry).stripsWidth == 70);
-    geometry.strips = 2000;
-    TEST_CHECK(luciole::withWorkbenchGeometry({}, geometry).stripsWidth == 963);
+    geometry.strips = 900;
+    TEST_CHECK(luciole::withWorkbenchGeometry({}, geometry).stripsWidth == 321);
     geometry.strips = std::numeric_limits<double>::quiet_NaN();
     TEST_CHECK(luciole::withWorkbenchGeometry({}, geometry).stripsWidth == 0);
     WorkbenchSettings before;

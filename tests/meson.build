@@ -138,6 +138,7 @@ test_table = [
   {'name': 'kept-snapshots', 'deps': [ui_dep], 'env': gio_env},
   {'name': 'folder-trail', 'deps': [ui_dep], 'env': gio_env},
   {'name': 'workbench-view', 'deps': [ui_dep, event_loop_dep], 'timeout': 120, 'env': gio_env},
+  {'name': 'workbench-row-zoom', 'deps': [ui_dep, event_loop_dep], 'timeout': 120, 'env': gio_env},
   {'name': 'workbench-view-layout', 'deps': [ui_dep, event_loop_dep], 'timeout': 120, 'env': gio_env},
   {'name': 'workbench-view-links', 'deps': [ui_dep, event_loop_dep], 'timeout': 120, 'env': gio_env},
   {'name': 'workbench-strips-pane', 'deps': [ui_dep, event_loop_dep], 'timeout': 120, 'env': gio_env},

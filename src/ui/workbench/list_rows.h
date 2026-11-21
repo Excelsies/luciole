@@ -29,7 +29,7 @@ namespace luciole {
   float quietTextSize(float listTextSize, std::size_t column);
 
   // The icon of a row of column `column` ahead beside a list whose rows use `listIcon` px icons (0 for the default,
-  // which gives the columns' own sizes): the column's size in the list's proportion, at most 40 px.
+  // which gives the columns' own sizes): the column's size in the list's proportion, in whole pixels.
   float quietIconSize(int listIcon, std::size_t column);
   // The height a row of column `column` takes for that icon: its own height at the default, moving with the icon.
   float quietRowHeight(int listIcon, std::size_t column);

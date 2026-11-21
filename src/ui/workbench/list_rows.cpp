@@ -23,7 +23,6 @@ namespace {
   constexpr std::size_t kQuietColumns = luciole::workbench::kColumnsAhead;
   constexpr float kListTextMin = 6;
   constexpr float kListTextMax = 96;
-  constexpr float kMaxQuietIcon = 40;
   constexpr float kBelowList = 1; // the most a column's text may reach is this far under the list's
 
   constexpr std::array<float, kQuietColumns> kIconSizes{16, 14, 12};
@@ -69,7 +68,7 @@ namespace {
 
 float luciole::quietIconSize(int listIcon, std::size_t column) {
   const float ratio = fileRowIconSize(listIcon) / static_cast<float>(kDefaultListIconSize);
-  return std::min(kMaxQuietIcon, kIconSizes[metricsColumn(column)] * ratio);
+  return std::round(kIconSizes[metricsColumn(column)] * ratio);
 }
 
 float luciole::quietRowHeight(int listIcon, std::size_t column) {

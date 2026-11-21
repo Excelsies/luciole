@@ -40,6 +40,14 @@ namespace {
     }
   }
 
+  // The icons of the columns ahead beside a list of icons `listIcon` px (0 is the default 32), in whole pixels: 16, 14
+  // and 12 at the default, in proportion to the list's.
+  float columnIcon(int listIcon, std::size_t column) {
+    const std::array<std::array<float, 3>, 4> table{{{8, 7, 6}, {16, 14, 12}, {20, 18, 15}, {32, 28, 24}}};
+    const std::size_t step = listIcon == 16 ? 0 : listIcon == 0 ? 1 : listIcon == 40 ? 2 : 3;
+    return table.at(step).at(column);
+  }
+
   void jumpRowsFit(::test::SceneCapture& capture, int listIcon) {
     JumpListView list;
     list.setListIconSize(listIcon);
@@ -60,8 +68,7 @@ namespace {
     TEST_CHECK(tiles.size() == 4);
     // the rows hold two lines and move with the list's icon: 38 at the default, 6 px less at 16, 16 more at 64
     const float line = capture.lineHeight(Style::fontSizeCaption) + capture.lineHeight(Style::fontSizeMini);
-    const float icon = listIcon == 0 ? 32.0F : static_cast<float>(listIcon);
-    const float want = std::max(38.0F + (icon - 32.0F) / 2, std::ceil(line + 6));
+    const float want = std::max(38.0F + columnIcon(listIcon, 0) - 16.0F, std::ceil(line + 6));
     std::println("  jump row {} px, wanted {} px at icon {}", tiles[0]->height(), want, listIcon);
     TEST_CHECK(std::abs(tiles[0]->height() - want) < 1.0F);
     for (const auto* tile : tiles) {
@@ -84,8 +91,7 @@ namespace {
       const float line = capture.lineHeight(size);
       std::println("  column {} row {} px for a {} px line", column, view.rowHeight(), line);
       // the icon is the column's own size in the list's proportion; its row is 10 px taller
-      const float ratio = (listIcon == 0 ? 32.0F : static_cast<float>(listIcon)) / 32.0F;
-      const float icon = std::min(40.0F, std::array{16.0F, 14.0F, 12.0F}[column] * ratio);
+      const float icon = columnIcon(listIcon, column);
       TEST_CHECK(quietIconSize(listIcon, column) == icon);
       TEST_CHECK(view.rowHeight() == std::max(10 + icon, std::ceil(line + 3)));
       TEST_CHECK(view.rowHeight() >= line + 2);
@@ -119,7 +125,6 @@ int main() {
       jumpRowsFit(*capture, listIcon);
       quietRowsFit(*capture, listIcon);
     }
-    TEST_CHECK(quietIconSize(1000, 0) == 40); // the icon of a column ahead stops at 40 px
   }
   std::println("workbench-rows-text-scale: all checks passed");
   return 0;

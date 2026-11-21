@@ -203,7 +203,7 @@ The toolkit multiplies every text size by the system font's size over the 14 px 
 
 ## Row size
 
-The list's icon size is List view's setting, one for both modes. Ctrl+wheel over the list, a column ahead or Jump ahead, and Ctrl+Plus, Ctrl+Minus and Ctrl+0 outside a text edit, change its step in Workbench as in List view. The columns ahead take the icon of their own default size in the proportion of the list's to its default (16, 14 and 12 px at the default, at most 40), and their rows move with the icon by the same amount; Jump ahead rows, which hold no icon, move as column A's do. Each row is at least as tall as its text needs at the system font size, so the two compose.
+The list's icon size is List view's setting, one for both modes. Ctrl+wheel over the list, a column ahead or Jump ahead, and Ctrl+Plus, Ctrl+Minus and Ctrl+0 outside a text edit, change its step in Workbench as in List view. The columns ahead take the icon of their own default size in the proportion of the list's to its default (16, 14 and 12 px at the default, in whole pixels), and their rows move with the icon by the same amount; Jump ahead rows, which hold no icon, are 12 px taller than column A's rows and move by the same amount. Each row is at least as tall as its text needs at the system font size, so the two compose.
 
 ## Verification
 

@@ -21,13 +21,11 @@
 #include "ui/controls/virtual_grid_view.h"
 #include "ui/palette.h"
 #include "ui/style.h"
-#include "ui/workbench/jump_list_view.h"
 #include "ui/workbench/pane_shell.h"
-#include "ui/workbench/quiet_column_view.h"
+#include "ui/workbench/row_zoom.h"
 #include "ui/workbench/workbench_chrome.h"
 #include "ui/workbench/workbench_preferences.h"
 #include "wayland/wayland_seat.h"
-#include "workbench/column_plan.h"
 #include "workbench/pane_layout.h"
 
 #include <algorithm>
@@ -315,39 +313,17 @@ bool WorkbenchController::previewWheel(const PointerEvent& event, float x, float
 
 void WorkbenchController::setListIconSize(int size) {
   m_listIcon = size;
-  if (!m_session) {
-    return;
+  if (m_session) {
+    luciole::setRowListIconSize(m_session->view(), size);
   }
-  auto& view = m_session->view();
-  for (std::size_t slot = 0; slot < luciole::workbench::kColumnsAhead; ++slot) {
-    view.column(slot).setListIconSize(size);
-  }
-  view.jumpList().setListIconSize(size);
 }
 
 bool WorkbenchController::overRowList(float x, float y) const {
   if (!m_session) {
     return false;
   }
-  const auto over = [x, y](const Node& node) {
-    for (const Node* up = &node; up != nullptr; up = up->parent()) {
-      if (!up->visible()) {
-        return false;
-      }
-    }
-    return node.containsScenePoint(x, y);
-  };
   const auto* list = m_page.fileList();
-  if (list != nullptr && m_session->shows(*list) && over(*list)) {
-    return true;
-  }
-  auto& view = m_session->view();
-  for (std::size_t slot = 0; slot < luciole::workbench::kColumnsAhead; ++slot) {
-    if (over(view.column(slot))) {
-      return true;
-    }
-  }
-  return over(view.jumpList());
+  return luciole::overRowList(m_session->view(), list != nullptr && m_session->shows(*list) ? list : nullptr, x, y);
 }
 
 void WorkbenchController::pointerLeft() { pointList(std::nullopt); }

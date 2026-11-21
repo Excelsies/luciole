@@ -51,10 +51,10 @@ namespace luciole {
   // A remembered Workbench list width is narrower than the 470 pixels the list keeps by default.
   inline constexpr int kMinWorkbenchListWidth = 320;
   inline constexpr int kMaxWorkbenchListWidth = 469;
-  // The Workbench ancestor strips pane holds one to twelve named bands beside the "+N levels" band: 70 to 321 px at
-  // the default text size. A saved width is in pixels, so the most is 321 at the largest text scale, 3.
+  // The Workbench ancestor strips pane holds one to twelve named bands beside the "+N levels" band. A saved width is
+  // in pixels at the default text size; the pane draws it times the text scale.
   inline constexpr int kMinWorkbenchStripsWidth = 70;
-  inline constexpr int kMaxWorkbenchStripsWidth = 963;
+  inline constexpr int kMaxWorkbenchStripsWidth = 321;
   enum class ViewDensity : std::uint8_t { Compact, Comfortable };
   enum class FilenameTruncation : std::uint8_t { Middle, End };
   struct IconCaptions {

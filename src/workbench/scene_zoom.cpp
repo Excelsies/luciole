@@ -8,7 +8,7 @@ namespace luciole::workbench {
   // matching function, or leave it unscaled on purpose, then update the count here.
   namespace zoom_fields {
     struct AnyField {
-      template <class T> operator T() const; // NOLINT(google-explicit-constructor): stands for any member's type
+      template <class T> operator T() const; // NOLINT(google-explicit-constructor)
     };
 
     // The most members an aggregate takes in an initializer list: its field count.

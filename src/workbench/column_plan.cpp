@@ -59,6 +59,23 @@ namespace luciole::workbench {
       return strips;
     }
 
+    // The drawn width of a saved one, in whole pixels; the saved width itself at 1.
+    double drawnWidth(double saved, double scale) { return roundWidth(saved * scale); }
+
+    // The saved width, from 70 to 321, whose drawn width is nearest `drawn` and within `least` to `most` where it can
+    // be: a drag or a key step ends at a width that survives saving and drawing again.
+    double snappedSaved(double drawn, double scale, double least, double most, double ceiling) {
+      const auto at = [&](double saved) { return clampLow(drawnWidth(saved, scale), least, ceiling); };
+      double saved = clampLow(roundWidth(drawn / scale), kStripsMinWidth, kStripsMaxWidth);
+      for (int i = 0; i < 4 && saved > kStripsMinWidth && at(saved) > most; ++i) { // scale is at most 3
+        saved -= 1;
+      }
+      for (int i = 0; i < 4 && saved < kStripsMaxWidth && at(saved) < least; ++i) {
+        saved += 1;
+      }
+      return saved;
+    }
+
     // The widest pane a center `view` px wide gives the strips while the list keeps `listMin`, never under the least.
     double maxStripsWidth(double view, double listMin, double scale) {
       const double room = std::isfinite(view) ? std::floor(view - listMin) : 0;
@@ -107,7 +124,7 @@ namespace luciole::workbench {
 
   double stripsPaneWidth(std::optional<double> width, double viewWidth, double listMin, double textScale) {
     const double scale = validScale(textScale);
-    const double wanted = width && std::isfinite(*width) ? roundWidth(*width) : stripsDefault(scale);
+    const double wanted = width && std::isfinite(*width) ? drawnWidth(*width, scale) : stripsDefault(scale);
     return clampLow(wanted, stripsMin(scale), maxStripsWidth(viewWidth, validListMin(listMin), scale));
   }
 
@@ -116,7 +133,7 @@ namespace luciole::workbench {
       return std::nullopt;
     }
     const double rounded = roundWidth(*width);
-    if (rounded < kStripsMinWidth || rounded > kMaxWorkbenchStripsWidth) {
+    if (rounded < kStripsMinWidth || rounded > kStripsMaxWidth) {
       return std::nullopt;
     }
     return rounded;
@@ -133,28 +150,49 @@ namespace luciole::workbench {
   double stripsMinWidthAt(double textScale) { return stripsMin(validScale(textScale)); }
 
   StripsDrag startStripsDrag(const ColumnPlan& plan, std::optional<double> saved) {
+    const double scale = validScale(plan.textScale);
+    const double least = plan.stripsMin > 0 ? plan.stripsMin : kStripsMinWidth;
+    const double ceiling = plan.stripsCeiling > 0 ? plan.stripsCeiling : kStripsMaxWidth;
+    const double fallback = plan.stripsDefault > 0 ? plan.stripsDefault : kStripsDefaultWidth;
     return {
         .startWidth = plan.stripsWidth,
         .startX = plan.margin + plan.stripsWidth,
         .max = plan.stripsMax,
         .saved = saved,
-        .wanted = clampLow(
-            saved && std::isfinite(*saved) ? roundWidth(*saved)
-                                           : (plan.stripsDefault > 0 ? plan.stripsDefault : kStripsDefaultWidth),
-            plan.stripsMin > 0 ? plan.stripsMin : kStripsMinWidth,
-            plan.stripsCeiling > 0 ? plan.stripsCeiling : kStripsMaxWidth
-        ),
-        .min = plan.stripsMin > 0 ? plan.stripsMin : kStripsMinWidth,
-        .ceiling = plan.stripsCeiling > 0 ? plan.stripsCeiling : kStripsMaxWidth,
+        .wanted =
+            clampLow(saved && std::isfinite(*saved) ? drawnWidth(roundWidth(*saved), scale) : fallback, least, ceiling),
+        .min = least,
+        .ceiling = ceiling,
+        .scale = scale,
     };
   }
 
+  double savedStripsWidth(double drawn, double textScale) {
+    // the least saved width that draws `drawn` or more, so a pane held at its greatest is saved as the least that does
+    return clampLow(std::ceil((drawn - 0.5) / validScale(textScale)), kStripsMinWidth, kStripsMaxWidth);
+  }
+
   std::optional<double> dragStrips(const StripsDrag& drag, double pointerX) {
-    return resizeStrips(drag.startWidth + (pointerX - drag.startX), drag.max, drag.min, drag.ceiling);
+    const auto wanted = resizeStrips(drag.startWidth + (pointerX - drag.startX), drag.max, drag.min, drag.ceiling);
+    if (!wanted) {
+      return std::nullopt;
+    }
+    const double most = std::isnan(drag.max) ? drag.min : clampLow(drag.max, drag.min, drag.ceiling);
+    const double saved = snappedSaved(*wanted, drag.scale, drag.min, most, drag.ceiling);
+    return clampLow(drawnWidth(saved, drag.scale), drag.min, drag.ceiling);
   }
 
   std::optional<double> stepStrips(const StripsDrag& drag, double edge) {
-    return resizeStrips(drag.wanted + (edge - drag.startX), drag.ceiling, drag.min, drag.ceiling);
+    if (std::isnan(edge)) {
+      return std::nullopt;
+    }
+    // a step moves the saved width by at least one, whatever the scale
+    const double travel = edge - drag.startX;
+    const double move =
+        travel == 0 ? 0.0 : std::copysign(std::max(1.0, roundWidth(std::abs(travel) / drag.scale)), travel);
+    const double from = savedStripsWidth(drag.wanted, drag.scale);
+    const double saved = clampLow(from + move, kStripsMinWidth, kStripsMaxWidth);
+    return clampLow(drawnWidth(saved, drag.scale), drag.min, drag.ceiling);
   }
 
   std::size_t columnCount(double room, const std::array<double, kColumnsAhead>& widths, double listMin, double floor) {
@@ -187,6 +225,7 @@ namespace luciole::workbench {
       plan.stripsDefault = stripsDefault(scale);
       plan.stripsMin = stripsMin(scale);
       plan.stripsCeiling = stripsMax(scale);
+      plan.textScale = scale;
       plan.strips = ancestorStrips(ancestors, plan.stripsWidth, scale);
     }
     const auto fit = columnCount(view - plan.stripsWidth, widths.columns, listMin, listFloor(widths, listMin));

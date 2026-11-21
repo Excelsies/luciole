@@ -330,8 +330,6 @@ void luciole::JumpListView::refresh(std::optional<std::size_t> index) {
   }
 }
 
-// A row holds two lines of text, which follow the system font size: the row grows with them past its height for the
-// list's icon size.
 void luciole::JumpListView::setListIconSize(int size) {
   if (size != m_listIcon) {
     m_listIcon = size;
@@ -339,6 +337,8 @@ void luciole::JumpListView::setListIconSize(int size) {
   }
 }
 
+// A row holds two lines of text, which follow the system font size: the row grows with them past its height for the
+// list's icon size.
 void luciole::JumpListView::fitRowHeight(Renderer& renderer) {
   const auto line = [&renderer](float size) {
     const auto metrics = renderer.measureFont(size, TextFont{});

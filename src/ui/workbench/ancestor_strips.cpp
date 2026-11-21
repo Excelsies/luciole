@@ -363,8 +363,9 @@ namespace luciole {
     if (!finished) {
       const auto next = wb::dragStrips(m_drag, value);
       m_previewed = next.has_value();
-      if (next && next != m_width) {
-        m_width = next;
+      const auto saved = next ? std::optional(wb::savedStripsWidth(*next, m_drag.scale)) : std::nullopt;
+      if (saved && saved != m_width) {
+        m_width = saved;
         m_changed();
       }
       return;
@@ -377,7 +378,7 @@ namespace luciole {
     // a key step at a limit continues from the clamped edge, also before the next placement
     const double drawn = std::min(*next, std::max(m_drag.max, m_drag.startWidth));
     m_divider->setValue(static_cast<float>(m_drag.startX + (drawn - m_drag.startWidth)));
-    m_width = next;
+    m_width = wb::savedStripsWidth(*next, m_drag.scale);
     m_drag.wanted = *next;
     m_committed();
   }

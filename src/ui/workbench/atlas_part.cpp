@@ -80,16 +80,11 @@ namespace luciole {
         return false;
       }
 
-      // The scene is drawn against the view as it is now while the camera maps it; without a camera the old scene is
-      // drawn as it was laid out.
+      // With a camera the scene maps to the view as it is; without one it is drawn as laid out.
       bool holdsSceneUntilReply() const override { return true; }
       std::optional<float> shownTextScale() const override {
-        if (m_tree == nullptr) {
-          return std::nullopt;
-        }
-        return m_builtCamera ? m_frame.textScale : m_sceneTextScale;
+        return m_tree == nullptr ? std::nullopt : std::optional(m_builtCamera ? m_frame.textScale : m_sceneTextScale);
       }
-
       void connect(const std::function<void()>& /*ready*/, const std::function<void(float)>& redraw) override {
         m_redraw = redraw;
       }

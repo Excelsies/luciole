@@ -88,8 +88,8 @@ namespace luciole {
         return false;
       }
       ShapeWheel inScene = wheel;
-      inScene.x /= m_sceneScale;
-      inScene.y /= m_sceneScale;
+      inScene.x /= partScale();
+      inScene.y /= partScale();
       const auto reaction = m_part->wheel(inScene);
       react(reaction);
       return reaction.handled;
@@ -105,8 +105,8 @@ namespace luciole {
         return false;
       }
       ShapeDrag inScene = drag;
-      inScene.x /= m_sceneScale;
-      inScene.y /= m_sceneScale;
+      inScene.x /= partScale();
+      inScene.y /= partScale();
       const auto reaction = m_part->drag(inScene);
       react(reaction);
       if (reaction.handled) {
@@ -203,6 +203,14 @@ namespace luciole {
     }
   }
 
+  // The scale of the scene the part works on now, which a worker's reply changes before the next show().
+  float PartView::partScale() const {
+    if (m_part != nullptr && m_part->holdsSceneUntilReply()) {
+      return m_part->shownTextScale().value_or(m_sceneScale);
+    }
+    return m_sceneScale;
+  }
+
   void PartView::show() {
     workbench::SceneShapes scene;
     PartSnapshot shown;
@@ -263,9 +271,10 @@ namespace luciole {
     if (reaction.relayout || (m_part != nullptr && m_part->moving())) {
       needFrame();
     }
+    const float scale = partScale();
     for (auto each : reaction.requests) {
-      each.x *= m_sceneScale; // the part works in the view the scene was laid out in
-      each.y *= m_sceneScale;
+      each.x *= scale; // the part works in the view the scene was laid out in
+      each.y *= scale;
       request(each);
     }
   }

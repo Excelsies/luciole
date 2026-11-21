@@ -1,5 +1,6 @@
 #include "atlas_view_rig.h"
 #include "instrument_rig.h"
+#include "model/directory_options.h"
 #include "scene_capture.h"
 #include "system_text_scale.h"
 #include "test_check.h"
@@ -228,9 +229,36 @@ namespace {
     std::println("atlas folder {}: piece {:.1f} before, {:.1f} during", folder, before, during);
     TEST_CHECK(during < 0 || during < before * 1.3F);
   }
+  // Between a worker's reply and the next frame the part already works on the new scene, and the pointer is mapped
+  // with that scene's scale, not the scale of the shapes still shown.
+  void pointerFollowsTheReplyBeforeTheNextFrame() {
+    const auto inputs = inputsFor(balancedTree(), 1);
+    ::test::setSystemTextScale(1.0F);
+    Rig rig(WorkbenchInstrument::Nest, 560, 520);
+    rig.show(inputs);
+    settle(rig, inputs);
+    const auto* piece = shapeOf(rig.view->shapeView(), 1);
+    TEST_CHECK(piece != nullptr && piece->kind == ShapeKind::RoundedRect);
+    // a point just inside the far corner of the piece drawn now
+    const ShapePoint corner{.x = piece->rect.x + piece->rect.width - 6, .y = piece->rect.y + piece->rect.height - 6};
+    ::test::setSystemTextScale(kLarge);
+    rig.frame(inputs); // the view takes the new scale
+    rig.frame(inputs); // and starts the layout for it
+    for (int wait = 0; wait < 5000 && g_main_context_pending(nullptr) == FALSE; ++wait) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    TEST_CHECK(g_main_context_pending(nullptr) != FALSE);
+    g_main_context_iteration(nullptr, FALSE); // the reply lands; no frame shows it yet
+    rig.requests.clear();
+    TEST_CHECK(rig.wheel(corner, -1));
+    TEST_CHECK(rig.requests.size() == 1 && rig.requests[0].kind == PartRequestKind::Go && rig.requests[0].node == 1);
+  }
 } // namespace
 
 int main() {
+  // Ctrl with the wheel and Plus, Minus and 0 resize the rows of Grid, List and Workbench, not of Column view.
+  static_assert(zoomsByKeys(ViewMode::Grid) && zoomsByKeys(ViewMode::List) && zoomsByKeys(ViewMode::Workbench));
+  TEST_CHECK(!zoomsByKeys(ViewMode::Miller));
   ::test::setSystemTextScale(kLarge);
   wheelReachesTheScenePoint();
   anchoredRequestComesBackOnTheView();
@@ -238,6 +266,7 @@ int main() {
   fontChangeLeavesTheShownSceneUntilTheReply(WorkbenchInstrument::Nest);
   nestKeepsSceneScaleThroughTwoReplies();
   atlasFollowsAtOnce();
+  pointerFollowsTheReplyBeforeTheNextFrame();
   for (const NodeId folder : {1, 5, 4}) {
     atlasFolderChangeThenFontChange(folder);
   }

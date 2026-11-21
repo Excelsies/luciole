@@ -2229,7 +2229,7 @@ bool BrowserPage::zoomFromKey(const KeyboardEvent& event) {
 bool BrowserPage::zoomFromScroll(const PointerEvent& event) {
   if (!luciole::zoomsByKeys(m_viewMode)
       || m_list == nullptr
-      || !m_list->visible()
+      || (m_viewMode != luciole::ViewMode::Workbench && !m_list->visible())
       || m_connection.keyboardModifiers() != KeyMod::Ctrl
       || event.axis != WL_POINTER_AXIS_VERTICAL_SCROLL) {
     m_zoomScroll = 0;

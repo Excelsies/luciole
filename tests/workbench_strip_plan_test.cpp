@@ -240,9 +240,7 @@ namespace {
     TEST_CHECK(normalizeStripsWidth(200.4) == 200.0);
     TEST_CHECK(normalizeStripsWidth(320.6) == 321.0);
     TEST_CHECK(normalizeStripsWidth(321) == 321.0);
-    TEST_CHECK(normalizeStripsWidth(450) == 450.0); // a width of a larger text scale is kept
-    TEST_CHECK(normalizeStripsWidth(963) == 963.0);
-    TEST_CHECK(!normalizeStripsWidth(963.5).has_value());
+    TEST_CHECK(!normalizeStripsWidth(321.5).has_value());
     TEST_CHECK(!normalizeStripsWidth(kNan).has_value());
     TEST_CHECK(!normalizeStripsWidth(kInfinity).has_value());
     TEST_CHECK(!normalizeStripsWidth(-kInfinity).has_value());
