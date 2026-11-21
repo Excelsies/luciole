@@ -515,7 +515,7 @@ media_lib = static_library('luciole-media',
   media_playback ? files('src/media/audio_tap.cpp', 'src/media/bink2_demux.cpp', 'src/media/bink2_demux_loop.cpp',
       'src/media/bink2_demux_seek.cpp', 'src/media/bink2_facts.cpp', 'src/media/bink2_poster.cpp', 'src/media/bink2_poster_worker.cpp',
       'src/media/bink2_pull_reader.cpp', 'src/media/bink2_slice_pool.cpp',
-      'src/media/bink2_stream.cpp', 'src/media/frame_sink.cpp', 'src/media/gstreamer_pipeline.cpp',
+      'src/media/bink2_stream.cpp', 'src/media/decoder_threads.cpp', 'src/media/frame_sink.cpp', 'src/media/gstreamer_pipeline.cpp',
       'src/media/gstreamer_runtime.cpp', 'src/media/media_player_gstreamer.cpp',
       'src/media/media_probe_gstreamer.cpp', 'src/media/pipeline_thread.cpp')
     : files('src/media/bink2_poster_none.cpp', 'src/media/media_player_none.cpp', 'src/media/media_probe_none.cpp'),
