@@ -28,7 +28,7 @@ void SidebarController::removeDrive(const std::string& key) {
   // Unsaved edits of the drive's files are asked about first, while a Save can still reach the drive.
   m_page.jobs().leaveDriveThen(
       root,
-      [this, key, root, verb = std::move(verb), lifetime = std::weak_ptr(m_lifetime)] {
+      [this, key, root, verb = std::move(verb), lifetime = std::weak_ptr(m_lifetime)] mutable {
         if (!lifetime.expired()) {
           m_page.jobs().leaveDrive(root);
           removeDriveWithoutAsking(key, root, std::move(verb));

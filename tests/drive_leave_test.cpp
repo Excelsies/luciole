@@ -373,7 +373,10 @@ namespace {
     Rig rig(drive.files, capture, drive.files.folder);
     rig.edit("a.txt");
     rig.type("1");
-    TEST_CHECK(rig.key('s', KeyMod::Ctrl));
+    // The gate holds the save from the key until the main loop delivers its result, so nothing is pumped between.
+    TEST_CHECK(
+        rig.editor->key({.sym = 's', .utf32 = 's', .modifiers = KeyMod::Ctrl, .pressed = true, .preedit = false})
+    );
     TEST_CHECK(rig.editor->saving() && rig.editor->savingIn(drive.root));
     TEST_CHECK(!rig.editor->savingIn(elsewhere.root));
     rig.frames([&] { return !rig.editor->saving(); });

@@ -23,7 +23,7 @@ namespace luciole {
 
   // Opens a file of the Workbench as Open does in the other views: one browsable archive shows the archive browser,
   // outside a file chooser; any other file goes to its program. The visit is recorded once the open goes ahead: a
-  // refused or failed archive browser records none.
+  // refused archive browser, or one that does not start, records none.
   void openWorkbenchFile(
       const Location& location, std::span<const DirectoryModel* const> models, bool chooser,
       const WorkbenchOpenHooks& hooks

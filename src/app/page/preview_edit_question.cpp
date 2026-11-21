@@ -43,7 +43,8 @@ namespace luciole {
   }
 
   SaveQuestion pageSaveQuestion(
-      std::string_view name, std::function<void()> save, std::function<void()> no, std::function<void()> closeDialog
+      std::string_view name, std::function<void()> save, std::function<void()> no,
+      const std::function<void()>& closeDialog
   ) {
     return saveQuestion(
         name, std::move(save),

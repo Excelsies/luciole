@@ -26,7 +26,8 @@ namespace luciole {
   // The question as the page shows it: No chooses No and then closes the dialog through `closeDialog`; the close button
   // only closes it, which chooses nothing.
   SaveQuestion pageSaveQuestion(
-      std::string_view name, std::function<void()> save, std::function<void()> no, std::function<void()> closeDialog
+      std::string_view name, std::function<void()> save, std::function<void()> no,
+      const std::function<void()>& closeDialog
   );
 
   // Shows `sentence` under the question, or hides the line when it is empty.
