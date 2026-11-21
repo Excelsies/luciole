@@ -55,6 +55,9 @@ namespace {
   constexpr auto kViewModes = std::to_array<Named<luciole::ViewMode>>(
       {{luciole::ViewMode::List, "list"}, {luciole::ViewMode::Grid, "grid"}, {luciole::ViewMode::Miller, "miller"}}
   );
+  // File pickers have no Columns view: it enters folders on selection, which choosing a folder needs.
+  constexpr auto kChooserViewModes =
+      std::to_array<Named<luciole::ViewMode>>({{luciole::ViewMode::List, "list"}, {luciole::ViewMode::Grid, "grid"}});
   constexpr auto kDensities = std::to_array<Named<luciole::ViewDensity>>(
       {{luciole::ViewDensity::Compact, "compact"}, {luciole::ViewDensity::Comfortable, "comfortable"}}
   );
@@ -222,6 +225,10 @@ namespace {
   // List and Columns icon sizes; 0 keeps the view's default size.
   bool rowIconSize(int value) { return value == 0 || std::ranges::contains(luciole::kRowIconSizes, value); }
   constexpr Rule<int> kRowIconSize{rowIconSize, "expected 0 or integer icon size 16, 20, 24, 28, 32, 40, 48, or 64"};
+  constexpr Rule<int> kGridIconSize{
+      [](int value) { return std::ranges::contains(luciole::kGridIconSizes, value); },
+      "expected integer icon size 32, 48, 64, 80, 96, 128, 160, 192, or 256"
+  };
 
   using P = luciole::BrowserPreference;
   using S = BrowserSettings;
@@ -267,9 +274,7 @@ namespace {
       describe(P::HiddenLast, "hidden_last", [](S& s) -> auto& { return s.sort.hiddenLast; }),
       describe(P::ViewMode, "view_mode", [](S& s) -> auto& { return s.viewMode; }, {kViewModes}),
       describe(
-          P::GridIconSize, "grid_icon_size", [](S& s) -> auto& { return s.gridIconSize; },
-          {[](int value) { return std::ranges::contains(luciole::kGridIconSizes, value); },
-           "expected integer icon size 32, 48, 64, 80, 96, 128, 160, 192, or 256"}
+          P::GridIconSize, "grid_icon_size", [](S& s) -> auto& { return s.gridIconSize; }, kGridIconSize
       ),
       describe(
           P::ListIconSize, "list_icon_size", [](S& s) -> auto& { return s.listIconSize; }, kRowIconSize
@@ -301,6 +306,27 @@ namespace {
       describe(P::ExpandableFolders, "expandable_folders", [](S& s) -> auto& { return s.expandableFolders; }),
       describe(P::ShowPreview, "show_preview", [](S& s) -> auto& { return s.showPreview; }),
       describe(P::ChooserShowPreview, "chooser_show_preview", [](S& s) -> auto& { return s.chooserShowPreview; }),
+      describe(P::ChooserSortBy, "chooser_sort_by", [](S& s) -> auto& { return s.chooserSort.field; }, {kSortFields}),
+      describe(
+          P::ChooserSortDescending, "chooser_sort_descending", [](S& s) -> auto& { return s.chooserSort.descending; }
+      ),
+      describe(
+          P::ChooserDirectoriesFirst, "chooser_directories_first",
+          [](S& s) -> auto& { return s.chooserSort.directoriesFirst; }
+      ),
+      describe(P::ChooserHiddenLast, "chooser_hidden_last", [](S& s) -> auto& { return s.chooserSort.hiddenLast; }),
+      describe(
+          P::ChooserViewMode, "chooser_view_mode", [](S& s) -> auto& { return s.chooserViewMode; }, {kChooserViewModes}
+      ),
+      describe(P::ChooserShowHidden, "chooser_show_hidden", [](S& s) -> auto& { return s.chooserShowHidden; }),
+      describe(
+          P::ChooserGridIconSize, "chooser_grid_icon_size", [](S& s) -> auto& { return s.chooserGridIconSize; },
+          kGridIconSize
+      ),
+      describe(
+          P::ChooserListIconSize, "chooser_list_icon_size", [](S& s) -> auto& { return s.chooserListIconSize; },
+          kRowIconSize
+      ),
       describe(
           P::PreviewWidth, "preview_width", [](S& s) -> auto& { return s.previewWidth; },
           {between<208, 800>, "expected integer preview width from 208 to 800"}

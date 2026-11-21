@@ -47,7 +47,13 @@ namespace luciole {
     bool showNetwork = true;
     bool expandableFolders = false;
     bool showPreview = true;
-    bool chooserShowPreview = false; // File picker windows keep their own preview visibility.
+    // File picker windows keep their own preview visibility and layout.
+    bool chooserShowPreview = false;
+    SortOptions chooserSort;
+    ViewMode chooserViewMode = ViewMode::List;
+    bool chooserShowHidden = false;
+    int chooserGridIconSize = kDefaultGridIconSize;
+    int chooserListIconSize = 0;
     int previewWidth = 320;
     int millerColumnWidth = 260;
     bool millerShowParents = true;
@@ -113,6 +119,14 @@ namespace luciole {
     ExpandableFolders,
     ShowPreview,
     ChooserShowPreview,
+    ChooserSortBy,
+    ChooserSortDescending,
+    ChooserDirectoriesFirst,
+    ChooserHiddenLast,
+    ChooserViewMode,
+    ChooserShowHidden,
+    ChooserGridIconSize,
+    ChooserListIconSize,
     PreviewWidth,
     MillerColumnWidth,
     MillerShowParents,
@@ -202,6 +216,14 @@ namespace luciole {
     static constexpr PreferenceKey<bool> ExpandableFolders{Id::ExpandableFolders};
     static constexpr PreferenceKey<bool> ShowPreview{Id::ShowPreview};
     static constexpr PreferenceKey<bool> ChooserShowPreview{Id::ChooserShowPreview};
+    static constexpr PreferenceKey<luciole::SortField> ChooserSortBy{Id::ChooserSortBy};
+    static constexpr PreferenceKey<bool> ChooserSortDescending{Id::ChooserSortDescending};
+    static constexpr PreferenceKey<bool> ChooserDirectoriesFirst{Id::ChooserDirectoriesFirst};
+    static constexpr PreferenceKey<bool> ChooserHiddenLast{Id::ChooserHiddenLast};
+    static constexpr PreferenceKey<luciole::ViewMode> ChooserViewMode{Id::ChooserViewMode};
+    static constexpr PreferenceKey<bool> ChooserShowHidden{Id::ChooserShowHidden};
+    static constexpr PreferenceKey<int> ChooserGridIconSize{Id::ChooserGridIconSize};
+    static constexpr PreferenceKey<int> ChooserListIconSize{Id::ChooserListIconSize};
     static constexpr PreferenceKey<int> PreviewWidth{Id::PreviewWidth};
     static constexpr PreferenceKey<int> MillerColumnWidth{Id::MillerColumnWidth};
     static constexpr PreferenceKey<bool> MillerShowParents{Id::MillerShowParents};

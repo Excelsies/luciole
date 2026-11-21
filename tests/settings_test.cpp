@@ -719,6 +719,17 @@ namespace {
         == luciole::AtomicWriteState::Durable
     );
     TEST_CHECK(config.settings().browser.chooserShowPreview && config.settings().browser.showPreview);
+    // The picker's layout is separate too, and it has no Columns view.
+    TEST_CHECK(
+        config.saveOverrides(std::array{luciole::OverrideEdit{P::ChooserViewMode, luciole::ViewMode::Grid}})
+        == luciole::AtomicWriteState::Durable
+    );
+    TEST_CHECK(
+        config.settings().browser.chooserViewMode == luciole::ViewMode::Grid
+        && config.settings().browser.viewMode == luciole::ViewMode::List
+    );
+    fixture.write("config.toml", "[browser]\nchooser_view_mode = 'miller'\n");
+    TEST_CHECK(!luciole::validateConfigFile(fixture.paths().base).empty());
     fixture.write("config.toml", "[browser]\nshow_preview = 'true'\n");
     TEST_CHECK(!luciole::validateConfigFile(fixture.paths().base).empty());
     fixture.write("config.toml", "[browser]\npreview_width = 444\nshow_preview = true\n");

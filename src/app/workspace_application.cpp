@@ -1001,9 +1001,13 @@ luciole::TabId WorkspaceApplication::createPage(
   auto settings = duplicate                    ? m_pages.at(duplicate)->options()
       : previous && m_pages.contains(previous) ? m_pages.at(previous)->options()
                                                : m_defaults;
-  // Miller columns enter folders on selection, which a chooser needs for choosing them.
-  if (host.chooser && settings.viewMode == luciole::ViewMode::Miller) {
-    settings.viewMode = luciole::ViewMode::List;
+  // File pickers keep their own layout, apart from the browser's.
+  if (host.chooser) {
+    settings.sort = settings.chooserSort;
+    settings.viewMode = settings.chooserViewMode;
+    settings.showHidden = settings.chooserShowHidden;
+    settings.gridIconSize = settings.chooserGridIconSize;
+    settings.listIconSize = settings.chooserListIconSize;
   }
   auto page = std::make_unique<BrowserPage>(
       m_connection, m_renderer, m_input, settings, m_clipboard, host.surface, host.dispatcher, m_animations, m_pins,

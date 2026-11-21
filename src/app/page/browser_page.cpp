@@ -2010,7 +2010,16 @@ void BrowserPage::changeSort(luciole::SortOptions options) {
     return;
   }
   applySort(options);
-  m_preferences.saveSort(options);
+  if (choosing()) {
+    m_preferences.submit({
+        {luciole::BrowserPreference::ChooserSortBy, options.field},
+        {luciole::BrowserPreference::ChooserSortDescending, options.descending},
+        {luciole::BrowserPreference::ChooserDirectoriesFirst, options.directoriesFirst},
+        {luciole::BrowserPreference::ChooserHiddenLast, options.hiddenLast},
+    });
+  } else {
+    m_preferences.saveSort(options);
+  }
   dispatcher().setFocus(m_list->focusArea());
 }
 
@@ -2024,7 +2033,11 @@ void BrowserPage::setViewMode(luciole::ViewMode mode) {
     dispatcher().setFocus(m_list->focusArea());
   }
   m_viewMode = mode;
-  m_preferences.save(mode);
+  if (choosing()) {
+    m_preferences.submit({{luciole::BrowserPreference::ChooserViewMode, mode}});
+  } else {
+    m_preferences.save(mode);
+  }
   browser().setDefaultViewMode(m_viewMode);
   m_browserDirty = true;
   m_surface->requestUpdate();
@@ -2082,7 +2095,11 @@ void BrowserPage::changeGridZoom(int requested) {
   m_listAdapter.onPointerCancel();
   m_gridAdapter.onPointerCancel();
   m_gridZoom = zoom;
-  m_preferences.saveGridIconSize(luciole::kGridIconSizes[m_gridZoom]);
+  if (choosing()) {
+    m_preferences.submit({{luciole::BrowserPreference::ChooserGridIconSize, luciole::kGridIconSizes[m_gridZoom]}});
+  } else {
+    m_preferences.saveGridIconSize(luciole::kGridIconSizes[m_gridZoom]);
+  }
   browser().setDefaultIconSize(static_cast<int>(gridIconSize()));
   m_browserDirty = true;
   m_surface->requestUpdate();
@@ -2100,7 +2117,11 @@ void BrowserPage::changeRowIconSize(int size) {
     m_preferences.saveMillerIconSize(size);
   } else {
     m_listIconSize = size;
-    m_preferences.saveListIconSize(size);
+    if (choosing()) {
+      m_preferences.submit({{luciole::BrowserPreference::ChooserListIconSize, size}});
+    } else {
+      m_preferences.saveListIconSize(size);
+    }
   }
   m_browserDirty = true;
   m_surface->requestUpdate();
@@ -3164,5 +3185,9 @@ void BrowserPage::toggleHidden() {
       column->browser->toggleHidden();
     }
   }
-  m_preferences.saveShowHidden(browser().model().filter().showHidden);
+  if (choosing()) {
+    m_preferences.submit({{luciole::BrowserPreference::ChooserShowHidden, show}});
+  } else {
+    m_preferences.saveShowHidden(show);
+  }
 }
