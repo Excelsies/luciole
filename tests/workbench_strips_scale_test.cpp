@@ -5,6 +5,7 @@
 #include <array>
 #include <cmath>
 #include <optional>
+#include <print>
 
 // The strip pane's drag and key steps at the text scales of a 14 pt and a 16 pt system font: they reach the scaled
 // ends of the pane's range, no press is dead before an end, a saved width outside the range starts from the drawn
@@ -132,9 +133,46 @@ namespace {
     limits.instrument.minWidth = 240.4;
     TEST_CHECK(scaleLimits(limits, 1.0) == limits);
   }
+  // At every scale from 1 to 3 in steps of 0.001: each width a saved one draws, the least pane and the greatest
+  // included, is what saving and drawing it again gives, and narrower key presses reach the pane the least saved width
+  // draws and stay there.
+  void everyScaleRoundTrips() {
+    for (int thousandths = 1000; thousandths <= 3000; ++thousandths) {
+      const double scale = thousandths / 1000.0;
+      const auto plan = planAt(scale, std::nullopt);
+      for (double from = kStripsMinWidth; from <= kStripsMaxWidth; ++from) {
+        const double drawn = planAt(scale, from).stripsWidth; // every width a saved one draws
+        const double saved = savedStripsWidth(drawn, scale);
+        const bool fixed =
+            saved >= kStripsMinWidth && saved <= kStripsMaxWidth && planAt(scale, saved).stripsWidth == drawn;
+        if (!fixed) {
+          std::println("scale {:.3f}: {} saves {} and draws {}", scale, drawn, saved, planAt(scale, saved).stripsWidth);
+        }
+        TEST_CHECK(fixed);
+      }
+      std::optional<double> saved;
+      double width = plan.stripsWidth;
+      for (int press = 0; press < 400; ++press) {
+        const auto now = planAt(scale, saved);
+        const auto drag = startStripsDrag(now, saved);
+        const auto next = stepStrips(drag, drag.startX - 1);
+        TEST_CHECK(next.has_value());
+        saved = savedStripsWidth(*next, scale);
+        width = *next;
+      }
+      const double least = planAt(scale, kStripsMinWidth).stripsWidth; // what the least saved width draws
+      if (width != least || planAt(scale, saved).stripsWidth != least || *saved != kStripsMinWidth) {
+        std::println(
+            "scale {:.3f}: narrower presses end at {} saving {}, not {} saving 70", scale, width, *saved, least
+        );
+      }
+      TEST_CHECK(width == least && planAt(scale, saved).stripsWidth == least && *saved == kStripsMinWidth);
+    }
+  }
 } // namespace
 
 int main() {
+  everyScaleRoundTrips();
   for (const double scale : kScales) {
     dragsReachBothEnds(scale);
     keysReachBothEndsWithoutDeadPresses(scale);

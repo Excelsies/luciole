@@ -168,8 +168,12 @@ namespace luciole::workbench {
   }
 
   double savedStripsWidth(double drawn, double textScale) {
+    const double scale = validScale(textScale);
+    if (drawn <= stripsMin(scale)) {
+      return kStripsMinWidth; // the least pane, which the band widths can make wider than 70 times the scale
+    }
     // the least saved width that draws `drawn` or more, so a pane held at its greatest is saved as the least that does
-    return clampLow(std::ceil((drawn - 0.5) / validScale(textScale)), kStripsMinWidth, kStripsMaxWidth);
+    return clampLow(std::ceil((drawn - 0.5) / scale - 1e-9), kStripsMinWidth, kStripsMaxWidth);
   }
 
   std::optional<double> dragStrips(const StripsDrag& drag, double pointerX) {
