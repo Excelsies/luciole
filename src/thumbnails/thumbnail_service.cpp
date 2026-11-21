@@ -44,10 +44,11 @@ namespace {
   constexpr std::chrono::seconds kPreviewIdle{30};
   constexpr unsigned kSweepSeconds = 30;
   std::mutex diskMutex;
+  // Persisted in cached PNGs: device and inode numbers can change across mounts, so they are left out.
   std::string stamp(const struct stat& info) {
     return std::format(
-        "{}:{}:{}:{}:{}:{}:{}", info.st_dev, info.st_ino, info.st_size, info.st_mtim.tv_sec, info.st_mtim.tv_nsec,
-        info.st_ctim.tv_sec, info.st_ctim.tv_nsec
+        "{}:{}:{}:{}:{}", info.st_size, info.st_mtim.tv_sec, info.st_mtim.tv_nsec, info.st_ctim.tv_sec,
+        info.st_ctim.tv_nsec
     );
   }
   bool privateUri(const std::string& uri) {
