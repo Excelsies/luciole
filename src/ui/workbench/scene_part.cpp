@@ -83,6 +83,17 @@ namespace luciole {
     return scaled;
   }
 
+  LabelMetrics LabelMetrics::scaled(double factor) const {
+    LabelMetrics out = *this;
+    for (auto* font : {&out.m_font, &out.m_semibold}) {
+      for (auto& advance : font->ascii) {
+        advance *= factor;
+      }
+      font->other *= factor;
+    }
+    return out;
+  }
+
   std::optional<PartRequest> clickRequest(const workbench::Tree& tree, workbench::ShapeId id) {
     switch (workbench::sceneRole(id.role)) {
     case SceneRole::More:

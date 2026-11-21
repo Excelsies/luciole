@@ -218,6 +218,12 @@ test_table = [
     'env': ['LUCIOLE_LIBRARY_ASSETS_DIR=' + (meson.project_source_root() / 'lib/assets')]},
   {'name': 'ribbon-pixels', 'deps': [ui_dep, dependency('zlib')], 'sources': files('scene_capture.cpp', 'png_writer.cpp'),
     'timeout': 60, 'env': ['LUCIOLE_LIBRARY_ASSETS_DIR=' + (meson.project_source_root() / 'lib/assets')]},
+  {'name': 'workbench-text-scale-panes', 'deps': [ui_dep, dependency('zlib')],
+    'sources': files('scene_capture.cpp', 'png_writer.cpp'), 'timeout': 180, 'system_font': true,
+    'env': ['LUCIOLE_LIBRARY_ASSETS_DIR=' + (meson.project_source_root() / 'lib/assets')]},
+  {'name': 'workbench-text-scale-chrome', 'deps': [ui_dep, dependency('zlib')],
+    'sources': files('scene_capture.cpp', 'png_writer.cpp'), 'timeout': 120, 'system_font': true,
+    'env': ['LUCIOLE_LIBRARY_ASSETS_DIR=' + (meson.project_source_root() / 'lib/assets')]},
   {'name': 'iris-part-pixels', 'deps': [ui_dep, dependency('zlib')], 'sources': files('scene_capture.cpp', 'png_writer.cpp'),
     'timeout': 60, 'env': ['LUCIOLE_LIBRARY_ASSETS_DIR=' + (meson.project_source_root() / 'lib/assets')]},
   {'name': 'atlas-view-pixels', 'deps': [ui_dep, dependency('zlib')], 'sources': files('scene_capture.cpp', 'png_writer.cpp'),
@@ -232,7 +238,7 @@ test_table = [
     'sources': files('scene_capture.cpp', 'png_writer.cpp'), 'timeout': 120,
     'env': gio_env + ['LUCIOLE_LIBRARY_ASSETS_DIR=' + (meson.project_source_root() / 'lib/assets')]},
   {'name': 'workbench-center-fit', 'deps': [app_workbench_dep, ui_dep, event_loop_dep, dependency('zlib')],
-    'sources': files('scene_capture.cpp', 'png_writer.cpp'), 'timeout': 180,
+    'sources': files('scene_capture.cpp', 'png_writer.cpp'), 'timeout': 180, 'system_font': true,
     'env': gio_env + ['LUCIOLE_LIBRARY_ASSETS_DIR=' + (meson.project_source_root() / 'lib/assets')]},
   {'name': 'workbench-rows-text-scale', 'deps': [ui_dep, dependency('zlib')], 'sources': files('scene_capture.cpp', 'png_writer.cpp'),
     'timeout': 60, 'env': ['LUCIOLE_LIBRARY_ASSETS_DIR=' + (meson.project_source_root() / 'lib/assets')]},
@@ -346,6 +352,7 @@ test_table = [
   {'name': 'workbench-flow-pill', 'deps': [workbench_dep]},
   {'name': 'workbench-flow-hit', 'deps': [workbench_dep]},
   {'name': 'workbench-shape', 'deps': [workbench_dep]},
+  {'name': 'workbench-scene-zoom', 'deps': [workbench_dep]},
   {'name': 'workbench-shape-mesh', 'deps': [workbench_dep]},
   {'name': 'workbench-shape-tween', 'deps': [workbench_dep]},
   {'name': 'workbench-scene-shapes', 'deps': [workbench_dep]},
@@ -487,6 +494,11 @@ endif
 
 foreach entry : test_table
   name = entry['name']
+  test_env = entry.get('env', [])
+  if entry.get('system_font', false)
+    # a test that sets the system font writes its own GTK settings, never the user's
+    test_env += ['XDG_CONFIG_HOME=' + meson.current_build_dir() / ('xdg-' + name), 'GSETTINGS_BACKEND=memory']
+  endif
   local_gio = 'GIO_USE_VFS=local' in entry.get('env', [])
   exe = executable(name + '-test',
     'library_test_setup.cpp',
@@ -500,7 +512,7 @@ foreach entry : test_table
     test(name, python, args: [entry['wrapper'], exe], timeout: entry.get('timeout', 30), env: entry.get('env', []),
       is_parallel: entry.get('parallel', true))
   else
-    test(name, exe, timeout: entry.get('timeout', 30), env: entry.get('env', []), is_parallel: entry.get('parallel', true))
+    test(name, exe, timeout: entry.get('timeout', 30), env: test_env, is_parallel: entry.get('parallel', true))
   endif
 endforeach
 

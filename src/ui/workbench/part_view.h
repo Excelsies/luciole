@@ -64,7 +64,11 @@ namespace luciole {
 
     ShapeView* m_view = nullptr;
     std::unique_ptr<ScenePart> m_part;
-    LabelMetrics m_metrics;
+    LabelMetrics m_metrics;      // advances at the real text size
+    LabelMetrics m_sceneMetrics; // the same, for the scene laid out in the view shrunk by the text scale
+    float m_textScale = 1;
+    std::uint64_t m_metricsGeneration = 0;
+    std::uint64_t m_metricsEpoch = 0;
     PartInputs m_inputs;
     PartSnapshot m_shown;
     float m_builtWidth = -1;

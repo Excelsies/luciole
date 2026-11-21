@@ -9,6 +9,8 @@
 #include "ui/workbench/list_rows.h"
 #include "workbench/column_plan.h"
 
+#include <algorithm>
+#include <cmath>
 #include <cstddef>
 #include <format>
 #include <print>
@@ -67,7 +69,10 @@ namespace {
     for (std::size_t column = 0; column < workbench::kColumnsAhead; ++column) {
       QuietRow row(icons, column);
       row.bind(entry, {}, 0.5, quietTextSize(Style::fontSizeBody, column));
-      const auto height = static_cast<int>(workbench::kColumnRowHeights[column]);
+      // a row grows with its line of text past its base height
+      const float line = 1.3F * quietTextSize(Style::fontSizeBody, column) * capture.textScale();
+      const auto height =
+          static_cast<int>(std::max(static_cast<float>(workbench::kColumnRowHeights[column]), std::ceil(line + 5.0F)));
       (void)capture.capture(row, static_cast<int>(kRowWidth), height, 1.0F);
       std::println("  column {} row {} px", column, height);
       TEST_CHECK(::test::expectTextClear(row, capture.textScale()) == 1);
@@ -84,7 +89,7 @@ int main() {
     return ::test::kSkipExitCode;
   }
   setPalette(luciole::test::tiles::testPalette());
-  for (const float textScale : {1.0F, kLargeFont}) {
+  for (const float textScale : {1.0F, 44.0F / 42.0F, kLargeFont, 2.0F}) {
     capture->setTextScale(textScale);
     std::println("text scale {:.2f}", textScale);
     jumpRowsFit(*capture);

@@ -3,6 +3,7 @@
 #include "model/details_columns.h"
 #include "png_writer.h"
 #include "scene_capture.h"
+#include "system_text_scale.h"
 #include "text_clear.h"
 #include "text_tile_view_rig.h"
 #include "thumbnails/thumbnail_service.h"
@@ -434,8 +435,8 @@ int main() {
   rig.view->setCursor(WorkbenchEntry{.location = Location::fromPath((folder / "notes.txt").native()), .folder = false});
   Body body(rig.root.removeChild(rig.view), files);
   // The system font at 16 pt is 21.33 px against the 14 px the toolkit's text sizes are written for.
-  for (const float textScale : {1.0F, 16.0F * 96.0F / 72.0F / 14.0F}) {
-    capture->setTextScale(textScale);
+  for (const float wanted : {1.0F, 44.0F / 42.0F, 16.0F * 96.0F / 72.0F / 14.0F}) {
+    const float textScale = ::test::setSystemTextScale(*capture, wanted);
     std::println("text scale {:.2f}", textScale);
     for (const float scale : {1.0F, 1.5F}) {
       for (const auto window : kWindows) {
@@ -443,7 +444,7 @@ int main() {
       }
     }
   }
-  capture->setTextScale(1.0F);
+  (void)::test::setSystemTextScale(*capture, 1.0F);
   expectListEntries(files, folder);
   rig.root.addChild(body.release()); // the rig lets go of the view's sources
   std::println("workbench-center-fit: all checks passed");

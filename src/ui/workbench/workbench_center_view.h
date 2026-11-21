@@ -109,6 +109,7 @@ namespace luciole {
       workbench::ColumnWidths widths;
       std::optional<double> stripsWidth;
       std::optional<std::size_t> held;
+      float textScale = 1;
       bool operator==(const Inputs&) const = default;
     };
 

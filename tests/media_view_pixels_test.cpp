@@ -262,11 +262,13 @@ int main(int argc, char** argv) {
   }
 
   // The control bar's times and buttons at the text scale of a 16 pt system font, 21.33 px over the 14 px body size.
-  capture->setTextScale(16.0F * 96.0F / 72.0F / 14.0F);
-  for (int i = 0; i < 4; ++i) {
-    (void)scene.frame(*capture, 1.0F);
+  for (const float textScale : {44.0F / 42.0F, 16.0F * 96.0F / 72.0F / 14.0F, 2.0F}) {
+    capture->setTextScale(textScale);
+    for (int i = 0; i < 4; ++i) {
+      (void)scene.frame(*capture, 1.0F);
+    }
+    TEST_CHECK(::test::expectTextClear(scene.root, capture->textScale()) > 0);
   }
-  TEST_CHECK(::test::expectTextClear(scene.root, capture->textScale()) > 0);
   capture->setTextScale(1.0F);
 
   // Play from the button, then pause on a frame with a click on the picture, and draw it.

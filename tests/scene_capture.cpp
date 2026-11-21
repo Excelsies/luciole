@@ -33,7 +33,12 @@ namespace test {
 
     void setScale(float scale) noexcept { m_scale = scale; }
     // The multiplier of every text size, as RenderContext applies the system font size.
-    void setTextScale(float scale) noexcept { m_textScale = scale; }
+    void setTextScale(float scale) noexcept {
+      if (scale != m_textScale) {
+        m_textScale = scale;
+        ++m_generation; // as the render context does, so labels measure again
+      }
+    }
     float textScale() const noexcept { return m_textScale; }
 
     TextMetrics measureText(
@@ -426,6 +431,11 @@ namespace test {
   void SceneCapture::setTextScale(float scale) { m_renderer->setTextScale(scale); }
 
   float SceneCapture::textScale() const { return m_renderer->textScale(); }
+
+  float SceneCapture::textWidth(std::string_view text, float fontSize, FontWeight weight) {
+    const TextFont font{.weight = weight, .family = {}, .features = {}};
+    return m_renderer->measureText(text, fontSize, font, 0.0F, 0, TextAlign::Start, TextEllipsize::End, false).width;
+  }
 
   GlPixels SceneCapture::capture(Node& root, int width, int height, float scale) {
     if (width <= 0 || height <= 0 || !std::isfinite(scale) || scale <= 0.0F) {

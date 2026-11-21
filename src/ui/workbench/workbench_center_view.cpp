@@ -5,6 +5,7 @@
 #include "ui/controls/pane_divider.h"
 #include "ui/style.h"
 #include "ui/workbench/quiet_column_view.h"
+#include "ui/workbench/text_scale.h"
 
 #include <algorithm>
 #include <iterator>
@@ -372,6 +373,7 @@ namespace luciole {
         .widths = m_widths,
         .stripsWidth = m_stripsEdge->width(),
         .held = m_held,
+        .textScale = systemTextScale(),
     };
     if (inputs == m_planned) {
       return;
@@ -382,8 +384,10 @@ namespace luciole {
          .widths = inputs.widths,
          .listMin = wb::kListFloor,
          .maxColumns = inputs.held,
-         .stripsWidth = inputs.stripsWidth}
+         .stripsWidth = inputs.stripsWidth,
+         .textScale = inputs.textScale}
     );
+    m_strips->setTextScale(inputs.textScale);
     if (plan.strips != m_plan.strips) {
       m_strips->setPlan(plan.strips);
     }

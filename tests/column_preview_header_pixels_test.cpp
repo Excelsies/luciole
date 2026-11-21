@@ -73,7 +73,7 @@ int main() {
       {"editing", false, {.shown = true, .editing = true, .saveAvailable = true, .unsaved = true}},
   }};
   // The text scale of a 16 pt system font, 21.33 px over the 14 px body size.
-  for (const float textScale : {1.0F, 16.0F * 96.0F / 72.0F / 14.0F}) {
+  for (const float textScale : {1.0F, 44.0F / 42.0F, 16.0F * 96.0F / 72.0F / 14.0F, 2.0F}) {
     capture->setTextScale(textScale);
     for (const auto& look : looks) {
       for (const int width : {140, 165, 185}) {

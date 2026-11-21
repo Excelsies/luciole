@@ -16,6 +16,7 @@
 #include "workbench/format.h"
 
 #include <algorithm>
+#include <cmath>
 #include <linux/input-event-codes.h>
 #include <string_view>
 #include <utility>
@@ -24,6 +25,9 @@ namespace {
   using luciole::QuietNotice;
 
   constexpr auto kHeaderHeight = static_cast<float>(luciole::workbench::kColumnHeaderHeight);
+  // Room above and below a row's line and the header's, which hold text that follows the system font size.
+  constexpr float kRowInset = 5;
+  constexpr float kHeaderInset = 2 * Style::spaceSm;
 
   QuietNotice noticeOf(const luciole::DirectoryModel& listing) {
     const auto& snapshot = listing.snapshot();
@@ -364,13 +368,27 @@ void luciole::QuietColumnView::applyHeader() {
   markLayoutDirty();
 }
 
+// The rows and the header grow past their sizes with the line of text they hold.
+void luciole::QuietColumnView::fitHeights(Renderer& renderer) {
+  const auto metrics = renderer.measureFont(m_textSize, TextFont{});
+  const float line = metrics.bottom - metrics.top;
+  m_grid->setCellHeight(
+      std::max(static_cast<float>(workbench::kColumnRowHeights[m_column]), std::ceil(line + kRowInset))
+  );
+  const float header = std::max(kHeaderHeight, std::ceil(line + kHeaderInset));
+  m_header->setMinHeight(header);
+  m_header->setMaxHeight(header);
+}
+
 // The pointer area follows the grid's rows after either pass.
 void luciole::QuietColumnView::doLayout(Renderer& renderer) {
+  fitHeights(renderer);
   Flex::doLayout(renderer);
   m_pointer->fit();
 }
 
 void luciole::QuietColumnView::doArrange(Renderer& renderer, const LayoutRect& rect) {
+  fitHeights(renderer);
   Flex::doArrange(renderer, rect);
   m_pointer->fit();
 }

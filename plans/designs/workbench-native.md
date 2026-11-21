@@ -197,6 +197,10 @@ Choices (instrument, ribbon, strips, measure, color, emphasis) are browser prefe
 6. Previews by kind, then editing.
 7. Documentation, packaging, performance passes.
 
+## System font size
+
+The toolkit multiplies every text size by the system font's size over the 14 px body size, `systemTextScale()`. The panes read it once per layout and size what holds text by it, so scale 1 is the layout as designed. The instruments and ribbons are laid out as if the pane were its size divided by the scale, with label advances divided by it, and the scene is then scaled up by it (`zoomScene`); text sizes stay, because the toolkit scales them. Pointer positions go the other way. The pane limits, the pane header, the ancestor strip bands and their paddings grow with the scale, and the rows and header of the columns ahead grow with the measured line of text. Label advances and the label nodes' measures are taken again when the scale or the font changes.
+
 ## Verification
 
 - Headless tests for every pure function and for services against fixture trees.

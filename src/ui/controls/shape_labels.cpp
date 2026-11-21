@@ -346,9 +346,12 @@ void ShapeLabels::finish() {
 }
 
 void ShapeLabels::place(Renderer& renderer) {
+  // What a slot measured holds for one render scale and one set of text metrics, which the system font changes.
   const float scale = renderer.renderScale();
-  const bool rescaled = scale != m_measuredScale;
+  const auto generation = renderer.textMetricsGeneration();
+  const bool rescaled = scale != m_measuredScale || generation != m_measuredGeneration;
   m_measuredScale = scale;
+  m_measuredGeneration = generation;
   for (auto& slot : m_slots) {
     if (slot.motion == Motion::Hidden) {
       continue;

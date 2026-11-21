@@ -63,11 +63,19 @@ namespace luciole::workbench {
     bool operator==(const RibbonLimits&) const = default;
   };
 
+  // What the panes need: the parts' body sizes, the height of a pane's header and the Jump ahead pane's least body.
+  // The last two grow with the text, so the owner of the panes sets them.
   struct PartLimits {
     InstrumentLimits instrument;
     RibbonLimits ribbon;
+    double header = kPaneHeader;
+    double jumpMinBody = kJumpMinBody;
     bool operator==(const PartLimits&) const = default;
   };
+
+  // The limits with every size that holds text multiplied by `scale`, the size of the system font over its default;
+  // the maximum height stays as it is. A scale that is not finite and positive changes nothing.
+  PartLimits scaleLimits(const PartLimits& limits, double scale);
 
   // Limits for a pane whose part is not mounted yet.
   inline constexpr InstrumentLimits kPlanningInstrumentLimits{.minWidth = 240, .minHeight = 220};

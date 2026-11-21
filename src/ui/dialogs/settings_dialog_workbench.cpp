@@ -55,14 +55,13 @@ void SettingsDialog::addWorkbenchCard(std::function<void()> clearVisits) {
   addBool(P::RecordVisits, "Record visits");
   m_section->addChild(
       ui::row(
-          {.align = FlexAlign::Center, .gap = 8.0F, .paddingV = 6.0F},
+          {.align = FlexAlign::Center, .gap = 8.0F, .paddingV = 6.0F, .minHeight = Style::controlHeight},
           ui::label({.text = "Recorded visits", .fontWeight = FontWeight::SemiBold, .flexGrow = 1.0F}),
           ui::button(
               {.out = &m_clearVisits,
                .text = "Clear visit history",
                .variant = ButtonVariant::Default,
-               .minWidth = 180.0F,
-               .maxWidth = 180.0F,
+               .minWidth = 180.0F, // no maximum: the text grows with the system font
                .onClick = std::move(clearVisits)}
           )
       )

@@ -67,6 +67,11 @@ PaneHeader::PaneHeader(PaneHeaderOptions options) : m_options(std::move(options)
   refresh();
 }
 
+void PaneHeader::setHeight(float height) {
+  setMinHeight(height);
+  setMaxHeight(height);
+}
+
 void PaneHeader::setTitle(std::string_view title) {
   if (title != m_title) {
     m_title = title;

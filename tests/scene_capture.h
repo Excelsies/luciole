@@ -2,11 +2,13 @@
 
 #include "gl_test_context.h"
 #include "render/backend/render_backend.h"
+#include "render/core/renderer.h"
 #include "render/text/cairo_glyph_renderer.h"
 #include "render/text/cairo_text_renderer.h"
 
 #include <memory>
 #include <string>
+#include <string_view>
 
 class Node;
 class TextureManager;
@@ -36,6 +38,9 @@ namespace test {
     // Multiplies every text size from now on, as the system font size does in the application; 1 by default.
     void setTextScale(float scale);
     float textScale() const;
+
+    // Advance of `text` at `fontSize` as the rig draws it: the text scale applied, one line, no wrapping.
+    float textWidth(std::string_view text, float fontSize, FontWeight weight = FontWeight::Normal);
 
     // Uploads textures for the image nodes of scenes this rig draws; the caller unloads them.
     TextureManager& textureManager();

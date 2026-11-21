@@ -43,12 +43,15 @@ namespace luciole {
     constexpr std::string_view kEdgeTip =
         "Resize the ancestor strips; Left/Right adjusts, Home or a double-click resets";
 
+    // The face of a band by its level; its width is the plan's, which grows with the text size.
     std::optional<Face> faceOf(const wb::Strip& strip) {
       if (strip.kind == wb::StripKind::Stack) {
         return Face{.width = strip.width, .icon = 0, .font = kStackFont};
       }
-      const auto* const found = std::ranges::find(kFaces, strip.width, &Face::width);
-      return found == kFaces.end() ? std::nullopt : std::optional<Face>(*found);
+      if (strip.level == 0) {
+        return std::nullopt;
+      }
+      return kFaces[std::min(strip.level - 1, kFaces.size() - 1)];
     }
 
     // Strips grow quieter with distance.
@@ -88,6 +91,13 @@ namespace luciole {
   void AncestorStrips::setPlan(std::vector<wb::Strip> plan) {
     m_plan = std::move(plan);
     bind();
+  }
+
+  void AncestorStrips::setTextScale(float scale) {
+    if (scale != m_textScale && scale > 0) {
+      m_textScale = scale;
+      bind(); // sizes the icons again
+    }
   }
 
   void AncestorStrips::setPointed(std::optional<std::uint64_t> id) {
@@ -186,7 +196,7 @@ namespace luciole {
     slot.area->setTooltip(m_ancestors[slot.ancestor].path);
     slot.icon->setVisible(face && face->icon > 0);
     if (face && face->icon > 0) {
-      slot.icon->setGlyphSize(face->icon);
+      slot.icon->setGlyphSize(face->icon * m_textScale);
     }
     slot.name->setVisible(face.has_value());
     if (face) {
@@ -227,21 +237,22 @@ namespace luciole {
     slot.background->setFrameSize(stripWidth, stripHeight);
     const float radius = Style::radiusSm; // rounded on the side away from the list
     slot.background->setStyleRadii(rtl ? Radii(0, radius, radius, 0) : Radii(radius, 0, 0, radius));
-    float top = kTopPadding;
+    const float scale = m_textScale; // what holds text grows with it: the paddings, the icon, the least room for a name
+    float top = kTopPadding * scale;
     if (slot.count->visible()) {
       const auto size = slot.count->Node::measure(renderer, LayoutConstraints::available(stripWidth, stripHeight));
       const float countWidth = std::min(size.width, stripWidth);
       slot.count->arrange(renderer, {(stripWidth - countWidth) / 2, top, countWidth, size.height});
-      top += size.height + kFaceGap;
+      top += size.height + kFaceGap * scale;
     }
     if (slot.icon->visible()) {
-      const float icon = faceOf(slot.strip).value_or(Face{}).icon;
+      const float icon = faceOf(slot.strip).value_or(Face{}).icon * scale;
       slot.icon->arrange(renderer, {(stripWidth - icon) / 2, top, icon, icon});
-      top += icon + kFaceGap;
+      top += icon + kFaceGap * scale;
     }
     const auto face = faceOf(slot.strip);
-    const float room = stripHeight - top - kBottomPadding;
-    const bool text = face && room >= face->font;
+    const float room = stripHeight - top - kBottomPadding * scale;
+    const bool text = face && room >= face->font * scale;
     slot.name->setVisible(text);
     if (!text) {
       return;

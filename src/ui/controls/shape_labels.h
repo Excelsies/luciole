@@ -94,4 +94,5 @@ private:
   std::vector<Slot> m_slots;
   float m_progress = 1;
   float m_measuredScale = 0;
+  std::uint64_t m_measuredGeneration = 0;
 };

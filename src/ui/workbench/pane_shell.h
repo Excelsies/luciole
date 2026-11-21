@@ -91,6 +91,8 @@ namespace luciole {
     LayoutRect sceneRect(const workbench::PaneRect& rect) const;
     void dragTo(workbench::DividerId id, float value, bool finished);
     void commit(const workbench::PaneState& state);
+    // The part limits as the text scale makes them.
+    workbench::PartLimits limits() const { return workbench::scaleLimits(m_limits, m_textScale); }
 
     std::array<Slot, 4> m_slots;
     std::array<Title, 3> m_titles; // of the panes with a header
@@ -105,7 +107,8 @@ namespace luciole {
     std::function<void(const workbench::PaneState&)> m_onCommit;
     workbench::PaneLayout m_layout;
     workbench::ViewSize m_layoutView;
-    workbench::PartLimits m_layoutLimits;
+    workbench::PartLimits m_layoutLimits; // as the layout was made, scaled
+    float m_textScale = 1;
     workbench::RibbonKind m_layoutKind = workbench::RibbonKind::Flame;
     bool m_layoutValid = false;
   };

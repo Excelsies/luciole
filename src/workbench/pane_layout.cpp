@@ -118,10 +118,10 @@ namespace luciole::workbench {
     LeftSplit splitLeft(const PaneState& state, double height, const PartLimits& limits) {
       const bool instrumentOpen = !state.collapsed.instrument;
       const bool jumpOpen = !state.collapsed.jump;
-      const double instrumentMin = kPaneHeader + limits.instrument.minHeight;
-      const double jumpMin = kPaneHeader + kJumpMinBody;
-      const double header = std::min(kPaneHeader, height);
-      const double rest = std::max(0.0, height - kPaneHeader);
+      const double instrumentMin = limits.header + limits.instrument.minHeight;
+      const double jumpMin = limits.header + limits.jumpMinBody;
+      const double header = std::min(limits.header, height);
+      const double rest = std::max(0.0, height - limits.header);
       if (instrumentOpen && jumpOpen) {
         if (height < instrumentMin + jumpMin) {
           return {.instrumentHeight = rest, .jumpHeight = header, .forcedJump = true, .divider = std::nullopt};
@@ -202,16 +202,17 @@ namespace luciole::workbench {
       const double width = out.view.width - left;
       const double height = out.view.height;
       if (!ribbonOpen) {
-        const double header = std::min(kPaneHeader, height);
+        const double header = std::min(limits.header, height);
         out.rects.ribbon = makeRect(left, 0, width, header);
-        out.rects.center = makeRect(left, kPaneHeader, width, height - kPaneHeader);
+        out.rects.center = makeRect(left, limits.header, width, height - limits.header);
         out.dividers.push_back(makeDivider(DividerId::Ribbon, DividerAxis::Horizontal, left, header, width, {}));
         return;
       }
-      const double lo = kPaneHeader + limits.ribbon.minHeight;
-      const double hi = std::min(height - kCenterMinHeight, kPaneHeader + limits.ribbon.maxHeight);
+      const double lo = limits.header + limits.ribbon.minHeight;
+      const double hi = std::min(height - kCenterMinHeight, limits.header + limits.ribbon.maxHeight);
       // by default the part's preferred height, but at most 38% of the view
-      const double fallback = std::min(kPaneHeader + limits.ribbon.preferredHeight, roundHalfUp(height * kRibbonShare));
+      const double fallback =
+          std::min(limits.header + limits.ribbon.preferredHeight, roundHalfUp(height * kRibbonShare));
       const double value = clampLow(state.ribbonHeights[kind].value_or(fallback), lo, hi);
       out.rects.ribbon = makeRect(left, 0, width, value);
       out.rects.center = makeRect(left, value, width, height - value);
@@ -228,13 +229,14 @@ namespace luciole::workbench {
       };
       const auto& rects = out.rects;
       if (!out.collapsed.instrument
-          && small(rects.instrument, limits.instrument.minWidth, kPaneHeader + limits.instrument.minHeight)) {
+          && small(rects.instrument, limits.instrument.minWidth, limits.header + limits.instrument.minHeight)) {
         return true;
       }
-      if (!out.collapsed.jump && small(rects.jump, 0, kPaneHeader + kJumpMinBody)) {
+      if (!out.collapsed.jump && small(rects.jump, 0, limits.header + limits.jumpMinBody)) {
         return true;
       }
-      if (!out.collapsed.ribbon && small(rects.ribbon, limits.ribbon.minWidth, kPaneHeader + limits.ribbon.minHeight)) {
+      if (!out.collapsed.ribbon
+          && small(rects.ribbon, limits.ribbon.minWidth, limits.header + limits.ribbon.minHeight)) {
         return true;
       }
       return small(rects.center, kCenterMinWidth, kCenterMinHeight);
@@ -255,7 +257,7 @@ namespace luciole::workbench {
       out.collapsed = state.collapsed;
       const double width = view.width;
       const double height = view.height;
-      const bool ribbonRoom = height >= kPaneHeader + limits.ribbon.minHeight + kCenterMinHeight;
+      const bool ribbonRoom = height >= limits.header + limits.ribbon.minHeight + kCenterMinHeight;
       bool ribbonOpen = !state.collapsed.ribbon && ribbonRoom;
       const auto widths = splitWidth(state, width, limits, ribbonOpen);
       ribbonOpen = ribbonOpen && !widths.forcedRibbon;
@@ -314,6 +316,22 @@ namespace luciole::workbench {
     return out;
   }
 
+  PartLimits scaleLimits(const PartLimits& limits, double scale) {
+    if (!std::isfinite(scale) || !(scale > 0)) {
+      return limits;
+    }
+    PartLimits out = limits;
+    out.instrument.minWidth *= scale;
+    out.instrument.minHeight *= scale;
+    out.ribbon.minWidth *= scale;
+    out.ribbon.minHeight *= scale;
+    out.ribbon.preferredHeight *= scale;
+    out.ribbon.maxHeight *= scale;
+    out.header *= scale;
+    out.jumpMinBody *= scale;
+    return out;
+  }
+
   PartLimits normalizeLimits(const PartLimits& limits) {
     const auto valid = [](double value, double fallback) {
       return std::isfinite(value) && value >= 0 ? value : fallback;
@@ -330,13 +348,16 @@ namespace luciole::workbench {
                 .minWidth = valid(limits.instrument.minWidth, defaults.instrument.minWidth),
                 .minHeight = valid(limits.instrument.minHeight, defaults.instrument.minHeight),
             },
-        .ribbon = {
-            .minWidth = valid(ribbon.minWidth, defaults.ribbon.minWidth),
-            .minHeight = minHeight,
-            .preferredHeight =
-                clampLow(valid(ribbon.preferredHeight, defaults.ribbon.preferredHeight), minHeight, maxHeight),
-            .maxHeight = maxHeight,
-        },
+        .ribbon =
+            {
+                .minWidth = valid(ribbon.minWidth, defaults.ribbon.minWidth),
+                .minHeight = minHeight,
+                .preferredHeight =
+                    clampLow(valid(ribbon.preferredHeight, defaults.ribbon.preferredHeight), minHeight, maxHeight),
+                .maxHeight = maxHeight,
+            },
+        .header = valid(limits.header, defaults.header),
+        .jumpMinBody = valid(limits.jumpMinBody, defaults.jumpMinBody),
     };
   }
 
@@ -369,7 +390,7 @@ namespace luciole::workbench {
     out.rects = PaneRects{};
     out.rects.instrument = makeRect(0, 0, size.width, size.height);
     out.dividers.clear();
-    out.squeezed = size.width < parts.instrument.minWidth || size.height < kPaneHeader + parts.instrument.minHeight;
+    out.squeezed = size.width < parts.instrument.minWidth || size.height < parts.header + parts.instrument.minHeight;
     return out;
   }
 

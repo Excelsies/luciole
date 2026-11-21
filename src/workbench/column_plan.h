@@ -78,6 +78,7 @@ namespace luciole::workbench {
     double listMin = kListFloor;
     std::optional<std::size_t> maxColumns; // a drag holds the column count it started with
     std::optional<double> stripsWidth;     // the strip pane's saved width; none is the default
+    double textScale = 1;                  // the system font's size over its default: the bands grow with it
   };
 
   struct ListSpan {
@@ -100,7 +101,8 @@ namespace luciole::workbench {
     double margin = 0;      // left offset that centers the group on a very wide view
     double stripsWidth = 0; // the strip pane; 0 without strips
     double stripsMax = 0;   // the widest the strip pane may be made while the list keeps its minimum; 0 without strips
-    double spare = 0;       // what the list can still give up before it reaches its minimum
+    double stripsDefault = 0; // the pane's default width at the plan's text scale; 0 without strips
+    double spare = 0;         // what the list can still give up before it reaches its minimum
   };
 
   // Captured once at pointer down; every frame of the drag reads only this.
@@ -143,15 +145,17 @@ namespace luciole::workbench {
   // it is at least 320 and under 470, then rounded.
   ColumnWidths normalizeWidths(const ColumnWidths& widths);
 
+  // The bands, the pane's least width and its default grow with `textScale` (a value that is not finite and positive
+  // reads as 1), each band rounded to whole pixels; the saved widths stay in pixels.
   // Strips for `count` ancestors in a pane `paneWidth` px wide, farthest first, with x from the pane's far edge and
   // the nearest against the list. All of them when their named bands fit, else the most named bands, at least one,
   // that fit beside one stack strip for the levels beyond them. A width outside 70 to 321 reads as the nearest
   // limit, NaN as 70.
-  std::vector<Strip> ancestorStrips(std::size_t count, double paneWidth);
+  std::vector<Strip> ancestorStrips(std::size_t count, double paneWidth, double textScale = 1);
 
   // The strip pane's width in a center `viewWidth` px wide: `width`, or the default when it is none or not finite,
   // rounded and held within 70 to 321, and narrower where the list would fall under `listMin`, down to 70.
-  double stripsPaneWidth(std::optional<double> width, double viewWidth, double listMin);
+  double stripsPaneWidth(std::optional<double> width, double viewWidth, double listMin, double textScale = 1);
 
   // A saved strip pane width: rounded when it is from 70 to 321 after rounding, else none, the default.
   std::optional<double> normalizeStripsWidth(std::optional<double> width);

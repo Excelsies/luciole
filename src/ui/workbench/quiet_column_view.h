@@ -86,6 +86,7 @@ namespace luciole {
     void doArrange(Renderer& renderer, const LayoutRect& rect) override;
 
   private:
+    void fitHeights(Renderer& renderer);
     class Adapter;
     friend class Adapter;
 

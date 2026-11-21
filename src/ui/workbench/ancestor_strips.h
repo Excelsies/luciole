@@ -40,6 +40,8 @@ namespace luciole {
     void setAncestors(std::vector<AncestorEntry> ancestors);
     // Farthest first, as workbench::ancestorStrips gives them; a strip for a level past the ancestors is not shown.
     void setPlan(std::vector<workbench::Strip> plan);
+    // The system font's size over its default: the paddings and icons grow with it, as the plan's bands do.
+    void setTextScale(float scale);
     // The folder another pane points at: the strip that holds it is marked. None, or an id that is no ancestor,
     // marks nothing.
     void setPointed(std::optional<std::uint64_t> id);
@@ -91,6 +93,7 @@ namespace luciole {
     std::size_t m_shown = 0;
     std::optional<std::uint64_t> m_pointed;
     std::optional<std::uint64_t> m_hoverSent; // the last folder onHover reported
+    float m_textScale = 1;
   };
 
   // The strips pane's edge beside the list: a divider that resizes the pane, and the pane's saved width. The divider

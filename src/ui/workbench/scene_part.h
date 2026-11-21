@@ -75,6 +75,8 @@ namespace luciole {
     double
     width(std::string_view text, double size, workbench::LabelWeight weight = workbench::LabelWeight::Regular) const;
     workbench::LabelFont font(double size, workbench::LabelWeight weight = workbench::LabelWeight::Regular) const;
+    // The same advances at `factor` times the size, for a scene laid out in a view scaled by 1 / factor.
+    LabelMetrics scaled(double factor) const;
 
   private:
     workbench::LabelFont m_font;
@@ -91,6 +93,7 @@ namespace luciole {
     double width = 0;
     double height = 0;
     LabelMetrics metrics;
+    std::uint64_t metricsEpoch = 0; // changes whenever `metrics` is measured again
     PartTrail trail{};
   };
 

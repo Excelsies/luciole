@@ -1,6 +1,8 @@
 #include "ui/workbench/part_view.h"
 
 #include "ui/controls/shape_view.h"
+#include "ui/workbench/text_scale.h"
+#include "workbench/scene_zoom.h"
 
 #include <algorithm>
 #include <chrono>
@@ -85,7 +87,10 @@ namespace luciole {
       if (m_part == nullptr || m_loading) {
         return false;
       }
-      const auto reaction = m_part->wheel(wheel);
+      ShapeWheel inScene = wheel;
+      inScene.x /= m_textScale;
+      inScene.y /= m_textScale;
+      const auto reaction = m_part->wheel(inScene);
       react(reaction);
       return reaction.handled;
     };
@@ -99,7 +104,10 @@ namespace luciole {
       if (m_part == nullptr || m_loading) {
         return false;
       }
-      const auto reaction = m_part->drag(drag);
+      ShapeDrag inScene = drag;
+      inScene.x /= m_textScale;
+      inScene.y /= m_textScale;
+      const auto reaction = m_part->drag(inScene);
       react(reaction);
       if (reaction.handled) {
         m_reshape = true;
@@ -179,9 +187,10 @@ namespace luciole {
         .serial = m_inputs.snapshot.serial,
         .settings = m_inputs.settings,
         .palette = m_inputs.palette,
-        .width = width,
-        .height = height,
-        .metrics = m_metrics,
+        .width = width / m_textScale,
+        .height = height / m_textScale,
+        .metrics = m_sceneMetrics,
+        .metricsEpoch = m_metricsEpoch,
         .trail = m_inputs.trail,
     };
     if (m_part->layout(frame)) {
@@ -194,14 +203,17 @@ namespace luciole {
     workbench::SceneShapes scene;
     PartSnapshot shown;
     std::string note = "Loading…";
+    // The scene lives in the view as the text scale shrinks it; zoomScene brings it to the real one.
+    const float sceneWidth = m_builtWidth / m_textScale;
+    const float sceneHeight = m_builtHeight / m_textScale;
     std::optional<workbench::ShapeRect> box =
-        workbench::ShapeRect{.x = 0, .y = 0, .width = m_builtWidth, .height = m_builtHeight, .radius = 0};
+        workbench::ShapeRect{.x = 0, .y = 0, .width = sceneWidth, .height = sceneHeight, .radius = 0};
     if (!m_loading) {
       scene = m_part->shapes(m_view->marks());
       shown = m_part->shownSnapshot();
       if (shown.tree != nullptr) {
         note = folderNote(*shown.tree, m_inputs.settings);
-        box = m_part->noteBox(m_builtWidth, m_builtHeight);
+        box = m_part->noteBox(sceneWidth, sceneHeight);
       }
     }
     // A note the scene writes itself is not written twice.
@@ -209,6 +221,7 @@ namespace luciole {
     if (!note.empty() && box && !written) {
       scene.labels.insert(scene.labels.begin(), noteLabel(std::move(note), *box, m_inputs.palette));
     }
+    workbench::zoomScene(scene, m_textScale);
     fitLabels(scene.labels, m_metrics);
     const float redrawn = std::exchange(m_redrawMs, 0.0F);
     float transition = m_fresh ? std::exchange(m_transitionMs, 0.0F) : redrawn;
@@ -242,7 +255,9 @@ namespace luciole {
     if (reaction.relayout || (m_part != nullptr && m_part->moving())) {
       needFrame();
     }
-    for (const auto& each : reaction.requests) {
+    for (auto each : reaction.requests) {
+      each.x *= m_textScale; // the part works in the view the scene was laid out in
+      each.y *= m_textScale;
       request(each);
     }
   }
@@ -260,8 +275,16 @@ namespace luciole {
   }
 
   void PartView::doLayout(Renderer& renderer) {
-    if (!m_metrics.ready()) {
+    // The label widths and the scene's scale follow the system font: a change lays the scene out again.
+    const float scale = systemTextScale();
+    const auto generation = renderer.textMetricsGeneration();
+    if (!m_metrics.ready() || scale != m_textScale || generation != m_metricsGeneration) {
       m_metrics.measure(renderer);
+      m_textScale = scale;
+      m_metricsGeneration = generation;
+      ++m_metricsEpoch;
+      m_sceneMetrics = m_metrics.scaled(1.0 / static_cast<double>(scale));
+      m_dirty = true;
       needFrame();
     }
     m_view->setFrameSize(width(), height());

@@ -32,6 +32,8 @@ public:
 
   explicit PaneHeader(PaneHeaderOptions options);
 
+  // The bar's height: kHeight unless the owner's text size asks for more.
+  void setHeight(float height);
   void setTitle(std::string_view title);
   // Placed before the pane's own buttons, replacing earlier controls; an empty pointer removes them.
   Node* setControls(std::unique_ptr<Node> controls);

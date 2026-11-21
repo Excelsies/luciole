@@ -248,6 +248,7 @@ namespace luciole {
             && frame.width == m_frame.width
             && frame.height == m_frame.height
             && frame.metrics.ready() == m_frame.metrics.ready()
+            && frame.metricsEpoch == m_frame.metricsEpoch
             && frame.trail == m_frame.trail;
       }
 

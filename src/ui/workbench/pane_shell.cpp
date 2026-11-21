@@ -6,6 +6,7 @@
 #include "ui/controls/pane_header.h"
 #include "ui/palette.h"
 #include "ui/style.h"
+#include "ui/workbench/text_scale.h"
 #include "workbench/preview_home.h"
 
 #include <algorithm>
@@ -233,7 +234,7 @@ namespace luciole {
       m_drag = DragStart{.id = id, .state = m_state};
     }
     const wb::ViewSize view{.width = width(), .height = height()};
-    const auto result = wb::dragDivider(m_drag->state, view, m_limits, m_kind, id, value, 0);
+    const auto result = wb::dragDivider(m_drag->state, view, limits(), m_kind, id, value, 0);
     // a key step at a limit starts from the clamped value, not from past the limit
     divider(id).setValue(static_cast<float>(result.value));
     if (finished) {
@@ -263,16 +264,18 @@ namespace luciole {
 
   void PaneShell::doLayout(Renderer& renderer) {
     const wb::ViewSize view{.width = width(), .height = height()};
+    m_textScale = systemTextScale(); // the headers and the panes' least sizes follow the system font
+    const auto scaled = limits();
     const bool current = m_layoutValid
         && m_layout.state == m_state
         && m_layoutView.width == view.width
         && m_layoutView.height == view.height
-        && m_layoutLimits == m_limits
+        && m_layoutLimits == scaled
         && m_layoutKind == m_kind;
     if (!current) {
-      m_layout = wb::layoutPanes(m_state, view, m_limits, m_kind);
+      m_layout = wb::layoutPanes(m_state, view, scaled, m_kind);
       m_layoutView = view;
-      m_layoutLimits = m_limits;
+      m_layoutLimits = scaled;
       m_layoutKind = m_kind;
       m_layoutValid = true;
       syncChrome();
@@ -301,7 +304,8 @@ namespace luciole {
     slot.root->setFrameSize(box.width, box.height);
     float top = 0;
     if (slot.header != nullptr) {
-      top = std::min(PaneHeader::kHeight, box.height);
+      top = std::min(static_cast<float>(m_layoutLimits.header), box.height);
+      slot.header->setHeight(static_cast<float>(m_layoutLimits.header));
       const LayoutRect bar{0, 0, box.width, top};
       slot.header->arrange(renderer, bar);
       fitTitle(renderer, indexOf(region, m_titles.size()), bar);

@@ -15,31 +15,54 @@ namespace luciole::workbench {
 
     double validListMin(double listMin) { return std::isfinite(listMin) && listMin > 0 ? listMin : kListFloor; }
 
+    // A scale that is not finite and positive reads as 1.
+    double validScale(double scale) { return std::isfinite(scale) && scale > 0 ? scale : 1.0; }
+
+    // Widths of the bands at a text scale, in whole pixels; the same as the constants at 1.
+    double bandWidth(std::size_t level, double scale) {
+      return std::round(kAncestorStripWidths[std::min(level - 1, kAncestorStripWidths.size() - 1)] * scale);
+    }
+
+    double stackWidth(double scale) { return std::round(kStackStripWidth * scale); }
+
+    // The `count` nearest named bands with the gap after each.
+    double bandsWidth(std::size_t count, double scale) {
+      double width = 0;
+      for (std::size_t level = 1; level <= count; ++level) { // at most kMaxStrips passes
+        width += bandWidth(level, scale) + kStripGap;
+      }
+      return width;
+    }
+
+    double stripsMin(double scale) { return bandsWidth(1, scale) + stackWidth(scale) + kStripGap; }
+    double stripsDefault(double scale) { return bandsWidth(4, scale) + stackWidth(scale) + kStripGap; }
+    double stripsMax(double scale) { return bandsWidth(12, scale) + stackWidth(scale) + kStripGap; }
+
     // `named` ancestor strips, nearest last, behind one stack strip for the levels beyond them; the nearest ends at
     // `right`.
-    std::vector<Strip> buildStrips(std::size_t named, std::size_t count, double right) {
+    std::vector<Strip> buildStrips(std::size_t named, std::size_t count, double right, double scale) {
       std::vector<Strip> strips;
       strips.reserve(named + 1);
-      double x = right - stripBandsWidth(named);
+      double x = right - bandsWidth(named, scale);
       if (named < count) {
-        x -= kStackStripWidth + kStripGap;
+        x -= stackWidth(scale) + kStripGap;
         strips.push_back(
-            {.kind = StripKind::Stack, .level = named + 1, .lastLevel = count, .width = kStackStripWidth, .x = x}
+            {.kind = StripKind::Stack, .level = named + 1, .lastLevel = count, .width = stackWidth(scale), .x = x}
         );
-        x += kStackStripWidth + kStripGap;
+        x += stackWidth(scale) + kStripGap;
       }
       for (std::size_t level = named; level >= 1; --level) { // at most kMaxStrips passes
-        const double width = kAncestorStripWidths[std::min(level - 1, kAncestorStripWidths.size() - 1)];
+        const double width = bandWidth(level, scale);
         strips.push_back({.kind = StripKind::Ancestor, .level = level, .lastLevel = level, .width = width, .x = x});
         x += width + kStripGap;
       }
       return strips;
     }
 
-    // The widest pane a center `view` px wide gives the strips while the list keeps `listMin`, never under 70.
-    double maxStripsWidth(double view, double listMin) {
+    // The widest pane a center `view` px wide gives the strips while the list keeps `listMin`, never under the least.
+    double maxStripsWidth(double view, double listMin, double scale) {
       const double room = std::isfinite(view) ? std::floor(view - listMin) : 0;
-      return clampLow(room, kStripsMinWidth, kStripsMaxWidth);
+      return clampLow(room, stripsMin(scale), stripsMax(scale));
     }
 
     // The widths after a change that leaves the list `free` px: the narrowest list below 470 is remembered, and
@@ -67,22 +90,25 @@ namespace luciole::workbench {
     return out;
   }
 
-  std::vector<Strip> ancestorStrips(std::size_t count, double paneWidth) {
-    const double pane = std::isnan(paneWidth) ? kStripsMinWidth : clampLow(paneWidth, kStripsMinWidth, kStripsMaxWidth);
-    if (count <= kMaxStrips && stripBandsWidth(count) <= pane) {
-      return buildStrips(count, count, pane);
+  std::vector<Strip> ancestorStrips(std::size_t count, double paneWidth, double textScale) {
+    const double scale = validScale(textScale);
+    const double least = stripsMin(scale);
+    const double pane = std::isnan(paneWidth) ? least : clampLow(paneWidth, least, stripsMax(scale));
+    if (count <= kMaxStrips && bandsWidth(count, scale) <= pane) {
+      return buildStrips(count, count, pane, scale);
     }
     std::size_t named = 1; // the narrowest pane holds one beside the stack
     while (named + 1 < std::min(count, kMaxStrips)
-           && stripBandsWidth(named + 1) + kStackStripWidth + kStripGap <= pane) { // at most kMaxStrips passes
+           && bandsWidth(named + 1, scale) + stackWidth(scale) + kStripGap <= pane) { // at most kMaxStrips passes
       ++named;
     }
-    return buildStrips(named, count, pane);
+    return buildStrips(named, count, pane, scale);
   }
 
-  double stripsPaneWidth(std::optional<double> width, double viewWidth, double listMin) {
-    const double wanted = width && std::isfinite(*width) ? roundWidth(*width) : kStripsDefaultWidth;
-    return clampLow(wanted, kStripsMinWidth, maxStripsWidth(viewWidth, validListMin(listMin)));
+  double stripsPaneWidth(std::optional<double> width, double viewWidth, double listMin, double textScale) {
+    const double scale = validScale(textScale);
+    const double wanted = width && std::isfinite(*width) ? roundWidth(*width) : stripsDefault(scale);
+    return clampLow(wanted, stripsMin(scale), maxStripsWidth(viewWidth, validListMin(listMin), scale));
   }
 
   std::optional<double> normalizeStripsWidth(std::optional<double> width) {
@@ -110,7 +136,8 @@ namespace luciole::workbench {
         .startX = plan.margin + plan.stripsWidth,
         .max = plan.stripsMax,
         .saved = saved,
-        .wanted = normalizeStripsWidth(saved).value_or(kStripsDefaultWidth),
+        .wanted =
+            normalizeStripsWidth(saved).value_or(plan.stripsDefault > 0 ? plan.stripsDefault : kStripsDefaultWidth),
     };
   }
 
@@ -144,11 +171,13 @@ namespace luciole::workbench {
     const double view = std::isfinite(viewWidth) && viewWidth > 0 ? viewWidth : 0;
     const double listMin = validListMin(options.listMin);
     const auto widths = normalizeWidths(options.widths);
+    const double scale = validScale(options.textScale);
     ColumnPlan plan;
     if (options.strips) {
-      plan.stripsWidth = stripsPaneWidth(options.stripsWidth, view, listMin);
-      plan.stripsMax = maxStripsWidth(view, listMin);
-      plan.strips = ancestorStrips(ancestors, plan.stripsWidth);
+      plan.stripsWidth = stripsPaneWidth(options.stripsWidth, view, listMin, scale);
+      plan.stripsMax = maxStripsWidth(view, listMin, scale);
+      plan.stripsDefault = stripsDefault(scale);
+      plan.strips = ancestorStrips(ancestors, plan.stripsWidth, scale);
     }
     const auto fit = columnCount(view - plan.stripsWidth, widths.columns, listMin, listFloor(widths, listMin));
     const auto count = std::min(fit, options.maxColumns.value_or(kColumnsAhead));
