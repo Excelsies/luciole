@@ -31,7 +31,8 @@ public:
   void compress(const std::vector<luciole::DirectoryEntry>& targets);
   void extractTo(const luciole::Location& archive);
   void extractHere(const luciole::Location& archive);
-  void browse(const luciole::Location& archive);
+  // True when reading the archive started.
+  bool browse(const luciole::Location& archive);
   // Owned archive job change: opens an extracted member, reports a finished operation and syncs the archive
   // browser on the next frame.
   void changed(OperationJob& job);

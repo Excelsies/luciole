@@ -128,10 +128,10 @@ BrowserPage::BrowserPage(
                  const auto state = luciole::ActionRegistry::browseArchiveState(operationsBusy(), archive);
                  if (!state.enabled) {
                    actionError(std::string(state.reason));
-                   return;
+                   return false;
                  }
                  m_statusBar.clearMessage();
-                 m_archiveController.browse(archive.location);
+                 return m_archiveController.browse(archive.location);
                },
            .modifiers = [this] { return m_connection.keyboardModifiers(); },
            .editing = [this] { return m_locationBar.textFocused() || editorFocused(); }}

@@ -49,7 +49,7 @@ public:
   // tell whether one of its text fields has focus. All are required.
   struct Hooks {
     std::function<void(const luciole::Location&)> launch;
-    std::function<void(const luciole::ArchiveFacts&)> browseArchive;
+    std::function<bool(const luciole::ArchiveFacts&)> browseArchive;
     std::function<std::uint32_t()> modifiers;
     std::function<bool()> editing;
   };

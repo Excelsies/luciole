@@ -1,6 +1,7 @@
 #include "app/page/workbench_open.h"
 #include "preview_edit_rig.h"
 
+#include <filesystem>
 #include <string>
 #include <unistd.h>
 #include <vector>
@@ -12,6 +13,7 @@ namespace {
   using namespace luciole::test::edit;
   using luciole::ArchiveFacts;
   using luciole::Location;
+  namespace fs = std::filesystem;
 
   constexpr std::string_view kEmptyZip{"PK\x05\x06\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0", 22};
 
@@ -23,6 +25,9 @@ namespace {
       files.write("part.zip.002", "split");
       files.write("sub/inner.zip", kEmptyZip);
       files.write("late.zip", kEmptyZip);
+      files.write("pack.tar", "tar bytes");
+      files.write("secret.zip", kEmptyZip, 0000);
+      fs::create_symlink("pack.zip", files.folder / "link.zip");
     }
     Location at(const std::string& relative) const { return Location::fromPath((files.folder / relative).native()); }
   };
@@ -31,12 +36,17 @@ namespace {
     std::vector<std::string> visited;
     std::vector<std::string> launched;
     std::vector<std::string> browsed;
+    bool refuse = false; // the archive browser is refused, as while a file job runs
 
     luciole::WorkbenchOpenHooks hooks() {
       return {
           .visited = [this](const Location& file) { visited.push_back(*file.basename()); },
           .launch = [this](const Location& file) { launched.push_back(*file.basename()); },
-          .browseArchive = [this](const ArchiveFacts& archive) { browsed.push_back(*archive.location.basename()); }
+          .browseArchive =
+              [this](const ArchiveFacts& archive) {
+                browsed.push_back(*archive.location.basename());
+                return !refuse;
+              }
       };
     }
   };
@@ -89,6 +99,38 @@ namespace {
     TEST_CHECK(opened.visited.size() == 2);
   }
 
+  void aTarBrowsesAndOddFilesAreLaunched(::test::SceneCapture& capture) {
+    const Folder folder;
+    Rig rig(folder.files, capture, folder.files.folder);
+    Opened opened;
+    open(rig, folder, "pack.tar", false, opened);
+    TEST_CHECK(opened.browsed == std::vector<std::string>{"pack.tar"} && opened.launched.empty());
+    open(rig, folder, "link.zip", false, opened); // a link to a ZIP is the link's business, as in the list
+    TEST_CHECK(opened.launched == std::vector<std::string>{"link.zip"});
+    luciole::openWorkbenchFile(
+        Location::fromUri("sftp://example.invalid/pack.zip"), modelsOf(rig), false, opened.hooks()
+    );
+    TEST_CHECK(opened.launched.back() == "pack.zip" && opened.browsed.size() == 1); // not a native file
+    if (::geteuid() == 0) {
+      std::println("skipped the unreadable ZIP: running as root reads everything");
+    } else {
+      open(rig, folder, "secret.zip", false, opened);
+      TEST_CHECK(opened.launched.back() == "secret.zip" && opened.browsed.size() == 1);
+    }
+  }
+
+  // A refused or failed archive browser records no visit; a launch does.
+  void aRefusedOpenIsNoVisit(::test::SceneCapture& capture) {
+    const Folder folder;
+    Rig rig(folder.files, capture, folder.files.folder);
+    Opened opened;
+    opened.refuse = true;
+    open(rig, folder, "pack.zip", false, opened);
+    TEST_CHECK(opened.browsed.size() == 1 && opened.launched.empty() && opened.visited.empty());
+    open(rig, folder, "note.txt", false, opened);
+    TEST_CHECK(opened.visited == std::vector<std::string>{"note.txt"});
+  }
+
   void aMissingFileIsLaunched(::test::SceneCapture& capture) {
     const Folder folder;
     Rig rig(folder.files, capture, folder.files.folder);
@@ -121,6 +163,8 @@ int main() {
   aZipShowsTheArchiveBrowser(*capture);
   otherFilesAreLaunched(*capture);
   aColumnAheadAndAShapeOpenTheSameWay(*capture);
+  aTarBrowsesAndOddFilesAreLaunched(*capture);
+  aRefusedOpenIsNoVisit(*capture);
   aMissingFileIsLaunched(*capture);
   runningJobsRefuseTheBrowser();
   std::println("workbench-open: all checks passed");

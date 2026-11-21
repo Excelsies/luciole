@@ -1,6 +1,7 @@
 #include "app/page/workbench_open.h"
 
 #include "app/page/workbench_session.h"
+#include "fs/entry_access.h"
 #include "fs/gio_ptr.h"
 
 #include <glib.h>
@@ -36,6 +37,7 @@ namespace luciole {
       if (const auto id = rowOf(*model, location)) {
         if (const auto* entry = model->entry(*id)) {
           auto facts = ActionRegistry::archiveFacts(*entry);
+          facts.readable = entryAccess(*entry).read; // a local listing may not have checked yet
           if (facts.mime.empty()) {
             facts.mime = factsOfFile(location).mime; // its type is not read yet
           }
@@ -53,12 +55,14 @@ namespace luciole {
     if (!hooks.visited || !hooks.launch || !hooks.browseArchive) {
       throw std::invalid_argument("Opening a Workbench file needs every hook.");
     }
-    hooks.visited(location);
     const auto facts = archiveFactsFor(location, models);
     if (!chooser && ActionRegistry::browsableFile(facts)) {
-      hooks.browseArchive(facts);
-    } else {
-      hooks.launch(location);
+      if (hooks.browseArchive(facts)) {
+        hooks.visited(location);
+      }
+      return;
     }
+    hooks.launch(location);
+    hooks.visited(location);
   }
 } // namespace luciole

@@ -49,7 +49,7 @@ void ArchiveController::extractHere(const luciole::Location& archive) {
   }
 }
 
-void ArchiveController::browse(const luciole::Location& archive) {
+bool ArchiveController::browse(const luciole::Location& archive) {
   if (!m_browser) {
     m_browser = m_page.jobs().create<luciole::ArchiveService>(JobScope::Page);
   }
@@ -57,9 +57,10 @@ void ArchiveController::browse(const luciole::Location& archive) {
     m_source = archive;
     m_wanted = true;
     m_dirty = true;
-  } else {
-    m_page.actionError("Could not read this archive.");
+    return true;
   }
+  m_page.actionError("Could not read this archive.");
+  return false;
 }
 
 bool ArchiveController::extract(

@@ -366,6 +366,7 @@ namespace luciole {
 
   void PreviewEditController::closeQuestion() {
     m_questionSentence.clear();
+    m_noChosen = false;
     if (std::exchange(m_question, QuestionState::None) == QuestionState::Shown) {
       m_hooks.dismiss();
     }
