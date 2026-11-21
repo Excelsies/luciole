@@ -1,4 +1,5 @@
 #include "bink2_sample.h"
+#include "media/bink2_demux.h"
 #include "media/bink2_stream.h"
 #include "media/gstreamer_runtime.h"
 #include "media_clips.h"
@@ -126,7 +127,6 @@ namespace {
   // A reader that keeps every picture it is given gets only a few before the element waits for one back: the pictures
   // are 12 MB each at 4K.
   void handsOutOnlyAFewPictures(const fs::path& path) {
-    constexpr int kMostHeld = 5;
     Rig rig(path);
     TEST_CHECK(rig.paused());
     rig.play();
@@ -137,8 +137,7 @@ namespace {
       TEST_CHECK(held.size() < 32);
     }
     std::println("the element handed out {} pictures to a reader that kept them", held.size());
-    TEST_CHECK(held.size() >= 2);
-    TEST_CHECK(std::ssize(held) <= kMostHeld);
+    TEST_CHECK(std::ssize(held) == luciole::media::bink2::kPoolMaximum);
     for (GstSample* sample : held) {
       gst_sample_unref(sample);
     }

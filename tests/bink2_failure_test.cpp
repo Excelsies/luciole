@@ -1,4 +1,5 @@
 #include "bink2_sample.h"
+#include "media/bink2_demux.h"
 #include "media/gstreamer_runtime.h"
 #include "media/media_player.h"
 #include "media_clips.h"
@@ -112,16 +113,14 @@ namespace {
     GstElement* pipeline = pipelineOn(sample, sink, true);
     gst_element_set_state(pipeline, GST_STATE_PLAYING);
     std::vector<GstSample*> held;
-    // The first picture takes as long as the file needs; then every pull keeps its picture until one finds nothing
-    // waiting, which is when the pool is empty and the task waits.
-    GstSample* first = gst_app_sink_try_pull_sample(GST_APP_SINK(sink), 60 * GST_SECOND);
-    TEST_CHECK(first != nullptr);
-    held.push_back(first);
-    while (GstSample* picture = gst_app_sink_try_pull_sample(GST_APP_SINK(sink), 2 * GST_SECOND)) {
+    // Every picture of the pool goes to this reader, which keeps it: the pull after the last finds nothing, and the
+    // task can only be waiting for a buffer. The pictures take as long as the file needs.
+    for (int i = 0; i < luciole::media::bink2::kPoolMaximum; ++i) {
+      GstSample* picture = gst_app_sink_try_pull_sample(GST_APP_SINK(sink), 60 * GST_SECOND);
+      TEST_CHECK(picture != nullptr);
       held.push_back(picture);
-      TEST_CHECK(held.size() < 32);
     }
-    TEST_CHECK(held.size() >= 2);
+    TEST_CHECK(gst_app_sink_try_pull_sample(GST_APP_SINK(sink), 2 * GST_SECOND) == nullptr);
     std::this_thread::sleep_for(500ms); // the task is now waiting for a buffer
     auto stopped = std::async(std::launch::async, [&] { return gst_element_set_state(pipeline, GST_STATE_NULL); });
     TEST_CHECK(stopped.wait_for(20s) == std::future_status::ready);

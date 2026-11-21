@@ -1,3 +1,4 @@
+#include "media/bink2_demux.h"
 #include "media/bink2_demux_state.h"
 
 #include <algorithm>
@@ -11,9 +12,7 @@ namespace {
   using namespace luciole::media::bink2;
 
   constexpr int kPoolMinimum = 2;
-  // The element runs ahead of the clock by what the pool holds, and a picture is 12 MB at 4K: a few are enough for
-  // the sink, the queue in front of it and the one being made.
-  constexpr int kPoolMaximum = 5;
+  // The element runs ahead of the clock by what the pool holds, and a picture is 12 MB at 4K.
 
   void postError(Demux& demux, gint code, const std::string& text, const char* debug = nullptr) {
     gst_element_message_full(
