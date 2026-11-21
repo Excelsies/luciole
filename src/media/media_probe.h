@@ -23,6 +23,9 @@ namespace luciole {
   class MediaProbe {
   public:
     static constexpr std::chrono::milliseconds kTimeLimit{3000};
+    // The one more try after a timeout: the first read started GStreamer and loaded its plugins, which a busy machine
+    // or a cold disk can take longer than kTimeLimit to do, so the second read needs less and gets more room.
+    static constexpr std::chrono::milliseconds kRetryLimit{20000};
 
     MediaProbe();
     // Cancels the read in progress.
@@ -49,6 +52,9 @@ namespace luciole {
     void cancel();
     // Whether a read runs whose result has not arrived.
     bool busy() const noexcept;
+    // The last read ended because `limit` ran out, so its none says nothing of the file: it may be media. A file that
+    // is not media, cannot be read or fails to parse ends at once with this false. Valid once the result arrived.
+    bool timedOut() const noexcept;
 
   private:
     struct Read;

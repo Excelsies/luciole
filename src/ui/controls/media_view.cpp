@@ -24,6 +24,8 @@ namespace {
   constexpr float kMinBarWidth = 24;
   constexpr std::string_view kNoSoundDevice = "No sound device was found.";
   constexpr std::string_view kSeeking = "Seeking...";
+  constexpr std::string_view kReading = "Still reading the file...";
+  constexpr std::string_view kUnread = "Could not read the details of this file.";
 
   // 0:05, 12:34 or 1:02:03; "--:--" while unknown.
   std::string clockText(double seconds) {
@@ -128,7 +130,7 @@ MediaView::~MediaView() {
 }
 
 void MediaView::setSource(const std::string& path) {
-  if (path == m_path) {
+  if (path == m_path && !m_factsFailed) {
     return;
   }
   stop();
@@ -136,6 +138,8 @@ void MediaView::setSource(const std::string& path) {
   m_path = path;
   m_facts = {};
   m_factsRead = false;
+  m_factsFailed = false;
+  m_factsRetried = false;
   setPoster(nullptr);
   readFacts();
   refreshControls();
@@ -369,7 +373,11 @@ void MediaView::refreshNotice(bool shown) {
 void MediaView::refreshMessage(bool failed) {
   const bool silent = m_player && m_player->state() != MediaState::Error && m_player->soundDeviceMissing();
   const bool seeking = m_seekShown && !failed;
+  const bool reading = m_factsRetried && !m_factsRead && !failed;
+  const bool unread = m_factsFailed && !failed;
   const auto text = failed ? m_player->error()
+      : unread             ? std::string(kUnread)
+      : reading            ? std::string(kReading)
       : seeking            ? std::string(kSeeking)
       : silent             ? std::string(kNoSoundDevice)
                            : std::string{};
@@ -378,7 +386,7 @@ void MediaView::refreshMessage(bool failed) {
     m_message->setColor(colorSpecFromRole(failed ? ColorRole::Error : ColorRole::OnSurfaceVariant));
     m_message->setFlexGrow(failed ? 1 : 0);
   }
-  showIn(*m_message, failed || silent || seeking);
+  showIn(*m_message, failed || silent || seeking || reading || unread);
   showIn(*m_mute, !silent);
 }
 
@@ -399,26 +407,6 @@ void MediaView::followClock() {
     m_clock.stop();
   } else if (!m_clock.active()) {
     m_clock.startRepeating(kClockInterval, [this] { onScreen() ? refreshPosition() : stop(); });
-  }
-}
-
-void MediaView::readFacts() {
-  if (m_path.empty() || m_factsRead || !m_shown || m_probe.busy()) {
-    return;
-  }
-  m_probe.start(m_path, [this](std::optional<luciole::MediaFacts> facts) { factsArrived(facts); });
-}
-
-// Keeps a playing time the player found when the container states none.
-void MediaView::factsArrived(std::optional<luciole::MediaFacts> facts) {
-  m_factsRead = true;
-  if (facts) {
-    facts->seconds = facts->seconds > 0 ? facts->seconds : m_facts.seconds;
-    m_facts = *facts;
-    refreshControls();
-    if (onFactsChanged) {
-      onFactsChanged();
-    }
   }
 }
 

@@ -11,6 +11,7 @@ struct luciole::MediaProbe::Read {
   std::atomic<bool> cancelled{false};
   std::function<void(std::optional<MediaFacts>)> done;
   bool finished = false;
+  bool timedOut = false;
 };
 
 namespace {
@@ -188,10 +189,11 @@ namespace {
     return std::nullopt;
   }
 
-  // Waits for the facts; none on an error, cancellation or the deadline. Each pass ends with a slice, a wake or
-  // an error, and there are at most kWakes wakes.
-  std::optional<MediaFacts>
-  awaitFacts(GstBus* bus, Found& found, const std::atomic<bool>& cancelled, std::chrono::milliseconds limit) {
+  // Waits for the facts; none on an error, cancellation or the deadline, which sets `timedOut`. Each pass ends with a
+  // slice, a wake or an error, and there are at most kWakes wakes.
+  std::optional<MediaFacts> awaitFacts(
+      GstBus* bus, Found& found, const std::atomic<bool>& cancelled, std::chrono::milliseconds limit, bool& timedOut
+  ) {
     const auto deadline = std::chrono::steady_clock::now() + limit;
     const auto passes = limit / kSlice + 1 + kWakes;
     const auto wait = static_cast<GstClockTime>(std::chrono::duration_cast<std::chrono::nanoseconds>(kSlice).count());
@@ -208,12 +210,13 @@ namespace {
         }
       }
     }
+    timedOut = !cancelled;
     return std::nullopt;
   }
 
   // Probe thread: the facts of `path`, or none.
   std::optional<MediaFacts>
-  probe(const std::string& path, const std::atomic<bool>& cancelled, std::chrono::milliseconds limit) {
+  probe(const std::string& path, const std::atomic<bool>& cancelled, std::chrono::milliseconds limit, bool& timedOut) {
     if (!path.starts_with('/')
         || !luciole::media::startProblem().empty()
         || !luciole::media::fileProblem(path).empty()) {
@@ -240,7 +243,7 @@ namespace {
     GstBus* bus = gst_element_get_bus(pipeline);
     const bool linked = gst_element_link(source, parse) != FALSE;
     const bool started = linked && gst_element_set_state(pipeline, GST_STATE_PAUSED) != GST_STATE_CHANGE_FAILURE;
-    const auto result = started ? awaitFacts(bus, found, cancelled, limit) : std::nullopt;
+    const auto result = started ? awaitFacts(bus, found, cancelled, limit, timedOut) : std::nullopt;
     (void)gst_element_set_state(pipeline, GST_STATE_NULL);
     gst_object_unref(bus);
     gst_object_unref(pipeline);
@@ -270,12 +273,14 @@ void luciole::MediaProbe::start(
     if (read->cancelled) {
       return;
     }
-    auto facts = probe(path, read->cancelled, limit);
-    media::runOnMainContext([read, facts] {
+    bool timedOut = false;
+    auto facts = probe(path, read->cancelled, limit, timedOut);
+    media::runOnMainContext([read, facts, timedOut] {
       if (read->cancelled || read->finished) {
         return;
       }
       read->finished = true;
+      read->timedOut = timedOut;
       // A copy, so the owner may start another read from the callback.
       const auto done = std::move(read->done);
       done(facts);
@@ -291,3 +296,5 @@ void luciole::MediaProbe::cancel() {
 }
 
 bool luciole::MediaProbe::busy() const noexcept { return m_read && !m_read->finished; }
+
+bool luciole::MediaProbe::timedOut() const noexcept { return m_read && m_read->finished && m_read->timedOut; }

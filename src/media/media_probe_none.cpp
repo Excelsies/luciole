@@ -21,3 +21,5 @@ void luciole::MediaProbe::start(
 void luciole::MediaProbe::cancel() {}
 
 bool luciole::MediaProbe::busy() const noexcept { return false; }
+
+bool luciole::MediaProbe::timedOut() const noexcept { return false; }

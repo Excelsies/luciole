@@ -1,8 +1,6 @@
 #include "media/media_probe.h"
 #include "workbench_place_rig.h"
 
-#include <chrono>
-#include <glib.h>
 #include <print>
 #include <string>
 #include <utility>
@@ -60,7 +58,13 @@ namespace {
     rig.select("song.wav");
     rig.settle();
     skewPast(rig);
-    rig.frames([&] { return media(rig) != nullptr && media(rig)->player() == nullptr && media(rig)->facts().audio; });
+    // The details come from the media probe, which reads again after a timeout: the bound is its two limits.
+    rig.frames(
+        [&] { return media(rig) != nullptr && media(rig)->player() == nullptr && media(rig)->facts().audio; },
+        std::chrono::duration_cast<std::chrono::seconds>(
+            luciole::MediaProbe::kTimeLimit + luciole::MediaProbe::kRetryLimit
+        ) + std::chrono::seconds(10)
+    );
     rig.click(media(rig)->playButton());
     rig.frames([&] { return media(rig)->player() != nullptr && media(rig)->player()->state() == MediaState::Playing; });
     TEST_CHECK(rig.view().previewHome() == PreviewHome::JumpAhead);
@@ -176,23 +180,6 @@ namespace {
     rig.release(x - 100, y);
     TEST_CHECK(!center.resizing());
   }
-
-  // The first read of a media file starts GStreamer and loads its plugins, which a loaded machine stretches past the
-  // probe's own time limit; the view's probe would then report no facts and the sound would never show its play
-  // button. Reading the file once, with room, leaves the plugins loaded for the reads the checks wait on.
-  void warmTheMediaProbe(const std::filesystem::path& clip) {
-    if (!luciole::MediaProbe::available()) {
-      return;
-    }
-    luciole::MediaProbe probe;
-    bool done = false;
-    probe.start(clip.string(), [&done](auto) { done = true; }, std::chrono::seconds(60));
-    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(65);
-    while (!done && std::chrono::steady_clock::now() < deadline) {
-      g_main_context_iteration(nullptr, TRUE);
-    }
-    TEST_CHECK(done);
-  }
 } // namespace
 
 int main() {
@@ -204,7 +191,6 @@ int main() {
   }
   static const luciole::test::preview::PreviewFiles files;
   test::audio::writeSoundClip(files.folder() / "song.wav", test::audio::SoundClip::ToneAndKicks, 30);
-  warmTheMediaProbe(files.folder() / "song.wav");
   {
     Rig rig(files, *capture);
     rig.choice = WorkbenchPreviewPlace::JumpAheadWhenNarrow;

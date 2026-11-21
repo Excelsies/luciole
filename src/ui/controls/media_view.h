@@ -73,6 +73,13 @@ public:
 
   // The player while one exists: from Play until the view stops.
   const luciole::MediaPlayer* player() const noexcept { return m_player.get(); }
+  // The time limits of the first facts read and of the one more try after it timed out; for tests.
+  void setProbeLimits(std::chrono::milliseconds first, std::chrono::milliseconds retry) {
+    m_firstLimit = first;
+    m_retryLimit = retry;
+  }
+  // The details could not be read in time, also on the one more try.
+  bool detailsUnread() const noexcept { return m_factsFailed; }
   // What is known of the file: its container's facts, and the playing time the player found.
   const luciole::MediaFacts& facts() const noexcept { return m_facts; }
   // Whether the picture shows a decoded frame rather than the poster.
@@ -164,7 +171,11 @@ private:
   float m_textSize;
   double m_dragSeconds = 0;
   long long m_shownSecond = -1;
-  bool m_factsRead = false; // a facts read finished for this path
+  bool m_factsRead = false;    // a facts read finished for this path
+  bool m_factsRetried = false; // the first read timed out and the one more try was made
+  bool m_factsFailed = false;  // the one more try timed out too: the details stay unknown
+  std::chrono::milliseconds m_firstLimit{luciole::MediaProbe::kTimeLimit};
+  std::chrono::milliseconds m_retryLimit{luciole::MediaProbe::kRetryLimit};
   bool m_shown = true;
   bool m_muted = false;
   bool m_looping = false;
