@@ -42,6 +42,19 @@ namespace luciole {
     return question;
   }
 
+  SaveQuestion pageSaveQuestion(
+      std::string_view name, std::function<void()> save, std::function<void()> no, std::function<void()> closeDialog
+  ) {
+    return saveQuestion(
+        name, std::move(save),
+        [no = std::move(no), closeDialog] {
+          no();
+          closeDialog();
+        },
+        closeDialog
+    );
+  }
+
   void showQuestionSentence(const SaveQuestion& question, std::string_view sentence) {
     question.sentence->setText(sentence);
     question.sentence->setVisible(!sentence.empty());

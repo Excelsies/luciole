@@ -127,7 +127,8 @@ namespace luciole {
     // True when the page may go now; otherwise the question opens and `resume` runs once it is answered No, or
     // Save and the save succeeded.
     // With `dismissCancels`, closing the question without choosing No keeps the changes and the editor, and `resume`
-    // runs with the changes still unsaved; unless another leave without it waits on the same question.
+    // runs with the changes still unsaved. That holds only while every request waiting on the question is such a
+    // leave: a page's own leaves, Stop editing and another leave without it make the same dismissal mean No.
     bool leave(std::function<void()> resume, bool dismissCancels = false);
     // The page is deactivated while the question is shown: its popup closes without an answer and the question is
     // shown again by onFrame() once the page can show it.
@@ -165,7 +166,9 @@ namespace luciole {
     void questionClosed();
     // The question was closed: true when that was no choice and the pending leaves give up (see leave()).
     bool dismissCancelsLeave();
-    void requestLeave();
+    void requestLeave(bool dismissCancels = false);
+    // Records what kind of request joins the question, forgetting the kinds of one that ended.
+    void noteRequest(bool dismissCancels);
     void apply(const editing::GateResult& result);
     void failed(const std::string& sentence);
     void closeQuestion();
@@ -196,8 +199,9 @@ namespace luciole {
     bool m_editorShown = false;
     bool m_hadKeyboard = false; // the editor had the keyboard in its last shown frame
     bool m_leaving = false;
-    bool m_dismissCancels = false; // every pending leave gives up when the question is closed without a choice
-    bool m_noChosen = false;       // No was pressed, as against Escape or the close button
+    bool m_cancelLeaves = false;  // a leave that gives up when the question is closed without a choice waits
+    bool m_otherRequests = false; // a request that does not waits
+    bool m_noChosen = false;      // No was pressed, as against Escape or the close button
     // The save.
     std::optional<FileShape> m_savedShape;
     FileShape m_savingShape;

@@ -170,20 +170,6 @@ namespace luciole {
     return m_file && locationWithin(*m_file, root) && saving();
   }
 
-  bool PreviewEditController::leave(std::function<void()> resume, bool dismissCancels) {
-    if (!m_session) {
-      return true;
-    }
-    const bool waiting = !m_resumes.empty();
-    requestLeave();
-    if (!m_session) {
-      return true; // nothing was unsaved: the editor closed at once
-    }
-    m_dismissCancels = dismissCancels && (!waiting || m_dismissCancels);
-    m_resumes.push_back(std::move(resume));
-    return false;
-  }
-
   void PreviewEditController::keepQuestion() {
     if (m_question == QuestionState::Shown) {
       m_question = QuestionState::Wanted;
@@ -210,7 +196,12 @@ namespace luciole {
                 questionClosed();
               }
             },
-        .no = [this, alive] { m_noChosen = m_noChosen || !alive.expired(); },
+        .no =
+            [this, alive] {
+              if (!alive.expired()) {
+                m_noChosen = true;
+              }
+            },
     };
     if (m_hooks.ask(std::move(question))) {
       m_question = QuestionState::Shown;
@@ -272,6 +263,7 @@ namespace luciole {
   void PreviewEditController::stop() {
     if (m_session) {
       settle();
+      noteRequest(false);
       apply(m_gate.stop());
     }
   }
@@ -313,14 +305,6 @@ namespace luciole {
       return;
     }
     apply(result);
-  }
-
-  void PreviewEditController::requestLeave() {
-    if (m_session && !m_leaving) {
-      settle();
-      m_leaving = true;
-      apply(m_gate.leave());
-    }
   }
 
   void PreviewEditController::apply(const editing::GateResult& result) {

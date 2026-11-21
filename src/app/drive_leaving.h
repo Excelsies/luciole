@@ -11,7 +11,8 @@ namespace luciole {
   // a file of that drive, and how it asks about them (CloseGate::Page::ask). Both are required.
   struct DriveEditor {
     std::function<bool(const Location& root)> unsavedIn;
-    // `dismissCancels` is true: closing the question without choosing No gives the removal up.
+    // Asks about the page's changes, calling `resume` once they are answered; true when the page may go at once. The
+    // question gives the removal up when it is closed without choosing No (see PreviewEditController::leave).
     std::function<bool(std::function<void()> resume)> ask;
   };
 

@@ -46,14 +46,8 @@ pagePreviewEditor(PageContext& page, std::function<std::uint32_t()> modifiers) {
           [&page, shown](luciole::PreviewEditController::Question question) {
             // No and the header's close button close the dialog; its close, Escape included, is an answer only when
             // No was pressed first.
-            auto parts = luciole::saveQuestion(
-                question.name, question.save,
-                [&page, no = question.no] {
-                  no();
-                  page.dismissPopup();
-                },
-                [&page] { page.dismissPopup(); }
-            );
+            auto parts =
+                luciole::pageSaveQuestion(question.name, question.save, question.no, [&page] { page.dismissPopup(); });
             luciole::showQuestionSentence(parts, question.sentence);
             page.showDialog(std::move(parts.root), DialogWidth::Small);
             if (page.popupSurface() == nullptr) {

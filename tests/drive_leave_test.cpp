@@ -1,5 +1,8 @@
 #include "app/drive_leaving.h"
+#include "app/page/preview_edit_question.h"
 #include "preview_edit_rig.h"
+#include "render/scene/input_dispatcher.h"
+#include "ui/dialogs/dialog_chrome.h"
 
 #include <memory>
 #include <string>
@@ -21,6 +24,19 @@ namespace {
       files.write("b.txt", "beta\n");
     }
   };
+
+  // The close button in the question's header.
+  const Node* closeButtonOf(const Node& node) {
+    if (const auto* area = dynamic_cast<const InputArea*>(&node); area != nullptr && luciole::isDialogClose(area)) {
+      return area;
+    }
+    for (const auto& child : node.children()) {
+      if (const auto* found = closeButtonOf(*child)) {
+        return found;
+      }
+    }
+    return nullptr;
+  }
 
   DriveEditor editorOf(Rig& rig) {
     return {
@@ -207,10 +223,146 @@ namespace {
     TEST_CHECK(eject.leaves == 0 && other.asks == 1); // the next page is asked
     other.chooseNo();
     TEST_CHECK(eject.leaves == 1 && eject.abandoned == 0);
+    // The gate takes the next request: a second removal asks about a fresh edit instead of being turned away.
+    other.edit("b.txt");
+    other.type("3");
     Eject again(drive);
     again.ask({editorAt(1)});
-    TEST_CHECK(again.leaves == 1 || other.question.has_value() || !other.editor->unsaved()); // the gate is free
-    TEST_CHECK(again.abandoned == 0);
+    other.frames([&] { return other.question.has_value(); });
+    TEST_CHECK(again.abandoned == 0 && other.asks == 2);
+    other.chooseNo();
+    TEST_CHECK(again.leaves == 1);
+  }
+
+  // The mode of one question ends with it: after a removal's question was answered, a question the editor opens
+  // itself, by moving to another file, is answered No when it is dismissed.
+  void aRemovalsModeDoesNotOutliveItsQuestion(::test::SceneCapture& capture) {
+    const Drive drive;
+    Rig rig(drive.files, capture, drive.files.folder);
+    rig.edit("a.txt");
+    rig.type("1");
+    Eject eject(drive);
+    eject.ask({editorOf(rig)});
+    rig.frames([&] { return rig.question.has_value(); });
+    rig.answerSave();
+    TEST_CHECK(eject.leaves == 1);
+    rig.frames([&] { return rig.offered(); });
+    rig.edit("a.txt");
+    rig.type("2");
+    rig.select("b.txt");
+    rig.frames([&] { return rig.question.has_value(); });
+    rig.dismiss();
+    TEST_CHECK(!rig.editor->gate().editing() && !rig.editor->unsaved());
+    TEST_CHECK(drive.files.read("a.txt") == "1alpha\n");
+  }
+
+  // A dismissal cancels only when every request waiting on the question is a removal's. With the page's own question
+  // or a window or tab leave on it, in either order, it means No for all of them and the removal goes on.
+  void aDismissalCancelsOnlyWhenEveryWaitingRequestDoes(::test::SceneCapture& capture) {
+    {
+      const Drive drive;
+      Rig rig(drive.files, capture, drive.files.folder);
+      rig.edit("a.txt");
+      rig.type("1");
+      rig.select("b.txt"); // the editor's own question
+      rig.frames([&] { return rig.question.has_value(); });
+      Eject eject(drive);
+      eject.ask({editorOf(rig)});
+      rig.dismiss();
+      rig.frames([&] { return eject.leaves == 1; });
+      TEST_CHECK(!rig.editor->unsaved() && eject.abandoned == 0 && drive.files.read("a.txt") == "alpha\n");
+    }
+    for (const bool windowFirst : {true, false}) {
+      const Drive drive;
+      Rig rig(drive.files, capture, drive.files.folder);
+      rig.edit("a.txt");
+      rig.type("1");
+      int closed = 0;
+      Eject eject(drive);
+      const auto window = [&] { return rig.editor->leave([&closed] { ++closed; }, false); };
+      if (windowFirst) {
+        TEST_CHECK(!window());
+        eject.ask({editorOf(rig)});
+      } else {
+        eject.ask({editorOf(rig)});
+        TEST_CHECK(!window());
+      }
+      rig.frames([&] { return rig.question.has_value(); });
+      rig.dismiss();
+      rig.frames([&] { return closed == 1 && eject.leaves == 1; });
+      TEST_CHECK(!rig.editor->unsaved() && eject.abandoned == 0 && drive.files.read("a.txt") == "alpha\n");
+    }
+  }
+
+  // Escape while the Save of the question is writing is no answer: the question comes back, and the removal goes on
+  // when the save succeeds or stays given up while it fails.
+  void aDismissalDuringTheSaveChangesNothing(::test::SceneCapture& capture) {
+    for (const bool succeeds : {true, false}) {
+      const Drive drive;
+      Rig rig(drive.files, capture, drive.files.folder);
+      rig.edit("a.txt");
+      rig.type("1");
+      Eject eject(drive);
+      eject.ask({editorOf(rig)});
+      rig.frames([&] { return rig.question.has_value(); });
+      if (!succeeds) {
+        TEST_CHECK(::chmod(drive.files.folder.c_str(), 0555) == 0);
+      }
+      auto shown = *rig.question;
+      shown.save();
+      shown.closed(); // Escape, with the save running
+      rig.frames([&] { return !rig.editor->saving(); });
+      if (!succeeds) {
+        TEST_CHECK(::chmod(drive.files.folder.c_str(), 0755) == 0);
+      }
+      rig.frames([&] { return succeeds ? eject.leaves == 1 : rig.question.has_value(); });
+      TEST_CHECK(eject.abandoned == 0);
+      TEST_CHECK(succeeds ? drive.files.read("a.txt") == "1alpha\n" : drive.files.read("a.txt") == "alpha\n");
+      TEST_CHECK(succeeds || (eject.leaves == 0 && rig.editor->unsaved()));
+      if (!succeeds) {
+        rig.chooseNo();
+      }
+    }
+  }
+
+  // The buttons of the page's own question: the close button chooses nothing and No chooses No.
+  void thePageQuestionsButtonsMeanWhatTheyDo(::test::SceneCapture& capture) {
+    const Drive drive;
+    Rig rig(drive.files, capture, drive.files.folder);
+    rig.edit("a.txt");
+    rig.type("1");
+    Eject eject(drive);
+    for (const bool closeButton : {true, false}) {
+      eject.ask({editorOf(rig)});
+      rig.frames([&] { return rig.question.has_value(); });
+      auto shown = *rig.question;
+      auto parts = luciole::pageSaveQuestion(shown.name, shown.save, shown.no, [&rig] {
+        if (auto closed = std::exchange(rig.question, std::nullopt)) {
+          closed->closed();
+        }
+      });
+      InputDispatcher dispatcher;
+      dispatcher.setSceneRoot(parts.root.get());
+      (void)capture.capture(*parts.root, 408, 200, 1);
+      std::uint32_t serial = 0;
+      const Node* target = closeButton ? closeButtonOf(*parts.root) : parts.no;
+      TEST_CHECK(target != nullptr);
+      float x = 0;
+      float y = 0;
+      Node::absolutePosition(target, x, y);
+      x += target->width() / 2;
+      y += target->height() / 2;
+      dispatcher.pointerEnter(x, y, ++serial);
+      dispatcher.pointerButton(x, y, BTN_LEFT, true, ++serial, 0, false);
+      dispatcher.pointerButton(x, y, BTN_LEFT, false, ++serial, 0, false);
+      rig.frames([&] { return !closeButton || eject.abandoned == 1; });
+      if (closeButton) {
+        TEST_CHECK(eject.leaves == 0 && rig.editor->unsaved());
+      } else {
+        rig.frames([&] { return eject.leaves == 1; });
+        TEST_CHECK(!rig.editor->unsaved());
+      }
+    }
   }
 
   // A save that runs when the drive is asked to go keeps it busy until the write has ended, and only for the files
@@ -248,6 +400,10 @@ int main() {
   aDismissedQuestionGivesTheRemovalUp(*capture);
   aRemovalWhileAnotherQuestionWaitsIsTurnedAway(*capture);
   aPageThatVanishesDuringItsQuestionCountsAsAnswered(*capture);
+  aRemovalsModeDoesNotOutliveItsQuestion(*capture);
+  aDismissalCancelsOnlyWhenEveryWaitingRequestDoes(*capture);
+  aDismissalDuringTheSaveChangesNothing(*capture);
+  thePageQuestionsButtonsMeanWhatTheyDo(*capture);
   aRunningSaveHoldsTheDrive(*capture);
   std::println("drive-leave: all checks passed");
   return 0;
