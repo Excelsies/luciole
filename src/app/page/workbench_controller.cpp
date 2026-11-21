@@ -21,10 +21,13 @@
 #include "ui/controls/virtual_grid_view.h"
 #include "ui/palette.h"
 #include "ui/style.h"
+#include "ui/workbench/jump_list_view.h"
 #include "ui/workbench/pane_shell.h"
+#include "ui/workbench/quiet_column_view.h"
 #include "ui/workbench/workbench_chrome.h"
 #include "ui/workbench/workbench_preferences.h"
 #include "wayland/wayland_seat.h"
+#include "workbench/column_plan.h"
 #include "workbench/pane_layout.h"
 
 #include <algorithm>
@@ -138,6 +141,7 @@ void WorkbenchController::mount() {
   auto& view = m_session->view();
   view.setTrail(&m_trail);
   view.setListTextSize(Style::fontSizeBody);
+  setListIconSize(m_listIcon);
   view.setPalette(luciole::workbenchPalette(palette));
   m_paletteConn = paletteChanged().connect([this] {
     if (m_session) {
@@ -307,6 +311,43 @@ bool WorkbenchController::previewWheel(const PointerEvent& event, float x, float
   return m_columnPreview
       && m_hooks.modifiers() == KeyMod::Ctrl
       && m_columnPreview->wheelSize(x, y, event.axis, event.axisValue120, event.axisDiscrete, event.axisValue);
+}
+
+void WorkbenchController::setListIconSize(int size) {
+  m_listIcon = size;
+  if (!m_session) {
+    return;
+  }
+  auto& view = m_session->view();
+  for (std::size_t slot = 0; slot < luciole::workbench::kColumnsAhead; ++slot) {
+    view.column(slot).setListIconSize(size);
+  }
+  view.jumpList().setListIconSize(size);
+}
+
+bool WorkbenchController::overRowList(float x, float y) const {
+  if (!m_session) {
+    return false;
+  }
+  const auto over = [x, y](const Node& node) {
+    for (const Node* up = &node; up != nullptr; up = up->parent()) {
+      if (!up->visible()) {
+        return false;
+      }
+    }
+    return node.containsScenePoint(x, y);
+  };
+  const auto* list = m_page.fileList();
+  if (list != nullptr && m_session->shows(*list) && over(*list)) {
+    return true;
+  }
+  auto& view = m_session->view();
+  for (std::size_t slot = 0; slot < luciole::workbench::kColumnsAhead; ++slot) {
+    if (over(view.column(slot))) {
+      return true;
+    }
+  }
+  return over(view.jumpList());
 }
 
 void WorkbenchController::pointerLeft() { pointList(std::nullopt); }

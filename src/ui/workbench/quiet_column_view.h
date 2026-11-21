@@ -61,6 +61,8 @@ namespace luciole {
     void setContent(QuietColumnContent content, std::uint64_t serial);
     // The main list's row text size; the column's text stays below it.
     void setListTextSize(float size);
+    // The main list's icon size (0 for the default): the rows' icons and heights follow it.
+    void setListIconSize(int size);
 
     QuietNotice notice() const noexcept { return m_notice; }
     // True while the column has no listing and no sentence to say: it draws neither its fill nor its header.
@@ -90,6 +92,7 @@ namespace luciole {
 
   private:
     void fitHeights(Renderer& renderer);
+    int m_listIcon = 0;
     float m_rowHeight = 0;
     float m_headerHeight = 0;
     class Adapter;

@@ -56,12 +56,16 @@ namespace luciole {
     // A middle press on a row; the cursor stays where it is.
     std::function<void(const workbench::JumpRow&)> onMiddleClick;
 
+    // The main list's icon size (0 for the default): the rows' height follows it.
+    void setListIconSize(int size);
+
   protected:
     void doLayout(Renderer& renderer) override;
     void doArrange(Renderer& renderer, const LayoutRect& rect) override;
 
   private:
     void fitRowHeight(Renderer& renderer);
+    int m_listIcon = 0;
 
     class Adapter;
     friend class Adapter;

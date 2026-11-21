@@ -11,6 +11,7 @@
 #include "workbench/column_plan.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstddef>
 #include <format>
@@ -39,8 +40,9 @@ namespace {
     }
   }
 
-  void jumpRowsFit(::test::SceneCapture& capture) {
+  void jumpRowsFit(::test::SceneCapture& capture, int listIcon) {
     JumpListView list;
+    list.setListIconSize(listIcon);
     JumpListContent content;
     for (int i = 0; i < 4; ++i) {
       workbench::JumpRow row;
@@ -56,13 +58,19 @@ namespace {
     std::vector<const JumpRowTile*> tiles;
     collectTiles(list, tiles);
     TEST_CHECK(tiles.size() == 4);
+    // the rows hold two lines and move with the list's icon: 38 at the default, 6 px less at 16, 16 more at 64
+    const float line = capture.lineHeight(Style::fontSizeCaption) + capture.lineHeight(Style::fontSizeMini);
+    const float icon = listIcon == 0 ? 32.0F : static_cast<float>(listIcon);
+    const float want = std::max(38.0F + (icon - 32.0F) / 2, std::ceil(line + 6));
+    std::println("  jump row {} px, wanted {} px at icon {}", tiles[0]->height(), want, listIcon);
+    TEST_CHECK(std::abs(tiles[0]->height() - want) < 1.0F);
     for (const auto* tile : tiles) {
       ::test::expectTextWithin(*tile, capture.textScale());
     }
     TEST_CHECK(::test::expectTextClear(list, capture.textScale()) == 12);
   }
 
-  void quietRowsFit(::test::SceneCapture& capture) {
+  void quietRowsFit(::test::SceneCapture& capture, int listIcon) {
     FileIconCache icons;
     DirectoryEntry entry;
     entry.name = "Quarterly planning notes.txt";
@@ -70,17 +78,24 @@ namespace {
     for (std::size_t column = 0; column < workbench::kColumnsAhead; ++column) {
       // the column lays its rows out at the height its line of text asks for
       QuietColumnView view(icons, column, [] { return 0U; });
+      view.setListIconSize(listIcon);
       (void)capture.capture(view, static_cast<int>(kRowWidth), 400, 1.0F);
       const float size = quietTextSize(Style::fontSizeBody, column);
       const float line = capture.lineHeight(size);
       std::println("  column {} row {} px for a {} px line", column, view.rowHeight(), line);
+      // the icon is the column's own size in the list's proportion; its row is 10 px taller
+      const float ratio = (listIcon == 0 ? 32.0F : static_cast<float>(listIcon)) / 32.0F;
+      const float icon = std::min(40.0F, std::array{16.0F, 14.0F, 12.0F}[column] * ratio);
+      TEST_CHECK(quietIconSize(listIcon, column) == icon);
+      TEST_CHECK(view.rowHeight() == std::max(10 + icon, std::ceil(line + 3)));
       TEST_CHECK(view.rowHeight() >= line + 2);
       TEST_CHECK(view.headerHeight() >= capture.lineHeight(size) + 8);
-      if (capture.textScale() == 1.0F) {
+      if (capture.textScale() == 1.0F && listIcon == 0) {
         TEST_CHECK(view.rowHeight() == workbench::kColumnRowHeights[column]);
         TEST_CHECK(view.headerHeight() == workbench::kColumnHeaderHeight);
       }
       QuietRow row(icons, column);
+      row.setIconSize(icon);
       row.bind(entry, {}, 0.5, size);
       (void)capture.capture(row, static_cast<int>(kRowWidth), static_cast<int>(view.rowHeight()), 1.0F);
       TEST_CHECK(::test::expectTextClear(row, capture.textScale()) == 1);
@@ -100,8 +115,11 @@ int main() {
   for (const float textScale : {1.0F, 44.0F / 42.0F, kLargeFont, 2.0F}) {
     capture->setTextScale(textScale);
     std::println("text scale {:.2f}", textScale);
-    jumpRowsFit(*capture);
-    quietRowsFit(*capture);
+    for (const int listIcon : {16, 0, 40, 64}) {
+      jumpRowsFit(*capture, listIcon);
+      quietRowsFit(*capture, listIcon);
+    }
+    TEST_CHECK(quietIconSize(1000, 0) == 40); // the icon of a column ahead stops at 40 px
   }
   std::println("workbench-rows-text-scale: all checks passed");
   return 0;

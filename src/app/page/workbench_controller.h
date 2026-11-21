@@ -92,6 +92,11 @@ public:
   // Axis hook in BrowserPage::dispatchPointer(), before the page's dispatcher: Ctrl with the wheel over the column
   // preview's content steps the preview size. True when taken.
   bool previewWheel(const PointerEvent& event, float x, float y);
+  // The main list's icon size (0 for the default), the page's List view setting: the columns ahead and Jump ahead
+  // rows follow it.
+  void setListIconSize(int size);
+  // The point lies over one of the view's row lists: the page's list, a column ahead or Jump ahead.
+  bool overRowList(float x, float y) const;
   // The pointer went to another page or the tab strip, which ends the list's hover.
   void pointerLeft();
   // Keyboard hook in BrowserPage::keyboard(), before the page's shortcuts: the keys of the view's focused part, and
@@ -170,6 +175,7 @@ private:
   luciole::ViewPreferenceWriter& m_preferences;
   Hooks m_hooks;
   std::function<void(const luciole::Location&)> m_recordVisit;
+  int m_listIcon = 0;
   luciole::WorkbenchServices* m_services = nullptr;
   luciole::BrowserSettings m_settings; // with the choices and geometry this page saved since
   luciole::FolderTrail m_trail;        // every folder this page entered while it lives, in any mode

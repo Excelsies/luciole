@@ -92,7 +92,9 @@ public:
         .hovered = m_owner.m_hovered == id,
     };
     const auto share = m_owner.share ? m_owner.share(*id) : std::nullopt;
-    static_cast<QuietRow&>(tile).bind(*entry, marks, share, m_owner.m_textSize);
+    auto& row = static_cast<QuietRow&>(tile);
+    row.setIconSize(quietIconSize(m_owner.m_listIcon, m_owner.m_column));
+    row.bind(*entry, marks, share, m_owner.m_textSize);
   }
 
   bool onPointerPress(std::size_t index, float, float, float, float) override {
@@ -292,6 +294,15 @@ void luciole::QuietColumnView::setListTextSize(float size) {
   m_grid->notifyDataChanged();
 }
 
+void luciole::QuietColumnView::setListIconSize(int size) {
+  if (size == m_listIcon) {
+    return;
+  }
+  m_listIcon = size;
+  m_grid->notifyDataChanged();
+  markLayoutDirty();
+}
+
 std::optional<luciole::EntryId> luciole::QuietColumnView::entryAt(std::size_t index) const {
   if (m_content.listing == nullptr || index >= m_rowCount || index >= m_content.listing->rows().size()) {
     return std::nullopt;
@@ -372,7 +383,7 @@ void luciole::QuietColumnView::applyHeader() {
 void luciole::QuietColumnView::fitHeights(Renderer& renderer) {
   const auto metrics = renderer.measureFont(m_textSize, TextFont{});
   const float line = metrics.bottom - metrics.top;
-  m_rowHeight = std::max(static_cast<float>(workbench::kColumnRowHeights[m_column]), std::ceil(line + kRowInset));
+  m_rowHeight = std::max(quietRowHeight(m_listIcon, m_column), std::ceil(line + kRowInset));
   m_headerHeight = std::max(kHeaderHeight, std::ceil(line + kHeaderInset));
   m_grid->setCellHeight(m_rowHeight);
   m_header->setMinHeight(m_headerHeight);

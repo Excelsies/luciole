@@ -1,6 +1,8 @@
 #include "ui/workbench/list_rows.h"
 
+#include "model/directory_options.h"
 #include "ui/browser/file_icon.h"
+#include "ui/browser/file_view_metrics.h"
 #include "ui/builders.h"
 #include "ui/controls/box.h"
 #include "ui/controls/flex.h"
@@ -21,6 +23,7 @@ namespace {
   constexpr std::size_t kQuietColumns = luciole::workbench::kColumnsAhead;
   constexpr float kListTextMin = 6;
   constexpr float kListTextMax = 96;
+  constexpr float kMaxQuietIcon = 40;
   constexpr float kBelowList = 1; // the most a column's text may reach is this far under the list's
 
   constexpr std::array<float, kQuietColumns> kIconSizes{16, 14, 12};
@@ -64,6 +67,18 @@ namespace {
   }
 } // namespace
 
+float luciole::quietIconSize(int listIcon, std::size_t column) {
+  const float ratio = fileRowIconSize(listIcon) / static_cast<float>(kDefaultListIconSize);
+  return std::min(kMaxQuietIcon, kIconSizes[metricsColumn(column)] * ratio);
+}
+
+float luciole::quietRowHeight(int listIcon, std::size_t column) {
+  const auto own = static_cast<float>(workbench::kColumnRowHeights[metricsColumn(column)]);
+  return own + quietIconSize(listIcon, column) - kIconSizes[metricsColumn(column)];
+}
+
+float luciole::jumpRowHeight(int listIcon) { return kJumpRowHeight + quietIconSize(listIcon, 0) - kIconSizes[0]; }
+
 float luciole::quietTextSize(float listTextSize, std::size_t column) {
   const float list =
       std::isfinite(listTextSize) ? std::clamp(listTextSize, kListTextMin, kListTextMax) : Style::fontSizeBody;
@@ -71,7 +86,8 @@ float luciole::quietTextSize(float listTextSize, std::size_t column) {
   return std::min(rule, list - kBelowList);
 }
 
-luciole::QuietRow::QuietRow(FileIconCache& icons, std::size_t column) : m_column(metricsColumn(column)) {
+luciole::QuietRow::QuietRow(FileIconCache& icons, std::size_t column)
+    : m_column(metricsColumn(column)), m_iconSize(kIconSizes[metricsColumn(column)]) {
   setHitTestVisible(false);
   addChild(ui::box({.out = &m_background, .styleRadius = Style::radiusMd}));
   addChild(
@@ -136,6 +152,14 @@ void luciole::QuietRow::bind(const DirectoryEntry& entry, RowMarks marks, std::o
   markLayoutDirty();
 }
 
+void luciole::QuietRow::setIconSize(float size) {
+  if (size != m_iconSize) {
+    m_iconSize = size;
+    m_icon->setIconSize(size);
+    markLayoutDirty();
+  }
+}
+
 void luciole::QuietRow::release(Renderer& renderer) { m_icon->releaseFile(renderer); }
 
 std::optional<float> luciole::QuietRow::share() const noexcept {
@@ -143,7 +167,7 @@ std::optional<float> luciole::QuietRow::share() const noexcept {
 }
 
 void luciole::QuietRow::doLayout(Renderer& renderer) {
-  const float icon = kIconSizes[m_column];
+  const float icon = m_iconSize;
   float used = kRowPadding * 2 + icon + Style::spaceSm;
   if (m_bar->visible()) {
     used += kBarWidths[m_column] + Style::spaceSm;

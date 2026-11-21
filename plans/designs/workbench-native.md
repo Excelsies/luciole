@@ -201,6 +201,10 @@ Choices (instrument, ribbon, strips, measure, color, emphasis) are browser prefe
 
 The toolkit multiplies every text size by the system font's size over the 14 px body size, `systemTextScale()`. The panes read it once per layout and size what holds text by it, so scale 1 is the layout as designed. The instruments and ribbons are laid out as if the pane were its size divided by the scale, with label advances divided by it, and the scene is then scaled up by it (`zoomScene`); text sizes stay, because the toolkit scales them. Pointer positions go the other way. The pane limits, the pane header, the ancestor strip bands and their paddings grow with the scale, and the rows and header of the columns ahead grow with the measured line of text. Label advances and the label nodes' measures are taken again when the scale or the font changes.
 
+## Row size
+
+The list's icon size is List view's setting, one for both modes. Ctrl+wheel over the list, a column ahead or Jump ahead, and Ctrl+Plus, Ctrl+Minus and Ctrl+0 outside a text edit, change its step in Workbench as in List view. The columns ahead take the icon of their own default size in the proportion of the list's to its default (16, 14 and 12 px at the default, at most 40), and their rows move with the icon by the same amount; Jump ahead rows, which hold no icon, move as column A's do. Each row is at least as tall as its text needs at the system font size, so the two compose.
+
 ## Verification
 
 - Headless tests for every pure function and for services against fixture trees.

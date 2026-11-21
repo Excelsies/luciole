@@ -2201,7 +2201,7 @@ void BrowserPage::resetZoom() {
 }
 
 bool BrowserPage::zoomFromKey(const KeyboardEvent& event) {
-  if ((m_viewMode != luciole::ViewMode::Grid && m_viewMode != luciole::ViewMode::List) || m_list == nullptr) {
+  if (!luciole::zoomsByKeys(m_viewMode) || m_list == nullptr) {
     return false;
   }
   int zoom = zoomStep();
@@ -2227,7 +2227,7 @@ bool BrowserPage::zoomFromKey(const KeyboardEvent& event) {
 }
 
 bool BrowserPage::zoomFromScroll(const PointerEvent& event) {
-  if ((m_viewMode != luciole::ViewMode::Grid && m_viewMode != luciole::ViewMode::List)
+  if (!luciole::zoomsByKeys(m_viewMode)
       || m_list == nullptr
       || !m_list->visible()
       || m_connection.keyboardModifiers() != KeyMod::Ctrl
@@ -2236,11 +2236,18 @@ bool BrowserPage::zoomFromScroll(const PointerEvent& event) {
     return false;
   }
   float localX = 0, localY = 0;
-  if (!Node::mapFromScene(m_list, static_cast<float>(event.sx), static_cast<float>(event.sy), localX, localY)
+  // The Workbench zooms over any of its row lists, and leaves the other panes' wheel as it is.
+  if (m_viewMode == luciole::ViewMode::Workbench) {
+    if (!m_workbench.overRowList(static_cast<float>(event.sx), static_cast<float>(event.sy))) {
+      return false;
+    }
+  } else if (
+      !Node::mapFromScene(m_list, static_cast<float>(event.sx), static_cast<float>(event.sy), localX, localY)
       || localX < 0
       || localY < 0
       || localX >= m_list->width()
-      || localY >= m_list->height()) {
+      || localY >= m_list->height()
+  ) {
     return false;
   }
   const double steps = event.axisValue120 != 0 ? event.axisValue120 / 120.0
@@ -2289,6 +2296,7 @@ void BrowserPage::syncBrowser() {
   m_list->setMinCellWidth(luciole::gridMetrics(gridIconSize(), m_savedSettings.presentation, false).minWidth);
   m_gridAdapter.setGridIconSize(gridIconSize());
   m_listAdapter.setListIconSize(m_listIconSize);
+  m_workbench.setListIconSize(m_listIconSize);
   for (auto* adapter : {&m_listAdapter, &m_gridAdapter}) {
     adapter->setPresentation(m_savedSettings.presentation, snapshot.metadata.filesystem.readOnly);
   }

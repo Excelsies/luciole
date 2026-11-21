@@ -28,6 +28,14 @@ namespace luciole {
   // others are clamped to 6 to 96 first.
   float quietTextSize(float listTextSize, std::size_t column);
 
+  // The icon of a row of column `column` ahead beside a list whose rows use `listIcon` px icons (0 for the default,
+  // which gives the columns' own sizes): the column's size in the list's proportion, at most 40 px.
+  float quietIconSize(int listIcon, std::size_t column);
+  // The height a row of column `column` takes for that icon: its own height at the default, moving with the icon.
+  float quietRowHeight(int listIcon, std::size_t column);
+  // The height a Jump ahead row takes beside such a list; the rows hold no icon and move as column A's do.
+  float jumpRowHeight(int listIcon);
+
   // States a row shows besides its entry.
   struct RowMarks {
     bool followed = false; // the next column lists or previews this entry
@@ -50,6 +58,8 @@ namespace luciole {
     EntryId entry() const noexcept { return m_entry; }
     RowMarks marks() const noexcept { return m_marks; }
     const Label& nameLabel() const noexcept { return *m_name; }
+    // The icon's size, from quietIconSize(); a column's own size until set.
+    void setIconSize(float size);
     // The bar's fill; none while the bar is hidden.
     std::optional<float> share() const noexcept;
 
@@ -58,6 +68,7 @@ namespace luciole {
 
   private:
     std::size_t m_column;
+    float m_iconSize;
     EntryId m_entry = 0;
     RowMarks m_marks;
     Box* m_background = nullptr;

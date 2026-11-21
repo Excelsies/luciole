@@ -293,7 +293,7 @@ private:
   void changeSort(luciole::SortOptions options);
   void changeGridZoom(int requested);
   void changeListIconSize(int size);
-  // The current view's step in its icon sizes; only Grid and List views zoom.
+  // The current view's step in its icon sizes; Grid, List and Workbench zoom.
   int zoomStep() const;
   void changeZoomStep(int requested);
   void resetZoom();
