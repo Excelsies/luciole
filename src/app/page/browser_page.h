@@ -120,7 +120,7 @@ public:
   // The page's editor: has the keyboard, holds unsaved changes, asks before the page goes away (PageEditing::leave).
   bool editorFocused() const;
   bool unsaved() const;
-  bool leave(std::function<void()> resume);
+  bool leave(std::function<void()> resume, bool dismissCancels = false);
   // OperationHub::Owner: hands the job to the controller of its kind.
   void jobChanged(OperationJob& job) override;
   void activityChanged() override { m_operations.markDirty(); }

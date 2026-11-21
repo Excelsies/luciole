@@ -130,6 +130,19 @@ namespace luciole::editing {
     return result;
   }
 
+  GateResult EditGate::cancel() {
+    if (!m_asking) {
+      return refused(Refusal::NoQuestion);
+    }
+    if (m_saving) {
+      return refused(Refusal::SaveRunning);
+    }
+    m_asking = false;
+    m_pending = 0;
+    m_leaving = false;
+    return {};
+  }
+
   GateResult EditGate::changedOnDisk() {
     if (!m_editing) {
       return refused(Refusal::NotEditing);

@@ -35,6 +35,10 @@ namespace luciole {
   }
 
   PreviewEditController::~PreviewEditController() {
+    // A leave that waits for the answer goes on without it: the edit goes with the page.
+    for (auto& resume : std::exchange(m_resumes, {})) {
+      DeferredCall::callLater(std::move(resume));
+    }
     m_probe.cancel();
     if (m_opening) {
       m_opening->cancel();
@@ -166,14 +170,16 @@ namespace luciole {
     return m_file && locationWithin(*m_file, root) && saving();
   }
 
-  bool PreviewEditController::leave(std::function<void()> resume) {
+  bool PreviewEditController::leave(std::function<void()> resume, bool dismissCancels) {
     if (!m_session) {
       return true;
     }
+    const bool waiting = !m_resumes.empty();
     requestLeave();
     if (!m_session) {
       return true; // nothing was unsaved: the editor closed at once
     }
+    m_dismissCancels = dismissCancels && (!waiting || m_dismissCancels);
     m_resumes.push_back(std::move(resume));
     return false;
   }
@@ -204,6 +210,7 @@ namespace luciole {
                 questionClosed();
               }
             },
+        .no = [this, alive] { m_noChosen = m_noChosen || !alive.expired(); },
     };
     if (m_hooks.ask(std::move(question))) {
       m_question = QuestionState::Shown;
@@ -297,6 +304,9 @@ namespace luciole {
       return;
     }
     m_question = QuestionState::None;
+    if (dismissCancelsLeave()) {
+      return;
+    }
     const auto result = m_gate.answer(editing::Answer::No);
     if (result.refusal == editing::Refusal::SaveRunning) {
       m_question = QuestionState::Wanted; // closed while its save runs: no answer, it comes back

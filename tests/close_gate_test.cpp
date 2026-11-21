@@ -138,14 +138,23 @@ namespace {
     auto a = fake("a", true);
     auto b = fake("b", true);
     a->answerSaves = false;
-    gate.request({pageOf(a, log)}, [&log] { ++log.actions; }, [&abandoned] { ++abandoned; });
+    gate.request(
+        {pageOf(a, log)}, [&log] { ++log.actions; }, [&abandoned](luciole::CloseGate::Abandon) { ++abandoned; }
+    );
     int ignored = 0;
-    gate.request({pageOf(b, log)}, [&log] { ++log.actions; }, [&ignored] { ++ignored; });
+    gate.request(
+        {pageOf(b, log)}, [&log] { ++log.actions; },
+        [&ignored](luciole::CloseGate::Abandon reason) {
+          ignored += reason == luciole::CloseGate::Abandon::Busy ? 1 : 100;
+        }
+    );
     TEST_CHECK(ignored == 1 && abandoned == 0 && b->asks == 0);
     answer(*a);
-    TEST_CHECK(abandoned == 1 && log.actions == 0);
+    TEST_CHECK(abandoned == 1 && log.actions == 0); // kept: a failed save or a closed question
     auto c = fake("c", true);
-    gate.request({pageOf(c, log)}, [&log] { ++log.actions; }, [&abandoned] { ++abandoned; });
+    gate.request(
+        {pageOf(c, log)}, [&log] { ++log.actions; }, [&abandoned](luciole::CloseGate::Abandon) { ++abandoned; }
+    );
     answer(*c);
     TEST_CHECK(log.actions == 1 && abandoned == 1);
   }

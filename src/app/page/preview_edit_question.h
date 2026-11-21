@@ -18,8 +18,10 @@ namespace luciole {
   };
 
   // The header with the question and its close button, a line for a failed save's sentence, then No and Save. Save
-  // calls `save`; No and the close button call `no`.
-  SaveQuestion saveQuestion(std::string_view name, std::function<void()> save, std::function<void()> no);
+  // calls `save`, No calls `no` and the close button calls `close`.
+  SaveQuestion saveQuestion(
+      std::string_view name, std::function<void()> save, std::function<void()> no, std::function<void()> close
+  );
 
   // Shows `sentence` under the question, or hides the line when it is empty.
   void showQuestionSentence(const SaveQuestion& question, std::string_view sentence);

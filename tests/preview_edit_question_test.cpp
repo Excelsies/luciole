@@ -26,7 +26,9 @@ namespace {
     ::test::SceneCapture& capture;
     int saves = 0;
     int noes = 0;
-    luciole::SaveQuestion question = luciole::saveQuestion("notes.txt", [this] { ++saves; }, [this] { ++noes; });
+    int closes = 0;
+    luciole::SaveQuestion question =
+        luciole::saveQuestion("notes.txt", [this] { ++saves; }, [this] { ++noes; }, [this] { ++closes; });
     InputDispatcher dispatcher;
     std::uint32_t serial = 0;
 
@@ -95,7 +97,7 @@ namespace {
     if (close != nullptr) {
       rig.click(*close);
     }
-    TEST_CHECK(rig.saves == 1 && rig.noes == 2); // the close button means No
+    TEST_CHECK(rig.saves == 1 && rig.noes == 1 && rig.closes == 1); // the close button is no choice of No
   }
 
   void testFailedSaveSentence(::test::SceneCapture& capture) {

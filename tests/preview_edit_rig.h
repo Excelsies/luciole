@@ -404,6 +404,19 @@ namespace luciole::test::edit {
       frame();
     }
 
+    // No pressed, as against the close button or Escape, which choose nothing.
+    void chooseNo() {
+      TEST_CHECK(question.has_value());
+      if (auto shown = std::exchange(question, std::nullopt)) {
+        shown->no();
+        shown->closed();
+      }
+      frame();
+    }
+
+    // The question closed without a choice: Escape or the close button.
+    void dismiss() { answerNo(); }
+
     // No, the close button and Escape all close the question without Save.
     void answerNo() {
       TEST_CHECK(question.has_value());

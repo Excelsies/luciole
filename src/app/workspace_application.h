@@ -163,9 +163,13 @@ private:
   // Every page of `window`, the selected tab's first.
   std::vector<luciole::TabId> windowPages(luciole::WindowId window) const;
   // The hub's gate before a drive is removed: asks every page whose editor holds unsaved changes to a file of the drive
-  // at `root`, then runs `action`; `abandoned` runs instead when a save failed or another question waits.
-  void
-  askBeforeDriveLeave(const luciole::Location& root, std::function<void()> action, std::function<void()> abandoned);
+  // at `root`, then runs `action`; `abandoned` runs instead, with the reason, when it does not.
+  void askBeforeDriveLeave(
+      const luciole::Location& root, std::function<void()> action, OperationHub::DriveLeaveAbandoned abandoned
+  );
+  // Asks the editor of `page`, which goes on at once when the page is gone. Closing the question without choosing No
+  // gives up when `dismissCancels`.
+  bool askPage(luciole::TabId page, std::function<void()> resume, bool dismissCancels);
   // Selects the tab of `page` and makes it the active pane at once, so a question it opens is seen.
   void reveal(luciole::TabId page);
   // Close guard of a window: one with unsaved pages stays open, asks them and closes once they agreed. A

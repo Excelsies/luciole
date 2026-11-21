@@ -52,7 +52,7 @@ struct PageEditing {
   std::function<bool()> saving;
   // Asks before the page goes away: true when it may go now. Otherwise its question is open (a popup bound as
   // ActivePopup::Kind::SaveChanges) and it calls `resume` once the user answered No, or Save and the save succeeded.
-  std::function<bool(std::function<void()> resume)> leave;
+  std::function<bool(std::function<void()> resume, bool dismissCancels)> leave;
   // The page is deactivated while its question is open: the popup closes, which is no answer, and the question is
   // shown again once the page is active.
   std::function<void()> keepQuestion;

@@ -1,6 +1,7 @@
 #include "app/drive_leaving.h"
 #include "preview_edit_rig.h"
 
+#include <memory>
 #include <string>
 #include <unistd.h>
 #include <vector>
@@ -24,7 +25,7 @@ namespace {
   DriveEditor editorOf(Rig& rig) {
     return {
         .unsavedIn = [&rig](const Location& root) { return rig.editor->unsavedIn(root); },
-        .ask = [&rig](std::function<void()> resume) { return rig.editor->leave(std::move(resume)); }
+        .ask = [&rig](std::function<void()> resume) { return rig.editor->leave(std::move(resume), true); }
     };
   }
 
@@ -35,6 +36,7 @@ namespace {
     luciole::CloseGate gate;
     int leaves = 0;
     int abandoned = 0;
+    std::vector<luciole::CloseGate::Abandon> reasons;
     std::string aOnDisk;
 
     void ask(std::vector<DriveEditor> pages) {
@@ -44,7 +46,10 @@ namespace {
             ++leaves;
             aOnDisk = drive.files.read("a.txt");
           },
-          [this] { ++abandoned; }
+          [this](luciole::CloseGate::Abandon reason) {
+            ++abandoned;
+            reasons.push_back(reason);
+          }
       );
     }
   };
@@ -72,7 +77,7 @@ namespace {
     Eject eject(drive);
     eject.ask({editorOf(rig)});
     rig.frames([&] { return rig.question.has_value(); });
-    rig.answerNo();
+    rig.chooseNo();
     TEST_CHECK(eject.leaves == 1 && eject.abandoned == 0 && eject.aOnDisk == "alpha\n");
     TEST_CHECK(!rig.editor->unsaved());
   }
@@ -91,7 +96,7 @@ namespace {
     TEST_CHECK(rig.question.has_value() && rig.editor->unsaved()); // still asking, with the reason
     TEST_CHECK(eject.leaves == 0 && eject.abandoned == 0);
     TEST_CHECK(drive.files.read("a.txt") == "alpha\n");
-    rig.answerNo(); // giving up on the changes lets the eject go on
+    rig.chooseNo(); // giving up on the changes lets the eject go on
     TEST_CHECK(eject.leaves == 1);
   }
 
@@ -123,8 +128,89 @@ namespace {
     TEST_CHECK(eject.leaves == 0);
     second.frames([&] { return second.question.has_value(); });
     TEST_CHECK(second.asks == 1);
-    second.answerNo();
+    second.chooseNo();
     TEST_CHECK(eject.leaves == 1 && eject.aOnDisk == "1alpha\n" && drive.files.read("b.txt") == "beta\n");
+  }
+
+  // Escape or the close button chooses nothing: the changes stay in the editor, the drive is not released and a
+  // second removal asks again; only No drops them.
+  void aDismissedQuestionGivesTheRemovalUp(::test::SceneCapture& capture) {
+    const Drive drive;
+    Rig rig(drive.files, capture, drive.files.folder);
+    rig.edit("a.txt");
+    rig.type("1");
+    Eject eject(drive);
+    eject.ask({editorOf(rig)});
+    rig.frames([&] { return rig.question.has_value(); });
+    rig.dismiss();
+    rig.frames([&] { return eject.abandoned == 1; });
+    TEST_CHECK(eject.leaves == 0 && eject.reasons.front() == luciole::CloseGate::Abandon::Kept);
+    TEST_CHECK(rig.editor->gate().editing() && rig.editor->unsaved() && !rig.question);
+    TEST_CHECK(drive.files.read("a.txt") == "alpha\n");
+    eject.ask({editorOf(rig)});
+    rig.frames([&] { return rig.question.has_value(); });
+    TEST_CHECK(rig.asks == 2 && eject.leaves == 0);
+    rig.chooseNo();
+    TEST_CHECK(eject.leaves == 1 && !rig.editor->unsaved() && drive.files.read("a.txt") == "alpha\n");
+  }
+
+  // A removal asked while another question waits says so instead of doing nothing.
+  void aRemovalWhileAnotherQuestionWaitsIsTurnedAway(::test::SceneCapture& capture) {
+    const Drive drive;
+    Rig rig(drive.files, capture, drive.files.folder);
+    rig.edit("a.txt");
+    rig.type("1");
+    Eject first(drive);
+    first.ask({editorOf(rig)});
+    rig.frames([&] { return rig.question.has_value(); });
+    Eject second(drive);
+    luciole::leaveDriveThen(
+        first.gate, drive.root, {editorOf(rig)}, [&second] { ++second.leaves; },
+        [&second](luciole::CloseGate::Abandon reason) {
+          ++second.abandoned;
+          second.reasons.push_back(reason);
+        }
+    );
+    TEST_CHECK(second.abandoned == 1 && second.reasons.front() == luciole::CloseGate::Abandon::Busy);
+    TEST_CHECK(second.leaves == 0 && rig.asks == 1);
+    rig.chooseNo();
+    TEST_CHECK(first.leaves == 1);
+  }
+
+  // A page that goes away while its question is open counts as answered: the removal goes on with the other pages
+  // and the gate takes the next request.
+  void aPageThatVanishesDuringItsQuestionCountsAsAnswered(::test::SceneCapture& capture) {
+    const Drive drive;
+    auto gone = std::make_unique<Rig>(drive.files, capture, drive.files.folder);
+    Rig other(drive.files, capture, drive.files.folder);
+    gone->edit("a.txt");
+    gone->type("1");
+    other.edit("b.txt");
+    other.type("2");
+    Rig* pages[2] = {gone.get(), &other};
+    const auto present = [&pages](int index) { return pages[index] != nullptr; };
+    const auto editorAt = [&](int index) {
+      return DriveEditor{
+          .unsavedIn =
+              [&, index](const Location& root) { return present(index) && pages[index]->editor->unsavedIn(root); },
+          .ask = [&, index](
+                     std::function<void()> resume
+                 ) { return !present(index) || pages[index]->editor->leave(std::move(resume), true); }
+      };
+    };
+    Eject eject(drive);
+    eject.ask({editorAt(0), editorAt(1)});
+    gone->frames([&] { return gone->question.has_value(); });
+    pages[0] = nullptr;
+    gone.reset(); // the page closes with its question open
+    other.frames([&] { return other.question.has_value(); });
+    TEST_CHECK(eject.leaves == 0 && other.asks == 1); // the next page is asked
+    other.chooseNo();
+    TEST_CHECK(eject.leaves == 1 && eject.abandoned == 0);
+    Eject again(drive);
+    again.ask({editorAt(1)});
+    TEST_CHECK(again.leaves == 1 || other.question.has_value() || !other.editor->unsaved()); // the gate is free
+    TEST_CHECK(again.abandoned == 0);
   }
 
   // A save that runs when the drive is asked to go keeps it busy until the write has ended, and only for the files
@@ -159,6 +245,9 @@ int main() {
   aFailingSaveKeepsTheDriveMounted(*capture);
   anEditOutsideTheDriveIsNotAskedAbout(*capture);
   twoPagesAreAskedInTurn(*capture);
+  aDismissedQuestionGivesTheRemovalUp(*capture);
+  aRemovalWhileAnotherQuestionWaitsIsTurnedAway(*capture);
+  aPageThatVanishesDuringItsQuestionCountsAsAnswered(*capture);
   aRunningSaveHoldsTheDrive(*capture);
   std::println("drive-leave: all checks passed");
   return 0;

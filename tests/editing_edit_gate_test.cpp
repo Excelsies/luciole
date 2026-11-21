@@ -189,6 +189,26 @@ namespace {
     TEST_CHECK(no.proceed == Proceed::Leave && no.released == 2 && gate.pending() == 0);
   }
 
+  // Cancelling closes the question and releases nothing: the editor, its text and a later leave stay as before.
+  void testCancelKeepsTheEditor() {
+    auto gate = dirtyGate();
+    TEST_CHECK(gate.cancel().refusal == Refusal::NoQuestion);
+    (void)gate.leave();
+    TEST_CHECK(gate.asking() && gate.pending() == 1);
+    const auto cancel = gate.cancel();
+    TEST_CHECK(cancel.refusal == Refusal::None && cancel.proceed == Proceed::None && !cancel.discardText);
+    TEST_CHECK(gate.editing() && gate.dirty() && !gate.asking() && gate.pending() == 0);
+    TEST_CHECK(gate.leave().openQuestion); // asked again
+    TEST_CHECK(gate.answer(Answer::No).proceed == Proceed::Leave);
+  }
+
+  void testCancelRefusedWhileSaving() {
+    auto gate = dirtyGate();
+    (void)gate.leave();
+    TEST_CHECK(gate.answer(Answer::Save).startSave);
+    TEST_CHECK(gate.cancel().refusal == Refusal::SaveRunning && gate.asking());
+  }
+
   void testSaveAnswerWhenNoLongerDirty() {
     auto gate = dirtyGate();
     (void)gate.leave();
@@ -473,6 +493,8 @@ int main() {
   testLeaveSaveFailsThenSucceeds();
   testQuestionStaysOpenWhileItsSaveRuns();
   testTwoLeavesOneAnswer();
+  testCancelKeepsTheEditor();
+  testCancelRefusedWhileSaving();
   testSaveAnswerWhenNoLongerDirty();
   testLeaveDuringSaveThatSucceeds();
   testLeaveDuringSaveThatFails();

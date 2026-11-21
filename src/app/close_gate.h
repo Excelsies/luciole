@@ -11,6 +11,10 @@ namespace luciole {
   // given, then the close itself once. One request at a time.
   class CloseGate {
   public:
+    // Why a request ended without its action: another request waits for an answer, or a page kept its changes after
+    // answering (its save failed, or the question was closed without a choice).
+    enum class Abandon : std::uint8_t { Busy, Kept };
+
     // One page of a request. `unsaved` tells whether it holds unsaved changes now. `ask` opens its question with
     // the continuation the page calls once the user has answered; it returns true when the page may go at once
     // instead. Both are required.
@@ -29,9 +33,9 @@ namespace luciole {
     // Asks the first page that has unsaved changes and goes on when it resumes; runs `action` once when no page is
     // left to ask. Ignored while another request waits for an answer. A page that resumes but still has unsaved
     // changes, because its save failed, ends the request without the action. Throws std::invalid_argument when
-    // `action` or a page's callback is empty. `abandoned`, when set, runs instead of the action when the request ends
-    // without it: a page kept its changes after its answer, or another request was waiting.
-    void request(std::vector<Page> pages, std::function<void()> action, std::function<void()> abandoned = {});
+    // `action` or a page's callback is empty. `abandoned`, when set, runs instead of the action with the reason when
+    // the request ends without it.
+    void request(std::vector<Page> pages, std::function<void()> action, std::function<void(Abandon)> abandoned = {});
 
     // Whether the action of an answered request is running: a close it starts was agreed to and asks nothing again.
     bool acting() const { return m_acting; }
@@ -41,11 +45,11 @@ namespace luciole {
     void resume(std::uint64_t ask);
     void end();
     // Ends the request without its action and says so.
-    void abandon();
+    void abandon(Abandon reason);
 
     std::vector<Page> m_pages;
     std::function<void()> m_action;
-    std::function<void()> m_abandoned;
+    std::function<void(Abandon)> m_abandoned;
     std::size_t m_next = 0;
     // Numbers each question, so a continuation answers only the question it was given with.
     std::uint64_t m_ask = 0;

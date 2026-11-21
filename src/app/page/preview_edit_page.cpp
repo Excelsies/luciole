@@ -44,8 +44,16 @@ pagePreviewEditor(PageContext& page, std::function<std::uint32_t()> modifiers) {
       .mayAsk = [&page] { return page.active() && page.popupAvailable() && page.popupSurface() == nullptr; },
       .ask =
           [&page, shown](luciole::PreviewEditController::Question question) {
-            // No and the header's close button close the dialog; its close, Escape included, answers No.
-            auto parts = luciole::saveQuestion(question.name, question.save, [&page] { page.dismissPopup(); });
+            // No and the header's close button close the dialog; its close, Escape included, is an answer only when
+            // No was pressed first.
+            auto parts = luciole::saveQuestion(
+                question.name, question.save,
+                [&page, no = question.no] {
+                  no();
+                  page.dismissPopup();
+                },
+                [&page] { page.dismissPopup(); }
+            );
             luciole::showQuestionSentence(parts, question.sentence);
             page.showDialog(std::move(parts.root), DialogWidth::Small);
             if (page.popupSurface() == nullptr) {
@@ -90,7 +98,9 @@ PageEditing pageEditing(luciole::PreviewEditController& editor) {
           },
       .unsaved = [&editor] { return editor.unsaved(); },
       .saving = [&editor] { return editor.saving(); },
-      .leave = [&editor](std::function<void()> resume) { return editor.leave(std::move(resume)); },
+      .leave = [&editor](
+                   std::function<void()> resume, bool dismissCancels
+               ) { return editor.leave(std::move(resume), dismissCancels); },
       .keepQuestion = [&editor] { editor.keepQuestion(); },
   };
 }

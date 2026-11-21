@@ -6,7 +6,7 @@
 
 void luciole::leaveDriveThen(
     CloseGate& gate, const Location& root, std::vector<DriveEditor> pages, std::function<void()> action,
-    std::function<void()> abandoned
+    std::function<void(CloseGate::Abandon)> abandoned
 ) {
   if (!action || std::ranges::any_of(pages, [](const DriveEditor& page) { return !page.unsavedIn || !page.ask; })) {
     throw std::invalid_argument("A drive leave needs its action and every page's callbacks.");

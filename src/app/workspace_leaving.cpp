@@ -25,18 +25,23 @@ void WorkspaceApplication::leaveThen(std::vector<luciole::TabId> pages, std::fun
   for (const auto page : pages) {
     asked.push_back(
         {.unsaved = [this, page] { return unsaved(page); },
-         .ask =
-             [this, page](std::function<void()> resume) {
-               reveal(page);
-               return m_pages.at(page)->leave(std::move(resume));
-             }}
+         .ask = [this, page](std::function<void()> resume) { return askPage(page, std::move(resume), false); }}
     );
   }
   m_leaving.request(std::move(asked), std::move(action));
 }
 
+bool WorkspaceApplication::askPage(luciole::TabId page, std::function<void()> resume, bool dismissCancels) {
+  const auto found = m_pages.find(page);
+  if (found == m_pages.end()) {
+    return true;
+  }
+  reveal(page);
+  return found->second->leave(std::move(resume), dismissCancels);
+}
+
 void WorkspaceApplication::askBeforeDriveLeave(
-    const luciole::Location& root, std::function<void()> action, std::function<void()> abandoned
+    const luciole::Location& root, std::function<void()> action, OperationHub::DriveLeaveAbandoned abandoned
 ) {
   // The focused window's pages first, then those of the other windows.
   auto windows = std::vector<luciole::WindowId>{};
@@ -54,11 +59,7 @@ void WorkspaceApplication::askBeforeDriveLeave(
                  const auto found = m_pages.find(page);
                  return found != m_pages.end() && found->second->workbench().unsavedIn(drive);
                },
-           .ask =
-               [this, page](std::function<void()> resume) {
-                 reveal(page);
-                 return m_pages.at(page)->leave(std::move(resume));
-               }}
+           .ask = [this, page](std::function<void()> resume) { return askPage(page, std::move(resume), true); }}
       );
     }
   }

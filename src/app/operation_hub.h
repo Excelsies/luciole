@@ -1,5 +1,6 @@
 #pragma once
 
+#include "app/close_gate.h"
 #include "app/job_activity.h"
 #include "browser/job_routing.h"
 #include "operations/archive_service.h"
@@ -163,11 +164,12 @@ public:
   // Ask every pane to leave a drive before explicit removal.
   void leaveDrive(const luciole::Location& root);
   // Runs `action` once every page holding unsaved changes to a file of the drive at `root` has answered, or at once
-  // when the application set no gate; `abandoned` runs instead when a page kept its changes.
+  // when the application set no gate; `abandoned` runs instead, with the reason, when it does not.
+  using DriveLeaveAbandoned = std::function<void(luciole::CloseGate::Abandon)>;
   using DriveLeaveGate =
-      std::function<void(const luciole::Location& root, std::function<void()> action, std::function<void()> abandoned)>;
+      std::function<void(const luciole::Location& root, std::function<void()> action, DriveLeaveAbandoned abandoned)>;
   void setDriveLeaveGate(DriveLeaveGate gate) { m_driveLeaveGate = std::move(gate); }
-  void leaveDriveThen(const luciole::Location& root, std::function<void()> action, std::function<void()> abandoned) {
+  void leaveDriveThen(const luciole::Location& root, std::function<void()> action, DriveLeaveAbandoned abandoned) {
     if (m_driveLeaveGate) {
       m_driveLeaveGate(root, std::move(action), std::move(abandoned));
     } else {
@@ -228,7 +230,9 @@ public:
   }
   void follow(const OperationJob& job) { m_hub.follow(job); }
   void leaveDrive(const luciole::Location& root) { m_hub.leaveDrive(root); }
-  void leaveDriveThen(const luciole::Location& root, std::function<void()> action, std::function<void()> abandoned) {
+  void leaveDriveThen(
+      const luciole::Location& root, std::function<void()> action, OperationHub::DriveLeaveAbandoned abandoned
+  ) {
     m_hub.leaveDriveThen(root, std::move(action), std::move(abandoned));
   }
   void prepareDriveRemoval(const luciole::Location& root, std::function<void(std::optional<luciole::FileError>)> done) {

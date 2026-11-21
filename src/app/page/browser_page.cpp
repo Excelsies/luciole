@@ -313,7 +313,9 @@ bool BrowserPage::editorFocused() const { return m_editing && m_editing->textFoc
 
 bool BrowserPage::unsaved() const { return m_editing && m_editing->unsaved(); }
 
-bool BrowserPage::leave(std::function<void()> resume) { return !m_editing || m_editing->leave(std::move(resume)); }
+bool BrowserPage::leave(std::function<void()> resume, bool dismissCancels) {
+  return !m_editing || m_editing->leave(std::move(resume), dismissCancels);
+}
 
 void BrowserPage::setEditing(PageEditing editing) {
   if (!editing.textFocused

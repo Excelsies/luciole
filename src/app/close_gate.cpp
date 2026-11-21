@@ -5,14 +5,14 @@
 #include <utility>
 
 void luciole::CloseGate::request(
-    std::vector<Page> pages, std::function<void()> action, std::function<void()> abandoned
+    std::vector<Page> pages, std::function<void()> action, std::function<void(Abandon)> abandoned
 ) {
   if (!action || std::ranges::any_of(pages, [](const Page& page) { return !page.unsaved || !page.ask; })) {
     throw std::invalid_argument("A close request needs its action and every page's callbacks.");
   }
   if (m_active) {
     if (abandoned) {
-      abandoned();
+      abandoned(Abandon::Busy);
     }
     return;
   }
@@ -35,7 +35,7 @@ void luciole::CloseGate::advance() {
       continue;
     }
     if (m_asked) {
-      abandon();
+      abandon(Abandon::Kept);
       return;
     }
     m_asked = true;
@@ -99,10 +99,10 @@ void luciole::CloseGate::end() {
   m_abandoned = {};
 }
 
-void luciole::CloseGate::abandon() {
+void luciole::CloseGate::abandon(Abandon reason) {
   auto abandoned = std::move(m_abandoned);
   end();
   if (abandoned) {
-    abandoned();
+    abandoned(reason);
   }
 }

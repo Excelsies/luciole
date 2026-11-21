@@ -16,9 +16,10 @@ namespace luciole {
     constexpr int kSentenceLines = 3;
   } // namespace
 
-  SaveQuestion saveQuestion(std::string_view name, std::function<void()> save, std::function<void()> no) {
+  SaveQuestion saveQuestion(
+      std::string_view name, std::function<void()> save, std::function<void()> no, std::function<void()> close
+  ) {
     SaveQuestion question;
-    auto close = no;
     question.root = ui::column(
         {.align = FlexAlign::Stretch},
         dialogHeader(std::format("Save changes to {}?", name), "device-floppy", std::move(close)),

@@ -82,6 +82,9 @@ namespace luciole::editing {
     // Refused with SaveRunning while the question's save runs; the question stays open until saveFinished.
     // A failed save keeps it open with the sentence for another answer, so the dialog must not close meanwhile.
     GateResult answer(Answer choice);
+    // The question was closed without an answer by leaves that give up on closing: the text and the editor stay and
+    // no request is released. Refused with SaveRunning while a save runs.
+    GateResult cancel();
     // Asks for a notice; keeps the text and the editor.
     GateResult changedOnDisk();
 

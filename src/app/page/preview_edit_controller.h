@@ -46,6 +46,8 @@ namespace luciole {
       std::function<void()> save;
       // The question closed without Save: No, its close button, Escape.
       std::function<void()> closed;
+      // No was chosen; called before `closed`, which tells a choice from closing the question without one.
+      std::function<void()> no;
     };
 
     // All are required.
@@ -124,7 +126,9 @@ namespace luciole {
     bool savingIn(const Location& root) const;
     // True when the page may go now; otherwise the question opens and `resume` runs once it is answered No, or
     // Save and the save succeeded.
-    bool leave(std::function<void()> resume);
+    // With `dismissCancels`, closing the question without choosing No keeps the changes and the editor, and `resume`
+    // runs with the changes still unsaved; unless another leave without it waits on the same question.
+    bool leave(std::function<void()> resume, bool dismissCancels = false);
     // The page is deactivated while the question is shown: its popup closes without an answer and the question is
     // shown again by onFrame() once the page can show it.
     void keepQuestion();
@@ -159,6 +163,8 @@ namespace luciole {
     void stop();
     void saved(UserFileSaveResult result);
     void questionClosed();
+    // The question was closed: true when that was no choice and the pending leaves give up (see leave()).
+    bool dismissCancelsLeave();
     void requestLeave();
     void apply(const editing::GateResult& result);
     void failed(const std::string& sentence);
@@ -190,6 +196,8 @@ namespace luciole {
     bool m_editorShown = false;
     bool m_hadKeyboard = false; // the editor had the keyboard in its last shown frame
     bool m_leaving = false;
+    bool m_dismissCancels = false; // every pending leave gives up when the question is closed without a choice
+    bool m_noChosen = false;       // No was pressed, as against Escape or the close button
     // The save.
     std::optional<FileShape> m_savedShape;
     FileShape m_savingShape;
