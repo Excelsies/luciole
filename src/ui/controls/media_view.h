@@ -45,6 +45,9 @@ public:
   static constexpr std::chrono::milliseconds kSeekNoticeDelay{300};
   static constexpr std::chrono::milliseconds kSeekWatchInterval{100};
 
+  // A video that sits paused or ended this long gives its pipeline back; its last frame, time and bar stay.
+  static constexpr std::chrono::milliseconds kIdleRelease{30'000};
+
   explicit MediaView(luciole::AudioOutput audio = luciole::AudioOutput::System);
   ~MediaView() override;
 
@@ -78,6 +81,10 @@ public:
     m_firstLimit = first;
     m_retryLimit = retry;
   }
+  // How long a paused or ended video waits before it gives its pipeline back; for tests.
+  void setIdleRelease(std::chrono::milliseconds idle) { m_idleRelease = idle; }
+  // The pipeline was given back and the view shows the last frame; Play or a seek opens the file again.
+  bool parked() const noexcept { return m_parked.has_value(); }
   // The details could not be read in time, also on the one more try.
   bool detailsUnread() const noexcept { return m_factsFailed; }
   // What is known of the file: its container's facts, and the playing time the player found.
@@ -112,8 +119,14 @@ private:
 
   void togglePlay();
   void onKey(const InputArea::KeyData& key);
+  bool openPlayer();
   void start();
   void stop();
+  bool idleVideo() const;
+  void watchIdle(bool restart);
+  void park();
+  bool wake();
+  double knownDuration() const;
   void seekBy(double seconds);
   void scrub(double fraction, luciole::SeekMode mode, bool done);
   void playerChanged();
@@ -176,6 +189,15 @@ private:
   bool m_factsFailed = false;  // the one more try timed out too: the details stay unknown
   std::chrono::milliseconds m_firstLimit{luciole::MediaProbe::kTimeLimit};
   std::chrono::milliseconds m_retryLimit{luciole::MediaProbe::kRetryLimit};
+  // Where the file stood when its pipeline was given back, until the player that took its place has loaded.
+  struct Parked {
+    double at = 0;
+    double duration = 0;
+    bool ended = false;
+  };
+  std::optional<Parked> m_parked;
+  Timer m_idle; // waits kIdleRelease after the video paused or ended
+  std::chrono::milliseconds m_idleRelease = kIdleRelease;
   bool m_shown = true;
   bool m_muted = false;
   bool m_looping = false;

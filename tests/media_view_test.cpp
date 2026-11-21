@@ -83,8 +83,14 @@ namespace {
     TEST_CHECK(rig.state() == MediaState::Playing);
     rig.key(XKB_KEY_space);
     TEST_CHECK(rig.state() == MediaState::Paused);
-    // Paused, no timer of the view waits.
-    TEST_CHECK(rig.until([] { return TimerManager::instance().pollTimeoutMs() < 0; }, std::chrono::milliseconds(2000)));
+    // Paused, the clock stops; only the wait that gives the pipeline back is left, and it is long.
+    TEST_CHECK(rig.until(
+        [] {
+          const int due = TimerManager::instance().pollTimeoutMs();
+          return due < 0 || due > MediaView::kClockInterval.count();
+        },
+        std::chrono::milliseconds(2000)
+    ));
     const double at = rig.position();
     rig.key(XKB_KEY_Right);
     TEST_NEAR(rig.position(), at + MediaView::kSeekStep, 0.15);

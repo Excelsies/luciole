@@ -245,7 +245,7 @@ void MediaView::onKey(const InputArea::KeyData& key) {
   }
 }
 
-void MediaView::start() {
+bool MediaView::openPlayer() {
   m_player = std::make_unique<luciole::MediaPlayer>(m_audio);
   m_player->setChangedCallback([this] { playerChanged(); });
   m_player->setFrameCallback([this] { scheduleCatchUp(); });
@@ -255,7 +255,18 @@ void MediaView::start() {
   m_askedPixels = m_stagePixels;
   if (!m_player->open(m_path)) {
     refreshControls();
+    return false;
+  }
+  return true;
+}
+
+// Play: a parked video goes on from where it stopped, an ended one from the start.
+void MediaView::start() {
+  if (!openPlayer()) {
     return;
+  }
+  if (m_parked && !m_parked->ended) {
+    m_player->seek(m_parked->at);
   }
   m_playRequested = true;
   m_player->play();
@@ -263,6 +274,8 @@ void MediaView::start() {
 
 void MediaView::stop() {
   m_player.reset();
+  m_parked.reset();
+  m_idle.stop();
   m_clock.stop();
   clearSeek();
   m_playRequested = false;
@@ -273,27 +286,42 @@ void MediaView::stop() {
 }
 
 void MediaView::seekBy(double seconds) {
+  if (m_parked && wake()) {
+    m_player->seek(m_parked->at + seconds);
+    watchSeek();
+    refreshPosition();
+    return;
+  }
   if (m_player && m_player->state() != MediaState::Loading && m_player->state() != MediaState::Error) {
     m_player->seek(m_player->position() + seconds);
     watchSeek();
     refreshPosition();
+    watchIdle(true);
   }
 }
 
 void MediaView::scrub(double fraction, SeekMode mode, bool done) {
-  if (!m_player || m_player->duration() <= 0) {
+  if (m_parked) {
+    (void)wake();
+  }
+  const double duration = knownDuration();
+  if (!m_player || duration <= 0) {
     return;
   }
   m_dragging = !done;
-  m_dragSeconds = std::clamp(fraction, 0.0, 1.0) * m_player->duration();
+  m_dragSeconds = std::clamp(fraction, 0.0, 1.0) * duration;
   m_player->seek(m_dragSeconds, mode);
   watchSeek();
   refreshPosition();
+  watchIdle(true);
 }
 
 // The player's state, duration or error changed; the player is never destroyed from here.
 void MediaView::playerChanged() {
   const auto state = m_player->state();
+  if (state != MediaState::Loading) {
+    m_parked.reset();
+  }
   if (state == MediaState::Ended || state == MediaState::Error) {
     m_playRequested = false;
   }
@@ -329,7 +357,7 @@ void MediaView::refreshControls() {
   if (m_total->text() != total) {
     m_total->setText(total);
   }
-  m_bar->setEnabled(m_player && m_player->duration() > 0);
+  m_bar->setEnabled(knownDuration() > 0);
   m_choiceWanted = soundOnly() && !failed;
   m_visual->follow(m_player.get(), m_choiceWanted);
   showTimes();
@@ -391,8 +419,8 @@ void MediaView::refreshMessage(bool failed) {
 }
 
 void MediaView::refreshPosition() {
-  const double duration = m_player ? m_player->duration() : 0;
-  const double at = !m_player ? 0 : (m_dragging ? m_dragSeconds : m_player->position());
+  const double duration = knownDuration();
+  const double at = !m_player ? (m_parked ? m_parked->at : 0) : (m_dragging ? m_dragSeconds : m_player->position());
   m_bar->setFraction(duration > 0 ? at / duration : 0);
   const auto second = static_cast<long long>(std::max(at, 0.0));
   if (second != m_shownSecond) {
@@ -408,6 +436,7 @@ void MediaView::followClock() {
   } else if (!m_clock.active()) {
     m_clock.startRepeating(kClockInterval, [this] { onScreen() ? refreshPosition() : stop(); });
   }
+  watchIdle(false);
 }
 
 void MediaView::scheduleCatchUp() {
