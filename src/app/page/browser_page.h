@@ -168,6 +168,7 @@ public:
   void setPopupAvailable(std::function<bool()> callback);
   void setForeignDrop(std::function<std::optional<std::pair<luciole::Location, LayoutRect>>(float, float)> callback);
   bool popupOwns(wl_surface* surface) const;
+  bool popupCapturesAllKeys() const;
   bool popup() const;
   bool dimsWindow() const;
   bool overlay() const override;
@@ -507,6 +508,7 @@ private:
   Button* m_newFolderButton = nullptr;
   Button* m_sortButton = nullptr;
   Button* m_emptyTrashButton = nullptr;
+  Button* m_closePaneButton = nullptr;
   bool m_browserDirty = true;
   std::unique_ptr<PopupSurface> m_popupSurface;
   PopupDismiss m_popupDismiss = PopupDismiss::OutsideClick;
