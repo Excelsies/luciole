@@ -3,6 +3,7 @@
 
 #include "media/bink2_stream.h"
 
+#include <charconv>
 #include <chrono>
 #include <cstdint>
 #include <cstdio>
@@ -11,6 +12,7 @@
 #include <fcntl.h>
 #include <memory>
 #include <print>
+#include <string_view>
 #include <sys/stat.h>
 #include <unistd.h>
 #include <vector>
@@ -19,6 +21,22 @@ namespace bink2bench {
   using Clock = std::chrono::steady_clock;
   using luciole::media::bink2::Planes;
   using luciole::media::bink2::Stream;
+
+  // A whole number in [minimum, maximum] from the command line; anything else ends the program with a message.
+  inline std::uint64_t number(const char* text, const char* what, std::uint64_t minimum, std::uint64_t maximum) {
+    const std::string_view view(text);
+    std::uint64_t value = 0;
+    const auto parsed = std::from_chars(view.data(), view.data() + view.size(), value);
+    if (view.empty()
+        || parsed.ec != std::errc{}
+        || parsed.ptr != view.data() + view.size()
+        || value < minimum
+        || value > maximum) {
+      std::println(stderr, "{} must be a whole number from {} to {}, not '{}'", what, minimum, maximum, view);
+      std::exit(2);
+    }
+    return value;
+  }
 
   class File {
   public:

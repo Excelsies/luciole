@@ -414,6 +414,8 @@ namespace {
     );
     return 0;
   }
+  constexpr std::uint64_t kMost = std::uint64_t{1} << 40;
+  constexpr std::uint64_t kMaxSide = 16384;
 } // namespace
 
 int main(int argc, char** argv) {
@@ -423,42 +425,41 @@ int main(int argc, char** argv) {
   }
   const std::string mode = argv[1];
   if (mode == "decode") {
-    return decode(argv[2], argc > 3 ? std::strtoull(argv[3], nullptr, 10) : 300);
+    return decode(argv[2], argc > 3 ? number(argv[3], "FRAMES", 1, kMost) : 300);
   }
   if (mode == "sum") {
-    return sum(argv[2], argc > 3 ? std::strtoull(argv[3], nullptr, 10) : 300);
+    return sum(argv[2], argc > 3 ? number(argv[3], "FRAMES", 1, kMost) : 300);
   }
   if (mode == "adler") {
     return adlers(
-        argv[2], argc > 3 ? std::strtoull(argv[3], nullptr, 10) : 0,
-        argc > 4 ? std::strtoull(argv[4], nullptr, 10) : ~0ULL >> 1
+        argv[2], argc > 3 ? number(argv[3], "FIRST", 0, kMost) : 0,
+        argc > 4 ? number(argv[4], "COUNT", 1, kMost) : kMost
     );
   }
   if (mode == "scan") {
     return scan(
-        argv[2], argc > 3 ? std::strtoull(argv[3], nullptr, 10) : 0,
-        argc > 4 ? std::strtoull(argv[4], nullptr, 10) : 300
+        argv[2], argc > 3 ? number(argv[3], "FIRST", 0, kMost) : 0, argc > 4 ? number(argv[4], "COUNT", 1, kMost) : 300
     );
   }
   if (mode == "dumprange" && argc > 5) {
-    return dumpRange(argv[2], std::strtoull(argv[3], nullptr, 10), std::strtoull(argv[4], nullptr, 10), argv[5]);
+    return dumpRange(argv[2], number(argv[3], "FIRST", 0, kMost), number(argv[4], "COUNT", 1, kMost), argv[5]);
   }
   if (mode == "dump" && argc > 4) {
-    return dump(argv[2], std::strtoull(argv[3], nullptr, 10), argv[4]);
+    return dump(argv[2], number(argv[3], "FRAME", 0, kMost), argv[4]);
   }
   if (mode == "seekto") {
     return seekTo(argv[2]);
   }
   if (mode == "poster") {
-    return poster(argv[2], argc > 3 ? static_cast<int>(std::strtol(argv[3], nullptr, 10)) : 256);
+    return poster(argv[2], argc > 3 ? static_cast<int>(number(argv[3], "SIDE", 1, kMaxSide)) : 256);
   }
   if (mode == "seek") {
     return seek(argv[2]);
   }
   if (mode == "play") {
     return play(
-        argv[2], argc > 4 ? static_cast<int>(std::strtol(argv[3], nullptr, 10)) : 1280,
-        argc > 4 ? static_cast<int>(std::strtol(argv[4], nullptr, 10)) : 720
+        argv[2], argc > 4 ? static_cast<int>(number(argv[3], "WIDTH", 1, kMaxSide)) : 1280,
+        argc > 4 ? static_cast<int>(number(argv[4], "HEIGHT", 1, kMaxSide)) : 720
     );
   }
   std::println(stderr, "unknown mode {}", mode);
