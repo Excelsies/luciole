@@ -45,6 +45,7 @@ namespace {
     rig.key(XKB_KEY_Right);
     rig.key(XKB_KEY_Right);
     rig.key(XKB_KEY_Right);
+    rig.view->setIdleRelease(60s); // it stays open while the test reads the place
     TEST_CHECK(rig.until([&] { return settledAndOpen(rig) && rig.state() == MediaState::Paused; }));
     TEST_NEAR(rig.position(), parkedAt + 3 * MediaView::kSeekStep, 0.6);
   }
@@ -70,6 +71,7 @@ namespace {
   void leftWhileParkedSeeksBack(ViewRig& rig, const fs::path& clip) {
     playsPausesAndParks(rig, clip, 1.0);
     rig.key(XKB_KEY_Left);
+    rig.view->setIdleRelease(60s); // it stays open while the test reads the place
     TEST_CHECK(rig.until([&] { return settledAndOpen(rig) && rig.state() == MediaState::Paused; }));
     TEST_NEAR(rig.position(), 0.0, 0.3);
   }
@@ -142,14 +144,17 @@ namespace {
     return drawn(rig);
   }
 
-  enum class Backward { LeftThrice, BarBefore, DragBack, LeftThenRight };
+  enum class Backward { LeftThrice, BarBefore, DragBack, LeftThenRight, LeftRightLeft };
 
   // Seeks to a place before the one a video was parked at, or Left and Right in quick turns during the reopen: the
   // picture that stands once the player has settled is the frame at the final target, and not the kept frame.
   void
   aBackwardSeekWhileParkedShowsTheFrameAtTheTarget(::test::SceneCapture& capture, const fs::path& ball, Backward how) {
     ViewRig rig(capture);
-    playsPausesAndParks(rig, ball, 2.0);
+    // The bar cases aim before the parked place by more than the slack a frame may be older than it (0.5 s) and a
+    // second more, so they tell a frame from the wrong place from a right one.
+    const bool byBar = how == Backward::BarBefore || how == Backward::DragBack;
+    playsPausesAndParks(rig, ball, byBar ? 3.0 : 2.0);
     rig.view->setIdleRelease(60s);
     const auto kept = drawn(rig);
     const auto& bar = rig.view->positionBar();
@@ -174,6 +179,11 @@ namespace {
     case Backward::LeftThenRight:
       rig.key(XKB_KEY_Left);
       rig.key(XKB_KEY_Right);
+      break;
+    case Backward::LeftRightLeft: // the last place is below the one a reopen was first asked for
+      rig.key(XKB_KEY_Left);
+      rig.key(XKB_KEY_Right);
+      rig.key(XKB_KEY_Left);
       break;
     }
     TEST_CHECK(rig.until([&] { return settledAndOpen(rig) && rig.state() == MediaState::Paused; }));
@@ -241,6 +251,7 @@ namespace {
     rig.view->setSeekNoticeDelay(0ms);
     playsPausesAndParks(rig, slow, 2.0);
     rig.key(XKB_KEY_Right);
+    rig.view->setIdleRelease(60s); // it stays open once it has reached its place
     bool seen = false;
     for (int i = 0; i < 2000 && !(settledAndOpen(rig) && rig.state() == MediaState::Paused); ++i) {
       (void)rig.frame();
@@ -353,6 +364,10 @@ int main() {
   TEST_CHECK(writeClip(shortClip, {.width = 64, .height = 48, .seconds = 3}));
   TEST_CHECK(writeClip(copy, {.width = 64, .height = 48, .seconds = 12}));
   TEST_CHECK(writeH264(slow, 3840, 2160, 8, 250));
+  // H.264 frames after a seek come with their time, as the frames of a real file do; the AVI clips' do not, and a
+  // frame with no time is shown whatever place it is for.
+  const auto h264ball = scratch.path("h264ball.mp4");
+  TEST_CHECK(writeH264(h264ball, 320, 240, 12, 30));
   {
     ViewRig rig(*capture);
     repeatedKeysWhileTheFileReopensAccumulate(rig, clip30);
@@ -368,8 +383,10 @@ int main() {
   neverShowsTheFirstFrameWhileResuming(*capture, ball);
   aSeekWhileParkedAndPausedShowsTheFrameAtTheTarget(*capture, ball, false);
   aSeekWhileParkedAndPausedShowsTheFrameAtTheTarget(*capture, ball, true);
-  for (const auto how : {Backward::LeftThrice, Backward::BarBefore, Backward::DragBack, Backward::LeftThenRight}) {
-    aBackwardSeekWhileParkedShowsTheFrameAtTheTarget(*capture, ball, how);
+  for (const auto how :
+       {Backward::LeftThrice, Backward::BarBefore, Backward::DragBack, Backward::LeftThenRight,
+        Backward::LeftRightLeft}) {
+    aBackwardSeekWhileParkedShowsTheFrameAtTheTarget(*capture, h264ball, how);
   }
   aDragRightAfterAReopenShowsFramesBeforeTheRelease(*capture, ball);
   anEndedFileReopenedForASeekNeverShowsTheFirstFrame(*capture, shortBall);
