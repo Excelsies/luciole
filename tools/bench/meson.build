@@ -12,6 +12,7 @@ executable('luciole-transfer-bench',
 if media_playback
   executable('luciole-bink2-bench',
     'bink2_bench.cpp',
+    'bink2_bench_play.cpp',
     include_directories: src_inc,
     dependencies: [media_dep],
   )
