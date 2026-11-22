@@ -216,7 +216,6 @@ std::optional<luciole::MediaFrame> luciole::media::takeFrame(Pipeline& pipeline)
   if (sample == nullptr) {
     return std::nullopt;
   }
-  pipeline.stats.taken++;
   auto held = std::make_shared<MappedSample>(sample);
   GstVideoInfo info;
   GstCaps* caps = gst_sample_get_caps(sample);
@@ -243,6 +242,10 @@ std::optional<luciole::MediaFrame> luciole::media::takeFrame(Pipeline& pipeline)
   const auto* pixels = static_cast<const std::uint8_t*>(GST_VIDEO_FRAME_PLANE_DATA(&held->frame, 0));
   const std::span rgba(pixels, static_cast<std::size_t>(width) * static_cast<std::size_t>(height) * 4);
   const std::int64_t time = streamTime(sample);
+  // The preroll picture may be taken and then comes again as a sample: it counts once.
+  if (time < 0 || pipeline.stats.lastTakenTime.exchange(time) != time) {
+    pipeline.stats.taken++;
+  }
   return MediaFrame{
       .width = width,
       .height = height,

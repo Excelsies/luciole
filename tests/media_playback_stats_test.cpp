@@ -77,8 +77,8 @@ namespace {
     // The 30 pictures of the clip; the first comes as the preroll and again as a sample, and counts once.
     TEST_CHECK(field(text, "delivered") == 30);
     TEST_CHECK(field(text, "missed") == 0);
-    // The view may take the preroll picture and then the same picture again as a sample.
-    TEST_CHECK(field(text, "taken") + field(text, "replaced") <= 31);
+    TEST_CHECK(field(text, "taken") <= field(text, "delivered"));
+    TEST_CHECK(field(text, "taken") + field(text, "replaced") <= field(text, "delivered"));
   }
 
   void saysNothingWithoutTheTrace(Pump& pump, const fs::path& clip, const std::string& file) {
