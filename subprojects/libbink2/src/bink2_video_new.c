@@ -2,6 +2,7 @@
 #include "bink2_video_new.h"
 #include "bink2_video.h"
 #include "bink2_dsp.h"
+#include "bink2_idct.h"
 
 #include <string.h>
 
@@ -374,13 +375,7 @@ static int new_decode_ac(Bink2Bits *bits, int16_t block[4][64],
 static void new_idct_put(unsigned char *dst, int stride,
                          const int16_t block[64])
 {
-    int32_t tmp[64];
-    int i;
-
-    for (i = 0; i < 64; i++)
-        tmp[i] = block[i];
-    bink2_idct_new(tmp);
-    bink2_put_block(dst, stride, tmp);
+    bink2_idct_put(dst, stride, block);
 }
 
 static int new_decode_intra_luma(Bink2Video *v, Bink2Bits *bits,
@@ -744,13 +739,7 @@ static void new_average_chroma(const unsigned char *src, int stride, float *dc)
 static void new_idct_add(unsigned char *dst, int stride,
                          const int16_t block[64])
 {
-    int32_t tmp[64];
-    int i;
-
-    for (i = 0; i < 64; i++)
-        tmp[i] = block[i];
-    bink2_idct_new(tmp);
-    bink2_add_block(dst, stride, tmp);
+    bink2_idct_add(dst, stride, block);
 }
 
 static int new_decode_inter_luma(Bink2Video *v, Bink2Bits *bits,

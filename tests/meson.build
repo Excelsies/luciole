@@ -458,6 +458,7 @@ if media_playback
     {'name': 'bink2-refusal', 'deps': [media_dep, event_loop_dep], 'timeout': 60},
     {'name': 'bink2-sound', 'deps': [media_dep, event_loop_dep], 'timeout': 240},
     {'name': 'bink2-facts', 'deps': [thumbnails_dep, media_dep, event_loop_dep], 'timeout': 90, 'env': gio_env},
+    {'name': 'bink2-idct', 'deps': [media_dep], 'timeout': 180},
     {'name': 'bink2-failure', 'deps': [media_dep, event_loop_dep], 'timeout': 300},
     {'name': 'bink2-stream', 'deps': [media_dep], 'timeout': 180},
     {'name': 'media-network-refusal', 'deps': [media_dep, event_loop_dep], 'timeout': 60},

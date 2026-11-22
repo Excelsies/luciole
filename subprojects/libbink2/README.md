@@ -35,6 +35,9 @@ Every changed file begins with a notice that says so. The changes:
 - `src/bink2_frames.c`, `src/bink2_frames.h` (new): the frame-at-a-time interface for a caller with threads of its
   own: `bink2_frame_prepare`, `bink2_frame_decode_slice`, `bink2_frame_finish`, the plane layout, key frame flags
   and a failing audio chunk reported as an error.
+- `src/bink2_idct.c`, `src/bink2_idct.h` (new): the inverse transform of the "new" blocks, put or added into a picture,
+  in one call on the 16 bit coefficients, with fast paths that give the same bytes as the plain C path of `bink2_dsp.c`
+  (`bink2_idct_use_plain` runs the plain path, for tests). `src/bink2_video_new.c` calls it.
 - `meson.build` (new): builds the decoder sources, with the compiler flags upstream uses.
 
 The library starts no threads. Streams older than `KB2g` and streams with an alpha plane (refused at open for
