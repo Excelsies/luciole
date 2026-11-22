@@ -2,9 +2,11 @@
 #include "render/core/image_resize.h"
 #include "test_check.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <fstream>
+#include <functional>
 #include <gdk-pixbuf/gdk-pixbuf.h>
 #include <memory>
 #include <print>
@@ -61,43 +63,66 @@ namespace {
     return out;
   }
 
-  // Rows padded to four bytes are what gdk_pixbuf_new gives for a width that is not a multiple of four.
-  void rowsWithPaddingGiveWhatPackedRowsGive() {
-    for (const bool hasAlpha : {false, true}) {
-      const auto pixbuf = make(1001, 640, hasAlpha, -1);
-      TEST_CHECK(gdk_pixbuf_get_rowstride(pixbuf.get()) != 1001 * gdk_pixbuf_get_n_channels(pixbuf.get()) || hasAlpha);
-      const auto fitted = luciole::fitRasterPixels(pixbuf.get(), 128, 10'000'000);
-      TEST_CHECK(fitted && fitted->width == 128 && fitted->height == 82);
-      const auto rows = packed(pixbuf.get());
-      const auto expected =
-          resizeToRgba(rows.data(), 1001, 640, hasAlpha ? ResizeSourceLayout::Rgba : ResizeSourceLayout::Rgb, 128, 82);
-      TEST_CHECK(fitted->rgba == expected);
-    }
-  }
+  using Color = std::function<std::uint8_t(int x, int y, int c)>;
+  using Alpha = std::function<std::uint8_t(int x, int y)>;
 
-  // A four-channel picture whose rows are `extra` bytes longer than its pixels, with the colors of make(); pixel
-  // (3, 2) has `oddAlpha` when that is not negative and every other pixel has alpha 255.
-  struct Padded {
-    std::vector<std::uint8_t> bytes;
+  // A picture whose rows are `extra` bytes longer than its pixels. With `exact` the buffer ends with the last pixel, so
+  // the last row is shorter than the stride and a read beyond the pixels is a read past the buffer.
+  struct Rows {
+    std::unique_ptr<std::uint8_t[]> bytes;
     Pixbuf pixbuf;
   };
-  Padded makePadded(int width, int height, int extra, int oddAlpha) {
-    Padded padded;
-    const int stride = width * 4 + extra;
-    padded.bytes.assign(static_cast<std::size_t>(stride) * height, 0x5a);
+  Rows makeRows(int width, int height, int channels, int extra, bool exact, const Color& color, const Alpha& alpha) {
+    Rows rows;
+    const int stride = width * channels + extra;
+    const std::size_t size = exact
+        ? static_cast<std::size_t>(height - 1) * stride + static_cast<std::size_t>(width) * channels
+        : static_cast<std::size_t>(stride) * height;
+    rows.bytes = std::make_unique<std::uint8_t[]>(size);
+    std::memset(rows.bytes.get(), 0x5a, size);
     for (int y = 0; y < height; ++y) {
       for (int x = 0; x < width; ++x) {
-        auto* pixel = padded.bytes.data() + static_cast<std::size_t>(y) * stride + static_cast<std::size_t>(x) * 4U;
+        auto* pixel = rows.bytes.get() + static_cast<std::size_t>(y) * stride + static_cast<std::size_t>(x) * channels;
         for (int c = 0; c < 3; ++c) {
-          pixel[c] = channel(x, y, c);
+          pixel[c] = color(x, y, c);
         }
-        pixel[3] = x == 3 && y == 2 && oddAlpha >= 0 ? static_cast<std::uint8_t>(oddAlpha) : 255;
+        if (channels == 4) {
+          pixel[3] = alpha(x, y);
+        }
       }
     }
-    padded.pixbuf.reset(gdk_pixbuf_new_from_data(
-        padded.bytes.data(), GDK_COLORSPACE_RGB, true, 8, width, height, stride, nullptr, nullptr
+    rows.pixbuf.reset(gdk_pixbuf_new_from_data(
+        rows.bytes.get(), GDK_COLORSPACE_RGB, channels == 4, 8, width, height, stride, nullptr, nullptr
     ));
-    return padded;
+    return rows;
+  }
+  const Color kColors = [](int x, int y, int c) { return channel(x, y, c); };
+  const Alpha kOpaque = [](int, int) -> std::uint8_t { return 255; };
+  const Alpha kVaried = [](int x, int y) { return channel(x, y, 3); };
+
+  ResizeSourceLayout layoutOf(int channels) {
+    return channels == 4 ? ResizeSourceLayout::Rgba : ResizeSourceLayout::Rgb;
+  }
+
+  // Rows padded to four bytes are what gdk_pixbuf_new gives for a width that is not a multiple of four; four-channel
+  // rows and rows that end at the last pixel are made by hand.
+  void rowsWithPaddingGiveWhatPackedRowsGive() {
+    const auto check = [](GdkPixbuf* pixbuf, int channels) {
+      const auto fitted = luciole::fitRasterPixels(pixbuf, 128, 10'000'000);
+      TEST_CHECK(fitted && fitted->width == 128 && fitted->height == 82);
+      const auto rows = packed(pixbuf);
+      TEST_CHECK(fitted->rgba == resizeToRgba(rows.data(), 1001, 640, layoutOf(channels), 128, 82));
+    };
+    const auto rgb = make(1001, 640, false, -1);
+    TEST_CHECK(gdk_pixbuf_get_rowstride(rgb.get()) != 1001 * 3);
+    check(rgb.get(), 3);
+    check(make(1001, 640, true, -1).get(), 4);
+    for (const int channels : {3, 4}) {
+      for (const bool exact : {false, true}) {
+        const auto rows = makeRows(1001, 640, channels, 12, exact, kColors, kVaried);
+        check(rows.pixbuf.get(), channels);
+      }
+    }
   }
 
   // Pictures whose alpha is 255 everywhere are shrunk as opaque: exactly the opaque resizer's colors, alpha exactly
@@ -115,21 +140,63 @@ namespace {
       }
     };
     check(make(2001, 1500, true, 255).get());
-    check(makePadded(2001, 1500, 0, -1).pixbuf.get());
-    check(makePadded(2001, 1500, 12, -1).pixbuf.get());
-  }
-
-  // One pixel that is not fully opaque keeps the alpha-weighted path, tight or padded.
-  void aSingleTranslucentPixelKeepsTheAlphaWeighting() {
     for (const int extra : {0, 12}) {
-      const auto picture = makePadded(1001, 640, extra, 254);
-      const auto fitted = luciole::fitRasterPixels(picture.pixbuf.get(), 128, 10'000'000);
-      TEST_CHECK(fitted && fitted->width == 128 && fitted->height == 82);
-      const auto rows = packed(picture.pixbuf.get());
-      TEST_CHECK(fitted->rgba == resizeToRgba(rows.data(), 1001, 640, ResizeSourceLayout::Rgba, 128, 82));
+      for (const bool exact : {false, true}) {
+        check(makeRows(2001, 1500, 4, extra, exact, kColors, kOpaque).pixbuf.get());
+      }
     }
   }
 
+  // The opaque and the straight-alpha resizer, given the same fully opaque picture, differ by rounding only.
+  void theOpaqueAndStraightAlphaPathsAgreeOnAnOpaquePicture() {
+    const auto pixbuf = make(2001, 1500, true, 255);
+    const auto rows = packed(pixbuf.get());
+    const auto opaque = resizeToRgba(rows.data(), 2001, 1500, ResizeSourceLayout::Rgbx, 64, 48);
+    const auto straight = resizeToRgba(rows.data(), 2001, 1500, ResizeSourceLayout::Rgba, 64, 48);
+    TEST_CHECK(opaque.size() == straight.size() && !opaque.empty());
+    int worst = 0;
+    for (std::size_t i = 0; i < opaque.size(); ++i) {
+      worst = std::max(worst, std::abs(opaque[i] - straight[i]));
+    }
+    std::println("raster-fit: opaque and straight-alpha results differ by at most {} level(s)", worst);
+    TEST_CHECK(worst <= 1);
+  }
+
+  // A quarter of the picture is transparent or half transparent, with colors far from the rest: the alpha-weighted
+  // path keeps the colors of the opaque part, the opaque path would blend the colors of the hidden quarter into them.
+  void aTranslucentRegionKeepsTheAlphaWeighting() {
+    for (const int hidden : {0, 128}) {
+      const Color color = [](int x, int y, int c) -> std::uint8_t {
+        return x < 500 && y < 320 ? 255 : static_cast<std::uint8_t>(20 + c * 10 + (x + y) % 7);
+      };
+      const Alpha alpha = [hidden](int x, int y) -> std::uint8_t {
+        return x < 500 && y < 320 ? static_cast<std::uint8_t>(hidden) : 255;
+      };
+      for (const int extra : {0, 12}) {
+        for (const bool exact : {false, true}) {
+          const auto picture = makeRows(1001, 640, 4, extra, exact, color, alpha);
+          const auto fitted = luciole::fitRasterPixels(picture.pixbuf.get(), 128, 10'000'000);
+          TEST_CHECK(fitted && fitted->width == 128 && fitted->height == 82);
+          const auto rows = packed(picture.pixbuf.get());
+          TEST_CHECK(fitted->rgba == resizeToRgba(rows.data(), 1001, 640, ResizeSourceLayout::Rgba, 128, 82));
+          const auto opaque = resizeToRgba(rows.data(), 1001, 640, ResizeSourceLayout::Rgbx, 128, 82);
+          int worstColor = 0;
+          bool translucent = false;
+          for (std::size_t i = 0; i < fitted->rgba.size(); ++i) {
+            if (i % 4 == 3) {
+              translucent = translucent || fitted->rgba[i] < 255;
+            } else {
+              worstColor = std::max(worstColor, std::abs(fitted->rgba[i] - opaque[i]));
+            }
+          }
+          TEST_CHECK(translucent);
+          TEST_CHECK(worstColor > 20);
+        }
+      }
+    }
+  }
+
+#ifndef __SANITIZE_ADDRESS__
   // Bytes of private writable memory the process holds now.
   std::size_t dataBytes() {
     std::ifstream status("/proc/self/status");
@@ -141,11 +208,16 @@ namespace {
     }
     return 0;
   }
+#endif
 
   // A 12 MP picture with padded rows is shrunk under a cap that leaves room for the result and the resizer's
   // scratch but not for a second copy of the picture.
   void aPaddedPictureIsShrunkWithoutAnotherCopyOfIt() {
 #ifdef __SANITIZE_ADDRESS__
+    std::println(
+        "raster-fit: the memory cap check is skipped: a sanitizer build maps its shadow memory, which RLIMIT_DATA "
+        "counts"
+    );
     return;
 #else
     const pid_t child = ::fork();
@@ -169,7 +241,8 @@ namespace {
 int main() {
   rowsWithPaddingGiveWhatPackedRowsGive();
   anOpaqueAlphaChannelIsShrunkAsOpaque();
-  aSingleTranslucentPixelKeepsTheAlphaWeighting();
+  theOpaqueAndStraightAlphaPathsAgreeOnAnOpaquePicture();
+  aTranslucentRegionKeepsTheAlphaWeighting();
   aPaddedPictureIsShrunkWithoutAnotherCopyOfIt();
   std::println("raster-fit: all checks passed");
   return 0;
