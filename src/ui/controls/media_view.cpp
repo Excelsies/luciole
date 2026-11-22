@@ -272,7 +272,11 @@ void MediaView::seekBy(double seconds) {
   if (const double length = knownDuration(); length > 0) {
     target = std::min(target, length);
   }
-  m_player->seek(std::max(target, 0.0));
+  target = std::max(target, 0.0);
+  m_player->seek(target);
+  if (m_awaiting) {
+    m_awaiting = target; // the place a reopened file goes on from is where the latest seek asked
+  }
   watchSeek();
   refreshPosition();
   watchIdle(); // the seek is use: it drops the old deadline, and its settling starts a new one
@@ -286,11 +290,13 @@ void MediaView::scrub(double fraction, SeekMode mode, bool done) {
   if (!m_player || duration <= 0) {
     return;
   }
-  if (m_player->state() != MediaState::Loading) {
-    m_awaiting.reset(); // a seek on a file that has loaded flushes what came before it
-  }
   m_dragging = !done;
   m_dragSeconds = std::clamp(fraction, 0.0, 1.0) * duration;
+  if (m_player->state() != MediaState::Loading) {
+    m_awaiting.reset(); // a seek on a file that has loaded flushes what came before it
+  } else if (m_awaiting) {
+    m_awaiting = m_dragSeconds;
+  }
   m_player->seek(m_dragSeconds, mode);
   watchSeek();
   refreshPosition();
@@ -448,7 +454,7 @@ void MediaView::catchUp() {
   }
   if (const auto frame = m_player->takeFrame()) {
     // A parked file opening again keeps its frame until one from the place it goes on from arrives; a frame from
-    // before that place is dropped. A frame with no time is the one a seek leaves, which has none.
+    // before that place is dropped. A frame with no stream time is shown.
     if (!m_awaiting || frame->time < 0 || frame->time >= *m_awaiting - kFrameSlack) {
       m_awaiting.reset();
       const bool first = !m_showingFrame;

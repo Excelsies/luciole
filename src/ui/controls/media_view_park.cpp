@@ -33,6 +33,7 @@ void MediaView::park() {
       .at = ended ? m_player->duration() : m_player->position(), .duration = m_player->duration(), .ended = ended
   };
   m_player.reset();
+  m_awaiting.reset();
   m_clock.stop();
   clearSeek();
   m_playRequested = false;

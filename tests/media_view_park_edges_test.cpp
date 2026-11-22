@@ -7,6 +7,7 @@
 #include "ui/controls/media_position_bar.h"
 #include "ui/controls/media_view.h"
 
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <cstdlib>
@@ -128,6 +129,59 @@ namespace {
     const auto expected = drawn(rig);
     TEST_CHECK(differing(kept, expected, rig.view->stageArea()) > 40);
     TEST_CHECK(differing(shown, expected, rig.view->stageArea()) < 40);
+  }
+
+  // What a seek on a live player to `target` shows: away and back by the bar.
+  ::test::GlPixels liveFrameAt(ViewRig& rig, double target) {
+    rig.click(rig.view->positionBar(), target < 6.0 ? 0.9F : 0.1F);
+    TEST_CHECK(rig.until([&] { return !rig.view->player()->seeking() && std::abs(rig.position() - target) > 2.0; }));
+    rig.click(rig.view->positionBar(), static_cast<float>(target / 12.0));
+    TEST_CHECK(rig.until([&] { return !rig.view->player()->seeking() && std::abs(rig.position() - target) < 0.3; }));
+    rig.pump.run(300ms);
+    return drawn(rig);
+  }
+
+  enum class Backward { LeftThrice, BarBefore, DragBack, LeftThenRight };
+
+  // Seeks to a place before the one a video was parked at, or Left and Right in quick turns during the reopen: the
+  // picture that stands once the player has settled is the frame at the final target, and not the kept frame.
+  void
+  aBackwardSeekWhileParkedShowsTheFrameAtTheTarget(::test::SceneCapture& capture, const fs::path& ball, Backward how) {
+    ViewRig rig(capture);
+    playsPausesAndParks(rig, ball, 8.0);
+    rig.view->setIdleRelease(60s);
+    const auto kept = drawn(rig);
+    const auto& bar = rig.view->positionBar();
+    float x = 0;
+    float y = 0;
+    Node::absolutePosition(&bar, x, y);
+    switch (how) {
+    case Backward::LeftThrice:
+      rig.key(XKB_KEY_Left);
+      rig.key(XKB_KEY_Left);
+      rig.key(XKB_KEY_Left);
+      break;
+    case Backward::BarBefore:
+      rig.click(bar, 0.1F);
+      break;
+    case Backward::DragBack:
+      rig.press(x + bar.width() * 0.6F, y + bar.height() / 2);
+      rig.dispatcher.pointerMotion(x + bar.width() * 0.3F, y + bar.height() / 2, ++rig.serial);
+      rig.frame();
+      rig.release(x + bar.width() * 0.2F, y + bar.height() / 2);
+      break;
+    case Backward::LeftThenRight:
+      rig.key(XKB_KEY_Left);
+      rig.key(XKB_KEY_Right);
+      break;
+    }
+    TEST_CHECK(rig.until([&] { return settledAndOpen(rig) && rig.state() == MediaState::Paused; }));
+    rig.pump.run(300ms);
+    const auto shown = drawn(rig);
+    const double target = rig.position();
+    const auto expected = liveFrameAt(rig, target);
+    TEST_CHECK(differing(kept, expected, rig.view->stageArea()) > 40);
+    TEST_CHECK(differing(shown, expected, rig.view->stageArea()) < 60);
   }
 
   // A drag on the bar right after a reopen shows frames along the way, before the button is released.
@@ -313,6 +367,9 @@ int main() {
   neverShowsTheFirstFrameWhileResuming(*capture, ball);
   aSeekWhileParkedAndPausedShowsTheFrameAtTheTarget(*capture, ball, false);
   aSeekWhileParkedAndPausedShowsTheFrameAtTheTarget(*capture, ball, true);
+  for (const auto how : {Backward::LeftThrice, Backward::BarBefore, Backward::DragBack, Backward::LeftThenRight}) {
+    aBackwardSeekWhileParkedShowsTheFrameAtTheTarget(*capture, ball, how);
+  }
   aDragRightAfterAReopenShowsFramesBeforeTheRelease(*capture, ball);
   anEndedFileReopenedForASeekNeverShowsTheFirstFrame(*capture, shortBall);
   {
