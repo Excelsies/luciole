@@ -22,8 +22,9 @@ libbink2 = static_library('bink2',
   'src/bink2_video_old.c',
   c_args: ['-fno-math-errno', '-fno-signed-zeros'] + cc.get_supported_arguments('-Wno-array-parameter'),
   dependencies: libm,
-  # Debug builds keep the decoder fast enough to play video; the debug information stays.
-  override_options: ['optimization=2'],
+  # Debug builds keep the decoder fast enough to play video; the debug information stays. -O3 lets the compiler
+  # vectorize the loops of the decoder: no machine-specific flag, and the pictures are byte for byte the same.
+  override_options: ['optimization=3'],
   # Not installed: the pinned copy is linked into the program.
   install: false,
 )
