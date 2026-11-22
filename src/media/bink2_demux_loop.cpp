@@ -13,11 +13,32 @@ namespace {
 
   constexpr int kPoolMinimum = 2;
 
+  // An error of the demuxer, posted on the bus of the pipeline itself. Decodebin drops an error that comes while it is
+  // still plugging the demuxer, which a file that is refused or damaged at its start makes happen now and then, and
+  // the file would never say that it cannot be played. Without a pipeline above it, the element posts it as usual.
   void postError(Demux& demux, gint code, const std::string& text, const char* debug = nullptr) {
-    gst_element_message_full(
-        demux.element, GST_MESSAGE_ERROR, GST_STREAM_ERROR, code, g_strdup(text.c_str()),
-        debug != nullptr ? g_strdup(debug) : nullptr, __FILE__, "streamingPass", __LINE__
-    );
+    GstObject* top = GST_OBJECT(gst_object_ref(demux.element));
+    while (GstObject* parent = gst_object_get_parent(top)) {
+      gst_object_unref(top);
+      top = parent;
+    }
+    GstBus* bus = GST_IS_PIPELINE(top) ? gst_element_get_bus(GST_ELEMENT(top)) : nullptr;
+    gst_object_unref(top);
+    if (bus == nullptr) {
+      gst_element_message_full(
+          demux.element, GST_MESSAGE_ERROR, GST_STREAM_ERROR, code, g_strdup(text.c_str()),
+          debug != nullptr ? g_strdup(debug) : nullptr, __FILE__, "streamingPass", __LINE__
+      );
+      return;
+    }
+    GError* error = g_error_new_literal(GST_STREAM_ERROR, code, text.c_str());
+    gchar* where = gst_object_get_path_string(GST_OBJECT(demux.element));
+    gchar* detail = g_strdup_printf("%s: %s", where, debug != nullptr ? debug : "");
+    (void)gst_bus_post(bus, gst_message_new_error(GST_OBJECT(demux.element), error, detail));
+    g_free(detail);
+    g_free(where);
+    g_error_free(error);
+    gst_object_unref(bus);
   }
 
   // Pushes `event` to every source pad, each with its own reference; a sound pad that ended takes no more.

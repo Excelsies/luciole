@@ -294,6 +294,52 @@ namespace {
     TEST_CHECK(pipelineError(folder / "wide.bik").contains("at most 4096"));
   }
 
+  GstBusSyncReply dropEverything(GstBus* /*bus*/, GstMessage* /*message*/, gpointer /*data*/) { return GST_BUS_DROP; }
+
+  // Decodebin drops an error that comes while it is still plugging the demuxer, which a file refused or damaged at its
+  // start makes happen now and then. A bin that drops every message stands for it here: the reason must still reach
+  // the bus of the pipeline.
+  void anErrorReachesThePipelineBusThroughABinThatDropsMessages(
+      const fs::path& folder, bool tooWide, std::string_view words
+  ) {
+    bink::Container container;
+    container.frames = {std::vector<std::uint8_t>(64, 0xFF)};
+    if (tooWide) {
+      container.width = 5000;
+    }
+    const fs::path path = folder / (tooWide ? "wide-bin.bik" : "damaged-bin.bik");
+    writeFile(path, container.bytes());
+    GstElement* pipeline = gst_pipeline_new(nullptr);
+    GstElement* inner = gst_bin_new(nullptr);
+    GstElement* source = gst_element_factory_make("filesrc", nullptr);
+    GstElement* demux = gst_element_factory_make("luciolebink2demux", nullptr);
+    TEST_CHECK(pipeline != nullptr && inner != nullptr && source != nullptr && demux != nullptr);
+    g_object_set(source, "location", path.c_str(), nullptr);
+    gst_bin_add_many(GST_BIN(inner), source, demux, nullptr);
+    TEST_CHECK(gst_element_link(source, demux) != FALSE);
+    gst_bin_add(GST_BIN(pipeline), inner);
+    GstBus* innerBus = gst_element_get_bus(demux);
+    TEST_CHECK(innerBus != nullptr);
+    gst_bus_set_sync_handler(innerBus, dropEverything, nullptr, nullptr);
+    gst_object_unref(innerBus);
+    gst_element_set_state(pipeline, GST_STATE_PAUSED);
+    GstBus* bus = gst_element_get_bus(pipeline);
+    GstMessage* message = gst_bus_timed_pop_filtered(bus, 5 * GST_SECOND, GST_MESSAGE_ERROR);
+    std::string text;
+    if (message != nullptr) {
+      GError* problem = nullptr;
+      gst_message_parse_error(message, &problem, nullptr);
+      text = problem != nullptr ? problem->message : "";
+      g_clear_error(&problem);
+      gst_message_unref(message);
+    }
+    gst_object_unref(bus);
+    gst_element_set_state(pipeline, GST_STATE_NULL);
+    gst_object_unref(pipeline);
+    std::println("through a bin that drops messages: {}", text.empty() ? "no error" : text);
+    TEST_CHECK(text.contains(words));
+  }
+
   // The older Bink format is not played: no element takes it, and the player says it cannot be played.
   void aBink1FileEndsInAnError(Pump& pump, const fs::path& folder) {
     std::vector<std::uint8_t> bytes(4096, 0);
@@ -347,6 +393,8 @@ int main() {
   reportsDamageAsAnError(folder);
   openingAHostileFileCanBeStopped(folder);
   if (MediaPlayer::available()) {
+    anErrorReachesThePipelineBusThroughABinThatDropsMessages(folder, true, "4096");
+    anErrorReachesThePipelineBusThroughABinThatDropsMessages(folder, false, "Frame 0");
     aDamagedHeaderEndsInAnError(pump, folder);
     aBink1FileEndsInAnError(pump, folder);
   }
