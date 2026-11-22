@@ -50,7 +50,7 @@ DESTDIR="$PWD/pkgroot" meson install --no-rebuild -C build-package
 | --- | --- | --- |
 | `tests` | `auto` | Auto enables tests for unsanitized debug builds; use `enabled` for check builds. |
 | `native_optimizations` | `false` | Keep false for portable packages; true enables CPU-local code generation. |
-| `build_revision` | `unknown` | Optional explicit revision metadata supplied by the packager. |
+| `build_revision` | `unknown` | Revision shown by `--version` and the About page. `unknown` derives it from `git describe` when building from a Git checkout; set it explicitly for archive builds. |
 | `benchmarks` | `false` | Leave disabled for ordinary packages. |
 
 Standard Meson prefix, directory, LTO and sanitizer options apply. GNU LTO needs compiler-aware archive tools such as `gcc-ar` and `gcc-ranlib`. Use a fresh build directory when changing toolchains.

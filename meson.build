@@ -73,7 +73,6 @@ subdir('lib')
 
 build_config = configuration_data()
 build_config.set_quoted('LUCIOLE_VERSION', meson.project_version())
-build_config.set_quoted('LUCIOLE_BUILD_REVISION', get_option('build_revision'))
 build_config.set_quoted('LUCIOLE_BUILD_TYPE', get_option('buildtype'))
 build_config.set_quoted('LUCIOLE_COMPILER', cpp.get_id() + ' ' + cpp.version())
 build_config.set_quoted('LUCIOLE_INSTALL_ASSETSDIR', get_option('prefix') / get_option('datadir') / 'luciole/assets')
@@ -82,6 +81,23 @@ build_info = configure_file(
   output: 'luciole_build_info.h',
   configuration: build_config,
 )
+# An explicit packager revision wins; otherwise git describes the checkout at build time.
+# Only cli.cpp and about_controller.cpp include this header, so a new commit rebuilds just them.
+git = find_program('git', required: false)
+if get_option('build_revision') == 'unknown' and git.found()
+  build_revision = vcs_tag(
+    input: 'src/app/build_revision.h.in',
+    output: 'luciole_build_revision.h',
+    command: [git, 'describe', '--tags', '--always', '--dirty=-dirty', '--abbrev=12'],
+    fallback: 'unknown',
+  )
+else
+  build_revision = configure_file(
+    input: 'src/app/build_revision.h.in',
+    output: 'luciole_build_revision.h',
+    configuration: {'VCS_TAG': get_option('build_revision')},
+  )
+endif
 fs = import('fs')
 completion_config = configuration_data()
 completion_config.set('BASH_COMPLETIONS', fs.read('assets/completions/luciole.bash'))
@@ -430,6 +446,7 @@ app = executable('luciole',
     'src/main.cpp',
   ),
   build_info,
+  build_revision,
   completions,
   app_icon,
   include_directories: include_directories('src', '.'),
