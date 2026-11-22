@@ -2,6 +2,7 @@
 #define LIBBINK2_VIDEO_NEW_H
 
 #include "bink2_bits.h"
+#include "bink2_video.h"
 
 #include <stdint.h>
 
@@ -30,6 +31,8 @@ void bink2_new_read_dcs(Bink2Bits *bits, int32_t dcs[16], int count, int q);
  */
 void bink2_new_read_acs(Bink2Bits *bits, int32_t levels[64],
                         const uint16_t qmat[4][64], int q, uint32_t cbp);
+/** The largest DC an inter block may have: 2047 when frame_flags has 0x40000, else 1023. */
+int bink2_new_inter_dc_limit(const Bink2Video *v);
 int bink2_new_read_mv(Bink2Bits *bits, int mvs[4][2], int *nb);
 
 #endif

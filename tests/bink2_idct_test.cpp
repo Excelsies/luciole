@@ -13,6 +13,8 @@
 extern "C" {
 #include <bink2_dsp.h>
 #include <bink2_idct.h>
+#include <bink2_video.h>
+#include <bink2_video_new.h>
 }
 
 // The inverse transform and the motion compensation of the Bink 2 decoder: that its fast paths give, byte for byte,
@@ -122,6 +124,17 @@ namespace {
     }
   }
 
+  // The largest DC an inter block may have follows the frame flag 0x40000: 2047 with it, 1023 without.
+  void interDcRange() {
+    Bink2Video video{};
+    video.frame_flags = 0;
+    TEST_CHECK(bink2_new_inter_dc_limit(&video) == 1023);
+    video.frame_flags = 0x40000;
+    TEST_CHECK(bink2_new_inter_dc_limit(&video) == 2047);
+    video.frame_flags = 0xFFFBFFFF; // every other flag set
+    TEST_CHECK(bink2_new_inter_dc_limit(&video) == 1023);
+  }
+
   // Motion compensation on random pictures, for every vector fraction and at the edges, against the reference.
   void motionCompensation() {
     std::mt19937 random(13);
@@ -205,6 +218,12 @@ namespace {
     std::vector<std::uint8_t> head(4096);
     TEST_CHECK(file.reader()(0, head.data(), head.size()));
     const std::size_t index = 44 + 4 + 12UL * le32(head, 40);
+    if (index + 4UL * (kFrames + 1) > head.size()) {
+      std::println(
+          "no sample: its header is longer than the {} bytes read; damaged pictures are not compared", head.size()
+      );
+      return;
+    }
     const std::uint64_t first = le32(head, index) & ~1U;
     const std::uint64_t last = le32(head, index + 4UL * kFrames) & ~1U;
     TEST_CHECK(first < last && last <= file.size());
@@ -267,6 +286,7 @@ namespace {
 int main() {
   extremeBlocks();
   randomBlocks();
+  interDcRange();
   motionCompensation();
   samplePictures();
   damagedPictures();

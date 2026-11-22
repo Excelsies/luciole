@@ -889,8 +889,7 @@ static void new_block_add(unsigned char *dst, int stride, int16_t block[64],
     }
 }
 
-/* The largest DC an inter block may have: 2047 when the frame says so, else 1023. */
-static int inter_dc_limit(const Bink2Video *v)
+int bink2_new_inter_dc_limit(const Bink2Video *v)
 {
     return (v->frame_flags & 0x40000) ? 2047 : 1023;
 }
@@ -911,7 +910,7 @@ static int new_decode_inter_luma(Bink2Video *v, Bink2Bits *bits,
         return -1;
     *prev_cbp = cbp;
     (void)flags;
-    if (new_decode_dc(v, bits, 1, q, -inter_dc_limit(v), inter_dc_limit(v),
+    if (new_decode_dc(v, bits, 1, q, -bink2_new_inter_dc_limit(v), bink2_new_inter_dc_limit(v),
                       0xA8) != 0)
         return -1;
 
@@ -944,7 +943,7 @@ static int new_decode_inter_chroma(Bink2Video *v, Bink2Bits *bits,
     if (bink2_bits_failed(bits))
         return -1;
     *prev_cbp = cbp;
-    if (new_decode_dc(v, bits, 0, q, -inter_dc_limit(v), inter_dc_limit(v),
+    if (new_decode_dc(v, bits, 0, q, -bink2_new_inter_dc_limit(v), bink2_new_inter_dc_limit(v),
                       0xA8) != 0)
         return -1;
     if (new_decode_ac(bits, block, cbp, q, bink2g_inter_qmat, &coded) != 0)
