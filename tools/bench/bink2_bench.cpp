@@ -1,6 +1,8 @@
 // Times Bink 2 decoding and playback of one file.
 //
-//   luciole-bink2-bench decode FILE [FRAMES]       milliseconds per frame, decoding in a loop
+//   luciole-bink2-bench decode FILE [FRAMES]       milliseconds per frame, decoding in a loop, and the CPU time
+//   luciole-bink2-bench sum FILE [FRAMES]          one line per picture: a hash of each plane's visible bytes
+//   luciole-bink2-bench seekto FILE                the time to reach a picture at a quarter, half and three quarters
 //   luciole-bink2-bench play FILE [WIDTH HEIGHT]   plays the file once through playbin as the player does
 //   luciole-bink2-bench poster FILE [SIDE]         the poster the thumbnail path makes, five times
 //   luciole-bink2-bench seek FILE                  the cost of an exact seek over the longest run of frames
@@ -13,6 +15,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdlib>
+#include <ctime>
 #include <fcntl.h>
 #include <format>
 #include <gst/app/gstappsink.h>
@@ -81,6 +84,13 @@ namespace {
     return std::move(*stream);
   }
 
+  // CPU seconds of the whole process, all threads.
+  double cpuSeconds() {
+    timespec now{};
+    ::clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &now);
+    return static_cast<double>(now.tv_sec) + static_cast<double>(now.tv_nsec) / 1e9;
+  }
+
   double milliseconds(Clock::time_point from) {
     return std::chrono::duration<double, std::milli>(Clock::now() - from).count();
   }
@@ -92,6 +102,8 @@ namespace {
     Pictures before(stream->layout());
     Pictures now(stream->layout());
     std::vector<double> times;
+    const double cpuBegin = cpuSeconds();
+    const auto wallBegin = Clock::now();
     for (std::uint64_t frame = 0; frame < frames; ++frame) {
       const auto begin = Clock::now();
       const auto done = stream->decode(frame, now.planes, frame == 0 ? nullptr : &before.planes);
@@ -102,6 +114,12 @@ namespace {
       }
       std::swap(before, now);
     }
+    const double wall = milliseconds(wallBegin) / 1000;
+    const double cpu = cpuSeconds() - cpuBegin;
+    std::println(
+        "{:.2f} frames per second, {:.2f} s wall, {:.2f} s cpu ({:.2f} cores)", static_cast<double>(frames) / wall,
+        wall, cpu, cpu / wall
+    );
     std::ranges::sort(times);
     double sum = 0;
     for (const double time : times) {
@@ -111,6 +129,81 @@ namespace {
         "{} frames: mean {:.2f} ms, median {:.2f}, 99th {:.2f}, slowest {:.2f}", frames,
         sum / static_cast<double>(frames), times[times.size() / 2], times[times.size() * 99 / 100], times.back()
     );
+    return 0;
+  }
+
+  // FNV-1a over `count` bytes, continuing `hash`.
+  std::uint64_t fnv(std::uint64_t hash, const std::uint8_t* bytes, std::size_t count) {
+    for (std::size_t i = 0; i < count; ++i) {
+      hash = (hash ^ bytes[i]) * 1099511628211ULL;
+    }
+    return hash;
+  }
+
+  // The visible bytes of each plane of each picture, hashed: numbers only, for comparing builds.
+  int sum(const char* path, std::uint64_t frames) {
+    const File file(path);
+    const auto stream = open(file);
+    frames = std::min(frames, stream->info().frames);
+    const auto& info = stream->info();
+    const auto& layout = stream->layout();
+    Pictures before(layout);
+    Pictures now(layout);
+    for (std::uint64_t frame = 0; frame < frames; ++frame) {
+      const auto done = stream->decode(frame, now.planes, frame == 0 ? nullptr : &before.planes);
+      if (!done) {
+        std::println(stderr, "frame {}: {}", frame, done.error());
+        return 1;
+      }
+      std::string line = std::format("{}", frame);
+      for (int plane = 0; plane < 3; ++plane) {
+        const int width = plane == 0 ? info.width : (info.width + 1) / 2;
+        const int height = plane == 0 ? info.height : (info.height + 1) / 2;
+        std::uint64_t hash = 14695981039346656037ULL;
+        for (int row = 0; row < height; ++row) {
+          hash =
+              fnv(hash,
+                  now.planes.plane[static_cast<std::size_t>(plane)]
+                      + static_cast<std::size_t>(row) * layout.stride[static_cast<std::size_t>(plane)],
+                  static_cast<std::size_t>(width));
+        }
+        line += std::format(" {:016x}", hash);
+      }
+      std::println("{}", line);
+      std::swap(before, now);
+    }
+    return 0;
+  }
+
+  // The time to reach a picture the way an exact seek does: decode from the key frame before it.
+  int seekTo(const char* path) {
+    const File file(path);
+    const auto stream = open(file);
+    const auto& keys = stream->keyFrames();
+    const std::uint64_t total = stream->info().frames;
+    Pictures before(stream->layout());
+    Pictures now(stream->layout());
+    for (const std::uint64_t target : {total / 4, total / 2, total * 3 / 4}) {
+      std::uint64_t from = 0;
+      for (const auto key : keys) {
+        if (key <= target) {
+          from = key;
+        }
+      }
+      const double cpuBegin = cpuSeconds();
+      const auto begin = Clock::now();
+      for (std::uint64_t frame = from; frame <= target; ++frame) {
+        if (!stream->decode(frame, now.planes, frame == from ? nullptr : &before.planes)) {
+          std::println(stderr, "frame {} is damaged", frame);
+          return 1;
+        }
+        std::swap(before, now);
+      }
+      std::println(
+          "picture {} from key frame {}: {} pictures, {:.0f} ms, {:.2f} s cpu", target, from, target - from + 1,
+          milliseconds(begin), cpuSeconds() - cpuBegin
+      );
+    }
     return 0;
   }
 
@@ -289,6 +382,12 @@ int main(int argc, char** argv) {
   const std::string mode = argv[1];
   if (mode == "decode") {
     return decode(argv[2], argc > 3 ? std::strtoull(argv[3], nullptr, 10) : 300);
+  }
+  if (mode == "sum") {
+    return sum(argv[2], argc > 3 ? std::strtoull(argv[3], nullptr, 10) : 300);
+  }
+  if (mode == "seekto") {
+    return seekTo(argv[2]);
   }
   if (mode == "poster") {
     return poster(argv[2], argc > 3 ? std::atoi(argv[3]) : 256);
