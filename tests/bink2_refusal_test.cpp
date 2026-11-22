@@ -322,12 +322,14 @@ namespace {
     TEST_CHECK(innerBus != nullptr);
     gst_bus_set_sync_handler(innerBus, dropEverything, nullptr, nullptr);
     gst_object_unref(innerBus);
-    gst_element_set_state(pipeline, GST_STATE_PAUSED);
+    // Both cases return SUCCESS here: the bin drops the messages that would make it asynchronous.
+    TEST_CHECK(gst_element_set_state(pipeline, GST_STATE_PAUSED) != GST_STATE_CHANGE_FAILURE);
     GstBus* bus = gst_element_get_bus(pipeline);
     GstMessage* message = gst_bus_timed_pop_filtered(bus, 5 * GST_SECOND, GST_MESSAGE_ERROR);
     std::string text;
     if (message != nullptr) {
       GError* problem = nullptr;
+      TEST_CHECK(GST_MESSAGE_SRC(message) == GST_OBJECT(demux));
       gst_message_parse_error(message, &problem, nullptr);
       text = problem != nullptr ? problem->message : "";
       g_clear_error(&problem);

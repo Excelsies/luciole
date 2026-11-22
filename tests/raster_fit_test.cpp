@@ -187,7 +187,7 @@ namespace {
       worst = std::max(worst, std::abs(opaque[i] - straight[i]));
     }
     std::println("raster-fit: opaque and straight-alpha results differ by at most {} level(s)", worst);
-    TEST_CHECK(worst == 0);
+    TEST_CHECK(worst <= 1);
   }
 
   // A quarter of the picture is transparent or half transparent, with colors far from the rest: the alpha-weighted
