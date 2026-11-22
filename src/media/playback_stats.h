@@ -7,8 +7,8 @@ namespace luciole::media {
   // What one pipeline delivered to its frame sink, for benchmarks: printed once when the pipeline is freed, and only
   // when LUCIOLE_STARTUP_TRACE=1.
   struct PlaybackStats {
-    std::atomic<std::uint64_t> delivered{0}; // pictures the sink received
-    std::atomic<std::uint64_t> taken{0};     // pictures the view took to draw
+    std::atomic<std::uint64_t> delivered{0}; // different pictures the sink received (the preroll one counts once)
+    std::atomic<std::uint64_t> taken{0};     // pictures the view took to draw (the preroll one may come twice)
     std::atomic<std::uint64_t> replaced{0};  // pictures a newer one replaced before the view took them
     std::atomic<std::uint64_t> missed{0};    // pictures the stream's timing says never arrived
     // Streaming thread only: the stream time of the last picture and the length of one, in nanoseconds; -1 and 0 when

@@ -72,11 +72,12 @@ namespace {
       TEST_CHECK(pump.until([] { return !MediaPlayer::stopsPending(); }));
     });
     ::unsetenv("LUCIOLE_STARTUP_TRACE");
-    std::println("trace: {}", text.substr(text.find("luciole-trace")));
     TEST_CHECK(text.find("playback delivered=") != std::string::npos);
-    // The 30 pictures of the clip, and the first one a second time: the sink hands it out as the preroll and as a sample.
-    TEST_CHECK(field(text, "delivered") == 31);
+    std::println("trace: {}", text.substr(text.find("luciole-trace")));
+    // The 30 pictures of the clip; the first comes as the preroll and again as a sample, and counts once.
+    TEST_CHECK(field(text, "delivered") == 30);
     TEST_CHECK(field(text, "missed") == 0);
+    // The view may take the preroll picture and then the same picture again as a sample.
     TEST_CHECK(field(text, "taken") + field(text, "replaced") <= 31);
   }
 

@@ -84,15 +84,24 @@ namespace {
     GstSample* old = nullptr;
     const std::int64_t time = streamTime(sample);
     pipeline->frameTime = time;
-    pipeline->stats.delivered++;
-    pipeline->stats.missed += luciole::media::missedFrames(pipeline->stats.lastTime, time, pipeline->stats.frameLength);
-    pipeline->stats.lastTime = time;
+    // The preroll picture comes again as the first sample: the same time, and not a new picture.
+    const bool again = time >= 0 && time == pipeline->stats.lastTime;
+    if (!again) {
+      pipeline->stats.delivered++;
+      if (const auto gap = luciole::media::missedFrames(pipeline->stats.lastTime, time, pipeline->stats.frameLength);
+          gap > 0) {
+        pipeline->stats.missed += gap;
+      }
+      pipeline->stats.lastTime = time;
+    }
     {
       const std::scoped_lock lock(pipeline->lock);
       old = std::exchange(pipeline->latest, sample);
     }
     if (old != nullptr) {
-      pipeline->stats.replaced++;
+      if (!again) {
+        pipeline->stats.replaced++;
+      }
       gst_sample_unref(old);
     }
     if (!pipeline->framePosted.exchange(true)) {

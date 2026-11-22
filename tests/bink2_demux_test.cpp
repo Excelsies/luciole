@@ -131,13 +131,15 @@ namespace {
     TEST_CHECK(rig.paused());
     rig.play();
     std::vector<GstSample*> held;
-    // Each pull that comes keeps its picture; the first pull that finds nothing waiting means the element is waiting.
-    while (GstSample* sample = rig.pull(2s)) {
+    // Every picture of the pool goes to this reader, which keeps it, however long the decoder takes for each.
+    for (int i = 0; i < luciole::media::bink2::kPoolMaximum; ++i) {
+      GstSample* sample = rig.pull(60s);
+      TEST_CHECK(sample != nullptr);
       held.push_back(sample);
-      TEST_CHECK(held.size() < 32);
     }
+    // The pool is empty: no picture comes while all are held.
+    TEST_CHECK(rig.pull(2s) == nullptr);
     std::println("the element handed out {} pictures to a reader that kept them", held.size());
-    TEST_CHECK(std::ssize(held) == luciole::media::bink2::kPoolMaximum);
     for (GstSample* sample : held) {
       gst_sample_unref(sample);
     }
