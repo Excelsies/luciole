@@ -4,6 +4,7 @@
 #include "workbench/shape.h"
 #include "workbench/shape_mesh.h"
 
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <span>
@@ -24,6 +25,9 @@ public:
   void draw(RenderBackend& backend, const CustomDrawContext& context) const override;
 
 private:
+  // Vertices a buffer may hold beyond four times the scene's before it is shrunk.
+  static constexpr std::size_t kKeptVertices = 4096;
+
   luciole::workbench::ShapeMesh m_mesh;
   float m_meshScale = 0;
   std::uint64_t m_revision = 0;

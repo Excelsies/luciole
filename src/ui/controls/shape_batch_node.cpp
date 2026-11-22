@@ -5,6 +5,11 @@
 
 void ShapeBatchNode::setShapes(std::span<const luciole::workbench::Shape> shapes, float pixelScale) {
   luciole::workbench::buildShapeMesh(shapes, pixelScale, m_mesh);
+  // A scene a good deal smaller than the one before gives the vertex memory back; one about as big keeps its buffer.
+  auto& vertices = m_mesh.vertices;
+  if (vertices.capacity() > 4 * vertices.size() + kKeptVertices) {
+    vertices.shrink_to_fit();
+  }
   m_meshScale = pixelScale;
   ++m_revision;
   markPaintDirty();

@@ -73,6 +73,7 @@ test_table = [
   {'name': 'table-view-editing-pixels', 'deps': [ui_dep, dependency('zlib')],
     'sources': files('scene_capture.cpp', 'png_writer.cpp'), 'timeout': 120,
     'env': ['LUCIOLE_LIBRARY_ASSETS_DIR=' + (meson.project_source_root() / 'lib/assets')]},
+  {'name': 'shape-batch-memory', 'deps': [ui_dep]},
   {'name': 'shape-batch-patterns', 'deps': [ui_dep, dependency('zlib')], 'sources': files('png_writer.cpp')},
   {'name': 'shape-batch-render', 'deps': [ui_dep]},
   {'name': 'shape-labels-fit', 'deps': [ui_dep]},
