@@ -12,7 +12,9 @@
 #include <format>
 #include <fstream>
 #include <functional>
+#ifdef __GLIBC__
 #include <malloc.h>
+#endif
 #include <memory>
 #include <poll.h>
 #include <print>
@@ -113,65 +115,127 @@ namespace {
     return found;
   }
 
-  // The service keeps a released thumbnail for its idle time and then lets it go, with the memory it held:
-  // a freed block of the heap is of no use to the system until the allocator gives it back.
-  void evictedThumbnailsGiveTheirMemoryBack() {
+  // 240 thumbnails the service holds, in the heap between small blocks that stay, as the app's own objects land
+  // between them: once they go, the heap has holes, and holes are of no use to the system until it is given back.
+  struct Loaded {
     Folder folder;
-    for (int index = 0; index < kPictures; ++index) {
-      write(folder.root / std::format("picture-{:03}.png", index), noise(8, 8, static_cast<unsigned>(index)));
-    }
     Pump pump;
-    const auto found = entries(folder, pump);
-    // The thumbnails are in the disk cache already, as after an earlier visit: no decoder runs, only the reads.
-    luciole::ThumbnailStore store;
-    for (std::size_t index = 0; index < found.size(); ++index) {
-      store.write(
-          {.image = noise(kWidth, kHeight, static_cast<unsigned>(index)),
-           .text =
-               {{"Thumb::URI", found[index].location().uri()},
-                {"Thumb::MTime", std::to_string(*found[index].modifiedSeconds)},
-                {"Thumb::Size", std::to_string(*found[index].size)}}},
-          kWidth, 1ULL << 30, nullptr
-      );
-    }
+    std::vector<luciole::DirectoryEntry> found;
     luciole::ThumbnailService thumbnails;
-    thumbnails.setRetention({.thumbnail = 400ms, .preview = 400ms, .sweep = 100ms});
-    const auto before = resident();
     std::vector<std::shared_ptr<const luciole::FileIconImage>> held;
-    for (const auto& entry : found) {
-      auto image = thumbnails.request(entry, kWidth);
-      TEST_CHECK(image != nullptr);
-      held.push_back(std::move(image));
-    }
-    // Small blocks the process keeps for good land between the thumbnails, as the app's own objects do, so a freed
-    // thumbnail is a hole in the heap and not its end.
     std::vector<std::unique_ptr<char[]>> pins;
-    pump.until([&] {
-      for (int i = 0; i < 16; ++i) {
-        pins.push_back(std::make_unique<char[]>(200));
+    std::size_t before = 0;
+    std::size_t full = 0;
+    static constexpr std::size_t kBytes = kPictures * kThumbnailBytes;
+
+    Loaded() {
+      for (int index = 0; index < kPictures; ++index) {
+        write(folder.root / std::format("picture-{:03}.png", index), noise(8, 8, static_cast<unsigned>(index)));
       }
-      return std::ranges::all_of(held, [](const auto& image) { return image->ready; });
-    });
-    TEST_CHECK(thumbnails.reservedBytes() >= kPictures * (kThumbnailBytes / 2));
-    const auto full = resident();
-    held.clear();
-    thumbnails.endFrame();
-    pump.until([&] { return thumbnails.reservedBytes() == 0; });
-    // The allocator is asked once the loop has nothing else to do.
-    pump.run(500ms);
-    const auto after = resident();
-    // Most of what the pictures held is no longer resident: the part still in use may not be less than `before`.
-    const std::size_t held_bytes = kPictures * kThumbnailBytes;
-    TEST_CHECK(full > before + held_bytes / 2);
-    TEST_CHECK(after < full - held_bytes / 2);
+      found = entries(folder, pump);
+      // The thumbnails are in the disk cache already, as after an earlier visit: no decoder runs, only the reads.
+      luciole::ThumbnailStore store;
+      for (std::size_t index = 0; index < found.size(); ++index) {
+        store.write(
+            {.image = noise(kWidth, kHeight, static_cast<unsigned>(index)),
+             .text =
+                 {{"Thumb::URI", found[index].location().uri()},
+                  {"Thumb::MTime", std::to_string(*found[index].modifiedSeconds)},
+                  {"Thumb::Size", std::to_string(*found[index].size)}}},
+            kWidth, 1ULL << 30, nullptr
+        );
+      }
+      thumbnails.setRetention({.thumbnail = 400ms, .preview = 400ms, .sweep = 100ms});
+      before = resident();
+      for (const auto& entry : found) {
+        auto image = thumbnails.request(entry, kWidth);
+        TEST_CHECK(image != nullptr);
+        held.push_back(std::move(image));
+      }
+      pump.until([&] {
+        for (int i = 0; i < 16; ++i) {
+          pins.push_back(std::make_unique<char[]>(200));
+        }
+        return std::ranges::all_of(held, [](const auto& image) { return image->ready; });
+      });
+      TEST_CHECK(thumbnails.reservedBytes() >= kBytes / 2);
+      full = resident();
+      TEST_CHECK(full > before + kBytes / 2);
+    }
+    // Whether most of what the thumbnails held went back to the system within a few seconds of the loop running.
+    bool givenBack() {
+      bool back = false;
+      pump.until(
+          [&] {
+            back = resident() < full - kBytes / 2;
+            return back;
+          },
+          5s
+      );
+      return back;
+    }
+  };
+
+  // The service keeps a released thumbnail for its idle time and then lets it go.
+  void anIdleThumbnailGivesItsMemoryBack() {
+    Loaded loaded;
+    loaded.held.clear();
+    loaded.thumbnails.endFrame();
+    loaded.pump.until([&] { return loaded.thumbnails.reservedBytes() == 0; });
+    TEST_CHECK(loaded.givenBack());
+  }
+
+  // A drive removal drops what it read, and the memory goes back too.
+  void releasingALocationGivesItsMemoryBack() {
+    Loaded loaded;
+    loaded.thumbnails.releaseLocation(luciole::Location::fromPath(loaded.folder.root.native()));
+    TEST_CHECK(loaded.thumbnails.reservedBytes() == 0);
+    TEST_CHECK(loaded.givenBack());
+  }
+
+  // A cleared cache and a changed option drop everything, and the memory goes back too.
+  void clearingTheCacheGivesItsMemoryBack() {
+    Loaded loaded;
+    loaded.thumbnails.clearCache();
+    loaded.pump.until([&] { return !loaded.thumbnails.clearing(); });
+    TEST_CHECK(loaded.givenBack());
+  }
+
+  void changingTheOptionsGivesTheMemoryBack() {
+    Loaded loaded;
+    auto options = loaded.thumbnails.options();
+    options.maxFileMiB += 1;
+    loaded.thumbnails.setOptions(options);
+    TEST_CHECK(loaded.thumbnails.reservedBytes() == 0);
+    TEST_CHECK(loaded.givenBack());
+  }
+
+  void aSweepPeriodOfZeroIsRefused() {
+    luciole::ThumbnailService thumbnails;
+    bool refused = false;
+    try {
+      thumbnails.setRetention({.sweep = 0ms});
+    } catch (const std::invalid_argument&) {
+      refused = true;
+    }
+    TEST_CHECK(refused);
   }
 } // namespace
 
 int main() {
+#ifdef __GLIBC__
   // The app's allocator settings (src/app/application.cpp): one or two arenas, big blocks mapped on their own.
   (void)mallopt(M_ARENA_MAX, 1);
   (void)mallopt(M_MMAP_THRESHOLD, 128 * 1024);
-  evictedThumbnailsGiveTheirMemoryBack();
+  anIdleThumbnailGivesItsMemoryBack();
+  releasingALocationGivesItsMemoryBack();
+  clearingTheCacheGivesItsMemoryBack();
+  changingTheOptionsGivesTheMemoryBack();
+  aSweepPeriodOfZeroIsRefused();
   std::println("thumbnail-retention: all checks passed");
   return 0;
+#else
+  std::println("skipped: the heap is given back through glibc's malloc_trim");
+  return 77;
+#endif
 }

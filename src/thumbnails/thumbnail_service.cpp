@@ -20,6 +20,7 @@
 #include <format>
 #include <mutex>
 #include <nlohmann/json.hpp>
+#include <stdexcept>
 #include <string_view>
 #include <sys/stat.h>
 #include <thread>
@@ -337,7 +338,10 @@ struct luciole::ThumbnailService::State : std::enable_shared_from_this<State> {
     if (sweepTimer || !alive) {
       return;
     }
-    sweepTimer = g_timeout_source_new(static_cast<guint>(retention.sweep.count()));
+    // A whole number of seconds lets GLib line the wakeup up with other timers.
+    const auto milliseconds = static_cast<guint>(retention.sweep.count());
+    sweepTimer = milliseconds % 1000 == 0 ? g_timeout_source_new_seconds(milliseconds / 1000)
+                                          : g_timeout_source_new(milliseconds);
     g_source_set_callback(
         sweepTimer,
         [](gpointer data) -> gboolean {
@@ -759,7 +763,12 @@ void luciole::ThumbnailService::synchronizeSources(const DirectorySnapshot& snap
     }
   }
 }
-void luciole::ThumbnailService::setRetention(const Retention& retention) { m_state->retention = retention; }
+void luciole::ThumbnailService::setRetention(const Retention& retention) {
+  if (retention.sweep <= std::chrono::milliseconds::zero()) {
+    throw std::invalid_argument("The thumbnail sweep period must be positive.");
+  }
+  m_state->retention = retention;
+}
 void luciole::ThumbnailService::setOptions(ThumbnailOptions options) {
   if (options == m_state->options) {
     return;

@@ -45,7 +45,8 @@ namespace luciole {
     bool touch(const std::shared_ptr<const FileIconImage>& image, bool visible);
     void synchronizeSources(const DirectorySnapshot& snapshot);
     // How long a released image stays resident before it is dropped, by kind, and how often that is checked. The
-    // defaults are the working values; tests shorten them.
+    // defaults are the working values; tests shorten them. Set before the first request: the sweep timer keeps the
+    // period it was armed with, and a period of zero or less throws std::invalid_argument.
     struct Retention {
       std::chrono::milliseconds thumbnail{std::chrono::minutes(5)};
       std::chrono::milliseconds preview{std::chrono::seconds(30)};
