@@ -20,9 +20,9 @@ linked, so it can be rebuilt with a modified copy of them.
 
 Every changed file begins with a notice that says so. The changes:
 
-- `src/bink2_dsp.c`: the loops of the motion compensation with a vector in one direction run along the rows, so the
-  compiler can vectorize them; the results are the same. Chroma motion compensation with a fractional vector in both directions rounds once, after the
-  vertical pass, instead of after each pass, as the reference decoder does.
+- `src/bink2_dsp.c`: the loops of the motion compensation with a vector in one direction run along the rows, so
+  the compiler can vectorize them; the results are the same. Chroma motion compensation with a fraction in both
+  directions rounds once, after the vertical pass, instead of after each pass, as the reference decoder does.
 - `src/bink2_video.c`, `src/bink2_video.h`: one frame is decoded in steps (`bink2_video_job_begin`,
   `bink2_video_job_slice` once per slice, `bink2_video_job_end`) into planes the caller owns, with the row buffers
   of a slice in a `Bink2Scratch` of its own. Slices can then run on different threads and the pictures are the same,
@@ -36,12 +36,13 @@ Every changed file begins with a notice that says so. The changes:
 - `src/bink2_frames.c`, `src/bink2_frames.h` (new): the frame-at-a-time interface for a caller with threads of its
   own: `bink2_frame_prepare`, `bink2_frame_decode_slice`, `bink2_frame_finish`, the plane layout, key frame flags
   and a failing audio chunk reported as an error.
-- `src/bink2_idct.c`, `src/bink2_idct.h` (new): the inverse transform of the "new" blocks, put or added into a picture,
-  in one call on the 16 bit coefficients, with fast paths that give the same bytes as the plain C path of `bink2_dsp.c`
-  (`bink2_idct_use_plain` runs the plain path, for tests). `src/bink2_video_new.c` calls it, and dequantizes only the
-  coefficients that were read, and a block that had no coefficient read goes in as a flat fill without being cleared or scanned, and the other
-  blocks go through the same arithmetic with the eight columns as the inner loop of each pass, so the compiler can
-  vectorize it (the plain path, kept for the same comparison, dequantizes all 64 of each block).
+- `src/bink2_idct.c`, `src/bink2_idct.h` (new): the inverse transform of the "new" blocks, put or added into a
+  picture, in one call on the 16 bit coefficients. It gives the same bytes as the plain C path of `bink2_dsp.c`
+  (`bink2_idct_use_plain` runs that path, for tests). A block with no coefficient but its DC is a flat fill; the
+  others go through the same arithmetic with the eight columns as the inner loop of each pass, so the compiler can
+  vectorize it.
+- `src/bink2_video_new.c`: calls `bink2_idct.c`, and dequantizes only the coefficients that were read; a block with
+  none is not cleared or scanned. The plain path, kept for the same comparison, dequantizes all 64 of each block.
 - `meson.build` (new): builds the decoder sources, with the compiler flags upstream uses and at -O3 in every build type.
 
 The library starts no threads. Streams older than `KB2g` and streams with an alpha plane (refused at open for

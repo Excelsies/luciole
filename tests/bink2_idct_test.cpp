@@ -127,8 +127,10 @@ namespace {
     std::mt19937 random(13);
     constexpr int kWidth = 96;
     constexpr int kHeight = 80;
-    constexpr int kStride = 112;
-    std::vector<std::uint8_t> source(static_cast<std::size_t>(kStride) * kHeight);
+    constexpr int kPitch = 112;
+    // The decoder's planes are padded to whole 32 rows, and a vector reads up to 18 rows past a block.
+    constexpr int kPaddedHeight = (kHeight + 31) & ~31;
+    std::vector<std::uint8_t> source(static_cast<std::size_t>(kPitch) * kPaddedHeight);
     for (auto& byte : source) {
       byte = static_cast<std::uint8_t>(random());
     }
@@ -148,11 +150,11 @@ namespace {
       std::array<std::uint8_t, 24 * 24> fast{};
       std::array<std::uint8_t, 24 * 24> plain{};
       if (luma) {
-        bink2_mc_luma(fast.data(), 24, source.data(), kStride, x, y, kWidth, kHeight, mvx, mvy);
-        reference::ref_mc_luma(plain.data(), 24, source.data(), kStride, x, y, kWidth, kHeight, mvx, mvy);
+        bink2_mc_luma(fast.data(), 24, source.data(), kPitch, x, y, kWidth, kHeight, mvx, mvy);
+        reference::ref_mc_luma(plain.data(), 24, source.data(), kPitch, x, y, kWidth, kHeight, mvx, mvy);
       } else {
-        bink2_mc_chroma(fast.data(), 24, source.data(), kStride, x, y, kWidth, kHeight, mvx, mvy);
-        reference::ref_mc_chroma(plain.data(), 24, source.data(), kStride, x, y, kWidth, kHeight, mvx, mvy);
+        bink2_mc_chroma(fast.data(), 24, source.data(), kPitch, x, y, kWidth, kHeight, mvx, mvy);
+        reference::ref_mc_chroma(plain.data(), 24, source.data(), kPitch, x, y, kWidth, kHeight, mvx, mvy);
       }
       TEST_CHECK(fast == plain);
     }
@@ -189,6 +191,77 @@ namespace {
     }
     bink2_idct_use_plain(0);
   }
+  // The first pictures of the sample read through bit flips made in memory (the file is never changed): the fast
+  // and the plain paths must end each picture the same way, with the same error or the same bytes in every plane.
+  // The flips fall in the packets of the first frames, where the coefficients are; the container is left whole.
+  void damagedPictures() {
+    const auto sample = sampleFrom(kSampleVariable);
+    if (!sample) {
+      std::println("no sample: {} names no Bink 2 file; damaged pictures are not compared", kSampleVariable);
+      return;
+    }
+    const FileReader file(*sample);
+    constexpr std::uint32_t kFrames = 4;
+    std::vector<std::uint8_t> head(4096);
+    TEST_CHECK(file.reader()(0, head.data(), head.size()));
+    const std::size_t index = 44 + 4 + 12UL * le32(head, 40);
+    const std::uint64_t first = le32(head, index) & ~1U;
+    const std::uint64_t last = le32(head, index + 4UL * kFrames) & ~1U;
+    TEST_CHECK(first < last && last <= file.size());
+    constexpr int kSeeds = 240;
+    constexpr int kFlipsEach = 1;
+    int failed = 0;
+    int decoded = 0;
+    for (int seed = 1; seed <= kSeeds; ++seed) {
+      std::mt19937 random(static_cast<unsigned>(seed) * 7919U);
+      std::vector<std::pair<std::uint64_t, std::uint8_t>> flips;
+      for (int i = 0; i < kFlipsEach; ++i) {
+        flips.emplace_back(first + random() % (last - first), static_cast<std::uint8_t>(1U << (random() % 8U)));
+      }
+      const auto clean = file.reader();
+      const luciole::media::bink2::Stream::Read damaged = [&](std::uint64_t offset, void* out, std::size_t count) {
+        if (!clean(offset, out, count)) {
+          return false;
+        }
+        for (const auto& [at, mask] : flips) {
+          if (at >= offset && at < offset + count) {
+            static_cast<std::uint8_t*>(out)[at - offset] ^= mask;
+          }
+        }
+        return true;
+      };
+      auto fastStream = luciole::media::bink2::Stream::open(damaged, file.size());
+      auto plainStream = luciole::media::bink2::Stream::open(damaged, file.size());
+      TEST_CHECK(fastStream.has_value() && plainStream.has_value());
+      const auto& layout = (*fastStream)->layout();
+      Picture fastBefore(layout);
+      Picture fastNow(layout);
+      Picture plainBefore(layout);
+      Picture plainNow(layout);
+      for (std::uint64_t frame = 0; frame < kFrames; ++frame) {
+        bink2_idct_use_plain(0);
+        const auto fast = (*fastStream)->decode(frame, fastNow.planes, frame == 0 ? nullptr : &fastBefore.planes);
+        bink2_idct_use_plain(1);
+        const auto plain = (*plainStream)->decode(frame, plainNow.planes, frame == 0 ? nullptr : &plainBefore.planes);
+        TEST_CHECK(fast.has_value() == plain.has_value());
+        if (!fast) {
+          TEST_CHECK(fast.error() == plain.error());
+          ++failed;
+          break; // a later picture needs this one
+        }
+        ++decoded;
+        for (std::size_t plane = 0; plane < 3; ++plane) {
+          TEST_CHECK(std::memcmp(fastNow.planes.plane[plane], plainNow.planes.plane[plane], layout.size[plane]) == 0);
+        }
+        std::swap(fastBefore, fastNow);
+        std::swap(plainBefore, plainNow);
+      }
+    }
+    bink2_idct_use_plain(0);
+    std::println("damaged pictures: {} decoded the same, {} streams ended the same way in an error", decoded, failed);
+    TEST_CHECK(decoded > 0);
+  }
+
 } // namespace
 
 int main() {
@@ -196,6 +269,7 @@ int main() {
   randomBlocks();
   motionCompensation();
   samplePictures();
+  damagedPictures();
   std::println("bink2-idct: all checks passed");
   return 0;
 }

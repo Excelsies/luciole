@@ -211,3 +211,13 @@ namespace test::bink2::reference {
   }
 
 } // namespace test::bink2::reference
+
+#undef EDGE_STRIDE
+#undef LH_FILTER
+#undef LV_FILTER
+#undef CH1_FILTER
+#undef CH2_FILTER
+#undef CH3_FILTER
+#undef CV1_FILTER
+#undef CV2_FILTER
+#undef CV3_FILTER
