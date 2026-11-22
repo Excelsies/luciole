@@ -24,9 +24,9 @@ namespace {
   using namespace test::media;
   using namespace std::chrono_literals;
 
-  constexpr auto kIdle = 400ms;
+  constexpr auto kIdle = 300ms;
 
-  void playsPausesAndParks(ViewRig& rig, const fs::path& clip, double from = 2.0) {
+  void playsPausesAndParks(ViewRig& rig, const fs::path& clip, double from = 1.0) {
     rig.view->setIdleRelease(kIdle);
     rig.view->setSource(clip.string());
     rig.click(rig.view->stageArea());
@@ -68,7 +68,7 @@ namespace {
   }
 
   void leftWhileParkedSeeksBack(ViewRig& rig, const fs::path& clip) {
-    playsPausesAndParks(rig, clip, 3.0);
+    playsPausesAndParks(rig, clip, 1.0);
     rig.key(XKB_KEY_Left);
     TEST_CHECK(rig.until([&] { return settledAndOpen(rig) && rig.state() == MediaState::Paused; }));
     TEST_NEAR(rig.position(), 0.0, 0.3);
@@ -89,14 +89,14 @@ namespace {
       first = drawn(rig);
     }
     ViewRig rig(capture);
-    playsPausesAndParks(rig, clip, 4.0);
+    playsPausesAndParks(rig, clip, 2.0);
     const auto kept = drawn(rig);
     TEST_CHECK(differing(kept, first, rig.view->stageArea()) > 40);
     rig.click(rig.view->stageArea());
     for (int i = 0; i < 400; ++i) {
       const auto shown = rig.frame();
       TEST_CHECK(differing(shown, first, rig.view->stageArea()) > 40);
-      if (settledAndOpen(rig) && rig.state() == MediaState::Playing && rig.position() > 4.5) {
+      if (settledAndOpen(rig) && rig.state() == MediaState::Playing && rig.position() > 2.5) {
         break;
       }
     }
@@ -108,7 +108,7 @@ namespace {
   void
   aSeekWhileParkedAndPausedShowsTheFrameAtTheTarget(::test::SceneCapture& capture, const fs::path& ball, bool byBar) {
     ViewRig rig(capture);
-    playsPausesAndParks(rig, ball, 4.0);
+    playsPausesAndParks(rig, ball, 2.0);
     rig.view->setIdleRelease(60s); // it stays open while the test looks at it
     const auto kept = drawn(rig);
     if (byBar) {
@@ -123,7 +123,7 @@ namespace {
     const double target = rig.position();
     rig.click(rig.view->positionBar(), 0.1F);
     TEST_CHECK(rig.until([&] { return !rig.view->player()->seeking() && rig.position() < 3.0; }));
-    rig.click(rig.view->positionBar(), static_cast<float>(target / 12.0));
+    rig.click(rig.view->positionBar(), static_cast<float>((target + 0.01) / 12.0));
     TEST_CHECK(rig.until([&] { return !rig.view->player()->seeking() && std::abs(rig.position() - target) < 0.2; }));
     rig.pump.run(300ms);
     const auto expected = drawn(rig);
@@ -135,7 +135,8 @@ namespace {
   ::test::GlPixels liveFrameAt(ViewRig& rig, double target) {
     rig.click(rig.view->positionBar(), target < 6.0 ? 0.9F : 0.1F);
     TEST_CHECK(rig.until([&] { return !rig.view->player()->seeking() && std::abs(rig.position() - target) > 2.0; }));
-    rig.click(rig.view->positionBar(), static_cast<float>(target / 12.0));
+    // A hair past the target, so the frame that starts at it is the one asked for and not the one before.
+    rig.click(rig.view->positionBar(), static_cast<float>((target + 0.01) / 12.0));
     TEST_CHECK(rig.until([&] { return !rig.view->player()->seeking() && std::abs(rig.position() - target) < 0.3; }));
     rig.pump.run(300ms);
     return drawn(rig);
@@ -148,7 +149,7 @@ namespace {
   void
   aBackwardSeekWhileParkedShowsTheFrameAtTheTarget(::test::SceneCapture& capture, const fs::path& ball, Backward how) {
     ViewRig rig(capture);
-    playsPausesAndParks(rig, ball, 8.0);
+    playsPausesAndParks(rig, ball, 2.0);
     rig.view->setIdleRelease(60s);
     const auto kept = drawn(rig);
     const auto& bar = rig.view->positionBar();
@@ -168,7 +169,7 @@ namespace {
       rig.press(x + bar.width() * 0.6F, y + bar.height() / 2);
       rig.dispatcher.pointerMotion(x + bar.width() * 0.3F, y + bar.height() / 2, ++rig.serial);
       rig.frame();
-      rig.release(x + bar.width() * 0.2F, y + bar.height() / 2);
+      rig.release(x + bar.width() * 0.1F, y + bar.height() / 2);
       break;
     case Backward::LeftThenRight:
       rig.key(XKB_KEY_Left);
@@ -187,7 +188,7 @@ namespace {
   // A drag on the bar right after a reopen shows frames along the way, before the button is released.
   void aDragRightAfterAReopenShowsFramesBeforeTheRelease(::test::SceneCapture& capture, const fs::path& ball) {
     ViewRig rig(capture);
-    playsPausesAndParks(rig, ball, 4.0);
+    playsPausesAndParks(rig, ball, 2.0);
     rig.view->setIdleRelease(60s);
     const auto& bar = rig.view->positionBar();
     float x = 0;
@@ -238,7 +239,7 @@ namespace {
   // and a 4K clip takes a few looks to reach its place again.
   void aReopenShowsTheSeekingNotice(ViewRig& rig, const fs::path& slow) {
     rig.view->setSeekNoticeDelay(0ms);
-    playsPausesAndParks(rig, slow, 7.0);
+    playsPausesAndParks(rig, slow, 2.0);
     rig.key(XKB_KEY_Right);
     bool seen = false;
     for (int i = 0; i < 2000 && !(settledAndOpen(rig) && rig.state() == MediaState::Paused); ++i) {
@@ -351,7 +352,7 @@ int main() {
   TEST_CHECK(writeClip(shortBall, {.width = 64, .height = 48, .seconds = 3, .pattern = "ball"}));
   TEST_CHECK(writeClip(shortClip, {.width = 64, .height = 48, .seconds = 3}));
   TEST_CHECK(writeClip(copy, {.width = 64, .height = 48, .seconds = 12}));
-  TEST_CHECK(writeH264(slow, 3840, 2160, 15, 250));
+  TEST_CHECK(writeH264(slow, 3840, 2160, 8, 250));
   {
     ViewRig rig(*capture);
     repeatedKeysWhileTheFileReopensAccumulate(rig, clip30);
