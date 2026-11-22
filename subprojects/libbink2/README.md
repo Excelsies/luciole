@@ -20,7 +20,8 @@ linked, so it can be rebuilt with a modified copy of them.
 
 Every changed file begins with a notice that says so. The changes:
 
-- `src/bink2_dsp.c`: chroma motion compensation with a fractional vector in both directions rounds once, after the
+- `src/bink2_dsp.c`: the loops of the motion compensation with a vector in one direction run along the rows, so the
+  compiler can vectorize them; the results are the same. Chroma motion compensation with a fractional vector in both directions rounds once, after the
   vertical pass, instead of after each pass, as the reference decoder does.
 - `src/bink2_video.c`, `src/bink2_video.h`: one frame is decoded in steps (`bink2_video_job_begin`,
   `bink2_video_job_slice` once per slice, `bink2_video_job_end`) into planes the caller owns, with the row buffers

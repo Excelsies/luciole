@@ -3,6 +3,10 @@
  * vector with a fraction in both directions rounds once, after the vertical
  * pass, instead of after each pass. This makes the chroma planes match the
  * reference decoder bit for bit. Original: libbink2 commit ae2e413.
+ *
+ * Modified for Luciole, 2026-11-22: the loops of the motion compensation with
+ * a vector in one direction run along the rows, so the compiler can vectorize
+ * them. The results are the same.
  */
 #include "bink2_dsp.h"
 
@@ -236,10 +240,12 @@ void bink2_mc_luma(unsigned char *dst, int dst_stride,
             msrc += ss;
         }
     } else if (hmode == 0) {
-        for (i = 0; i < 16; i++) {
-            for (j = 0; j < 16; j++)
-                dst[j * dst_stride + i] =
-                    (unsigned char)clip8(LV_FILTER(msrc + j * ss + i, ss));
+        /* Rows outside, so the 16 results of a row are one vector. */
+        for (j = 0; j < 16; j++) {
+            for (i = 0; i < 16; i++)
+                dst[i] = (unsigned char)clip8(LV_FILTER(msrc + i, ss));
+            dst += dst_stride;
+            msrc += ss;
         }
     } else {
         unsigned char temp[21 * 16];
@@ -333,11 +339,11 @@ void bink2_mc_chroma(unsigned char *dst, int dst_stride,
             msrc += ss;
         }
     } else if (hmode == 0) {
-        for (i = 0; i < 8; i++) {
-            for (j = 0; j < 8; j++)
-                dst[j * dst_stride + i] =
-                    (unsigned char)clip8(chroma_v(vmode, msrc + j * ss + i,
-                                                  ss));
+        for (j = 0; j < 8; j++) {
+            for (i = 0; i < 8; i++)
+                dst[i] = (unsigned char)clip8(chroma_v(vmode, msrc + i, ss));
+            dst += dst_stride;
+            msrc += ss;
         }
     } else {
         /* The horizontal pass keeps its sum unrounded; the one rounding

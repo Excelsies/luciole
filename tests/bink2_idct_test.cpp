@@ -1,3 +1,4 @@
+#include "bink2_mc_reference.h"
 #include "bink2_sample.h"
 #include "media/bink2_stream.h"
 
@@ -10,15 +11,17 @@
 #include <vector>
 
 extern "C" {
+#include <bink2_dsp.h>
 #include <bink2_idct.h>
 }
 
-// The inverse transform of the Bink 2 decoder: that its fast paths give, byte for byte, what the plain C path gives.
-// Blocks made to be hard (the extreme values of every coefficient, sparse blocks, blocks that overflow the 16 bit
-// steps) are put and added through both, and, when LUCIOLE_BINK2_SAMPLE names a real file, the pictures of its first
-// frames are decoded through both. Without the file only the blocks run.
+// The inverse transform and the motion compensation of the Bink 2 decoder: that its fast paths give, byte for byte,
+// what the plain C path gives. Blocks made to be hard (the extreme values of every coefficient, sparse blocks, blocks
+// that overflow the 16 bit steps) are put and added through both, and, when LUCIOLE_BINK2_SAMPLE names a real file, the
+// pictures of its first frames are decoded through both. Without the file only the blocks run.
 namespace {
   using namespace test::bink2;
+  namespace reference = test::bink2::reference;
 
   using Block = std::array<std::int16_t, 64>;
   constexpr int kStride = 24;
@@ -119,6 +122,42 @@ namespace {
     }
   }
 
+  // Motion compensation on random pictures, for every vector fraction and at the edges, against the reference.
+  void motionCompensation() {
+    std::mt19937 random(13);
+    constexpr int kWidth = 96;
+    constexpr int kHeight = 80;
+    constexpr int kStride = 112;
+    std::vector<std::uint8_t> source(static_cast<std::size_t>(kStride) * kHeight);
+    for (auto& byte : source) {
+      byte = static_cast<std::uint8_t>(random());
+    }
+    for (int round = 0; round < 40000; ++round) {
+      if (round % 4 == 1) { // flat and extreme pictures saturate the filters
+        for (auto& byte : source) {
+          byte = (random() & 1U) != 0 ? 255 : 0;
+        }
+      }
+      const bool luma = round % 2 == 0;
+      const int block = luma ? 16 : 8;
+      const int x = static_cast<int>(random() % (kWidth / block)) * block;
+      const int y = static_cast<int>(random() % (kHeight / block)) * block;
+      const int range = luma ? 80 : 160;
+      const int mvx = static_cast<int>(random() % (2 * range)) - range;
+      const int mvy = static_cast<int>(random() % (2 * range)) - range;
+      std::array<std::uint8_t, 24 * 24> fast{};
+      std::array<std::uint8_t, 24 * 24> plain{};
+      if (luma) {
+        bink2_mc_luma(fast.data(), 24, source.data(), kStride, x, y, kWidth, kHeight, mvx, mvy);
+        reference::ref_mc_luma(plain.data(), 24, source.data(), kStride, x, y, kWidth, kHeight, mvx, mvy);
+      } else {
+        bink2_mc_chroma(fast.data(), 24, source.data(), kStride, x, y, kWidth, kHeight, mvx, mvy);
+        reference::ref_mc_chroma(plain.data(), 24, source.data(), kStride, x, y, kWidth, kHeight, mvx, mvy);
+      }
+      TEST_CHECK(fast == plain);
+    }
+  }
+
   // The pictures of the first frames of the sample, decoded with the fast paths and with the plain C path: every
   // byte of every plane, padding included, equal.
   void samplePictures() {
@@ -155,6 +194,7 @@ namespace {
 int main() {
   extremeBlocks();
   randomBlocks();
+  motionCompensation();
   samplePictures();
   std::println("bink2-idct: all checks passed");
   return 0;
