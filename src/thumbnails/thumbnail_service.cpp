@@ -4,6 +4,7 @@
 #include "formats/file_kind.h"
 #include "fs/gio_interop.h"
 #include "fs/gio_ptr.h"
+#include "fs/heap_trim.h"
 #include "fs/native_listing.h"
 #include "fs/posix_fd.h"
 #include "thumbnails/font_facts.h"
@@ -44,10 +45,8 @@ namespace {
     );
   }
 
-  // Released images stay resident until they go unseen this long; the byte budget is only a safety cap.
-  constexpr std::chrono::minutes kThumbnailIdle{5};
-  constexpr std::chrono::seconds kPreviewIdle{30};
-  constexpr unsigned kSweepSeconds = 30;
+  // Released images stay resident until they go unseen this long (ThumbnailService::Retention); the byte budget is
+  // only a safety cap.
   std::mutex diskMutex;
   std::string stamp(const struct stat& info) {
     return std::format(
@@ -253,6 +252,7 @@ struct luciole::ThumbnailService::State : std::enable_shared_from_this<State> {
   };
   static constexpr std::size_t kWriteBudget = 64U * 1024U * 1024U;
   ThumbnailOptions options;
+  Retention retention;
   NetworkFilesystemCheck networkFilesystem;
   std::unordered_map<std::string, Item> cache;
   std::unordered_map<const FileIconImage*, Item*> leases;
@@ -292,6 +292,9 @@ struct luciole::ThumbnailService::State : std::enable_shared_from_this<State> {
       g_cancellable_cancel(item.cancel.get());
       item.image->pixels.reset();
       item.image->ready = false;
+    }
+    if (alive && !cache.empty()) {
+      scheduleHeapTrim();
     }
     cache.clear();
     leases.clear();
@@ -334,7 +337,7 @@ struct luciole::ThumbnailService::State : std::enable_shared_from_this<State> {
     if (sweepTimer || !alive) {
       return;
     }
-    sweepTimer = g_timeout_source_new_seconds(kSweepSeconds);
+    sweepTimer = g_timeout_source_new(static_cast<guint>(retention.sweep.count()));
     g_source_set_callback(
         sweepTimer,
         [](gpointer data) -> gboolean {
@@ -351,9 +354,10 @@ struct luciole::ThumbnailService::State : std::enable_shared_from_this<State> {
   }
   bool sweep() {
     const auto now = std::chrono::steady_clock::now();
+    const auto before = cache.size();
     for (auto it = cache.begin(); it != cache.end();) {
       auto& item = it->second;
-      const std::chrono::seconds idle = item.purpose == ThumbnailPurpose::Preview ? kPreviewIdle : kThumbnailIdle;
+      const auto idle = item.purpose == ThumbnailPurpose::Preview ? retention.preview : retention.thumbnail;
       if (item.image.use_count() > 1) {
         item.seen = now;
       } else if (item.stage == Stage::Ready && now - item.seen >= idle) {
@@ -362,6 +366,9 @@ struct luciole::ThumbnailService::State : std::enable_shared_from_this<State> {
         continue;
       }
       ++it;
+    }
+    if (cache.size() != before) {
+      scheduleHeapTrim(); // what the dropped images held is free blocks of the heap until it is given back
     }
     return !cache.empty();
   }
@@ -752,6 +759,7 @@ void luciole::ThumbnailService::synchronizeSources(const DirectorySnapshot& snap
     }
   }
 }
+void luciole::ThumbnailService::setRetention(const Retention& retention) { m_state->retention = retention; }
 void luciole::ThumbnailService::setOptions(ThumbnailOptions options) {
   if (options == m_state->options) {
     return;
@@ -787,6 +795,7 @@ void luciole::ThumbnailService::releaseLocation(const Location& root) {
       g_cancellable_cancel(running.cancel.get());
     }
   }
+  const auto before = m_state->cache.size();
   for (auto item = m_state->cache.begin(); item != m_state->cache.end();) {
     if (inside(item->second.source.location())) {
       const auto old = item++;
@@ -794,6 +803,9 @@ void luciole::ThumbnailService::releaseLocation(const Location& root) {
     } else {
       ++item;
     }
+  }
+  if (m_state->cache.size() != before) {
+    scheduleHeapTrim();
   }
 }
 

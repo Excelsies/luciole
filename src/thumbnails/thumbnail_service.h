@@ -5,6 +5,7 @@
 #include "model/thumbnail_options.h"
 #include "thumbnails/file_icon_cache.h"
 
+#include <chrono>
 #include <optional>
 #include <string>
 
@@ -43,6 +44,14 @@ namespace luciole {
     std::shared_ptr<const FileIconImage> prepared(const DirectoryEntry& source);
     bool touch(const std::shared_ptr<const FileIconImage>& image, bool visible);
     void synchronizeSources(const DirectorySnapshot& snapshot);
+    // How long a released image stays resident before it is dropped, by kind, and how often that is checked. The
+    // defaults are the working values; tests shorten them.
+    struct Retention {
+      std::chrono::milliseconds thumbnail{std::chrono::minutes(5)};
+      std::chrono::milliseconds preview{std::chrono::seconds(30)};
+      std::chrono::milliseconds sweep{std::chrono::seconds(30)};
+    };
+    void setRetention(const Retention& retention);
     void setOptions(ThumbnailOptions options);
     const ThumbnailOptions& options() const;
     void setChangedCallback(std::function<void()> callback);
