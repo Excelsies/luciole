@@ -6,15 +6,15 @@
 #include "render/core/image_resize.h"
 
 #include <algorithm>
+#include <array>
 #include <charconv>
-#include <cmath>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <stb/stb_image_resize2.h>
 
 namespace {
   struct DecodeSize {
-    int target;
     std::uint64_t maxPixels;
     bool rejected = false;
     int width = 0, height = 0;
@@ -30,6 +30,32 @@ namespace {
     if (state.rejected) {
       gdk_pixbuf_loader_set_size(loader, 1, 1);
     }
+  }
+
+  // Shrinks rows that lie `stride` bytes apart to RGBA straight from the pixbuf, as resizeToRgba does for packed rows
+  // (same filters and color handling); a packed copy of a large picture would double the helper's peak memory.
+  std::vector<std::uint8_t>
+  resizeRows(const std::uint8_t* pixels, int width, int height, int stride, int channels, ImageExtent target) {
+    std::vector<std::uint8_t> out(static_cast<std::size_t>(target.width) * target.height * 4U);
+    const auto layout = channels == 4 ? STBIR_RGBA : STBIR_RGB;
+    STBIR_RESIZE resize;
+    stbir_resize_init(
+        &resize, pixels, width, height, stride, out.data(), target.width, target.height, 0, layout,
+        STBIR_TYPE_UINT8_SRGB
+    );
+    if (stbir_resize_extended(&resize) == 0) {
+      return {};
+    }
+    if (channels == 3) {
+      // Packed RGB was written at the front of the allocation; spread it to four bytes a pixel from the back.
+      for (std::size_t end = out.size() / 4U; end > 0; --end) {
+        const std::size_t from = (end - 1U) * 3U, to = (end - 1U) * 4U;
+        const std::array<std::uint8_t, 3> color{out[from], out[from + 1U], out[from + 2U]};
+        std::ranges::copy(color, out.begin() + static_cast<std::ptrdiff_t>(to));
+        out[to + 3U] = 255;
+      }
+    }
+    return out;
   }
 } // namespace
 
@@ -77,7 +103,7 @@ std::expected<LoadedImageFile, std::string> luciole::decodeRasterImage(
     g_clear_error(&setupError);
     return std::unexpected("GdkPixbuf: " + message);
   }
-  DecodeSize state{target, maxPixels};
+  DecodeSize state{maxPixels};
   g_signal_connect(loader.get(), "size-prepared", G_CALLBACK(sizePrepared), &state);
   GError* error = nullptr;
   bool ok = true;
@@ -169,11 +195,13 @@ luciole::fitRasterPixels(GdkPixbuf* pixbuf, int target, std::uint64_t maxPixels)
   }
   const auto* pixels = gdk_pixbuf_read_pixels(pixbuf);
   const auto fitted = fitImageWithin(width, height, target, target);
-  if (stride == width * channels && (fitted.width != width || fitted.height != height)) {
-    auto resized = resizeToRgba(
-        pixels, width, height, channels == 4 ? ResizeSourceLayout::Rgba : ResizeSourceLayout::Rgb, fitted.width,
-        fitted.height
-    );
+  if (fitted.width != width || fitted.height != height) {
+    auto resized = stride == width * channels
+        ? resizeToRgba(
+              pixels, width, height, channels == 4 ? ResizeSourceLayout::Rgba : ResizeSourceLayout::Rgb, fitted.width,
+              fitted.height
+          )
+        : resizeRows(pixels, width, height, stride, channels, fitted);
     if (resized.empty()) {
       return std::unexpected("cannot scale decoded image");
     }
@@ -197,16 +225,6 @@ luciole::fitRasterPixels(GdkPixbuf* pixbuf, int target, std::uint64_t maxPixels)
       }
       image.rgba[dest + 3] = channels == 4 ? pixels[source + 3] : 255;
     }
-  }
-  if (fitted.width != width || fitted.height != height) {
-    auto resized =
-        resizeToRgba(image.rgba.data(), width, height, ResizeSourceLayout::Rgba, fitted.width, fitted.height);
-    if (resized.empty()) {
-      return std::unexpected("cannot scale decoded image");
-    }
-    image.rgba = std::move(resized);
-    image.width = fitted.width;
-    image.height = fitted.height;
   }
   return image;
 }

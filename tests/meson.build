@@ -31,6 +31,7 @@ test_table = [
     'timeout': 90, 'env': gio_env},
   {'name': 'thumbnail-retention', 'deps': [thumbnails_dep, imaging_dep, event_loop_dep], 'timeout': 90,
     'env': gio_env},
+  {'name': 'raster-fit', 'deps': [imaging_dep], 'env': gio_env},
   {'name': 'preview-service', 'deps': [thumbnails_dep, ui_dep], 'env': gio_env},
   {'name': 'private-key', 'deps': [model_dep]},
   {'name': 'view-mode', 'deps': [model_dep]},
