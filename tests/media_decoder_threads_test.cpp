@@ -167,6 +167,46 @@ namespace {
       TEST_CHECK(decoder->threads == expected);
     }
   }
+  // The value of the max-size-buffers property of the queue playsink puts before the video sink, -1 when there is none.
+  int videoQueueBuffers(const fs::path& clip) {
+    GstElement* playbin = gst_element_factory_make("playbin", nullptr);
+    GstElement* video = gst_element_factory_make("fakesink", nullptr);
+    GstElement* audio = gst_element_factory_make("fakesink", nullptr);
+    TEST_CHECK(playbin != nullptr && video != nullptr && audio != nullptr);
+    gst_object_ref_sink(playbin);
+    gchar* converted = g_filename_to_uri(clip.c_str(), nullptr, nullptr);
+    const std::string uri = converted;
+    g_free(converted);
+    g_object_set(playbin, "uri", uri.c_str(), "flags", 0x1U, "video-sink", video, "audio-sink", audio, nullptr);
+    luciole::media::refuseNetwork(playbin);
+    (void)gst_element_set_state(playbin, GST_STATE_PAUSED);
+    int buffers = -1;
+    if (gst_element_get_state(playbin, nullptr, nullptr, 30 * GST_SECOND) == GST_STATE_CHANGE_SUCCESS) {
+      GstIterator* items = gst_bin_iterate_recurse(GST_BIN(playbin));
+      GValue value = G_VALUE_INIT;
+      for (int step = 0; step < 4096 && gst_iterator_next(items, &value) == GST_ITERATOR_OK; ++step) {
+        auto* element = GST_ELEMENT(g_value_get_object(&value));
+        if (std::string_view(GST_OBJECT_NAME(element)) == "vqueue") {
+          guint count = 0;
+          g_object_get(element, "max-size-buffers", &count, nullptr);
+          buffers = static_cast<int>(count);
+        }
+        g_value_reset(&value);
+      }
+      g_value_unset(&value);
+      gst_iterator_free(items);
+    }
+    (void)gst_element_set_state(playbin, GST_STATE_NULL);
+    gst_object_unref(playbin);
+    return buffers;
+  }
+
+  // The queue before the video sink holds two pictures: each is a full decoded picture, 12 MiB at 4K.
+  void holdsTwoPicturesBeforeTheVideoSink(Scratch& scratch) {
+    const auto clip = scratch.path("queue.mp4");
+    TEST_CHECK(writeH264(clip, 320, 240, 10, 10));
+    TEST_CHECK(videoQueueBuffers(clip) == 2);
+  }
 } // namespace
 
 int main() {
@@ -190,6 +230,7 @@ int main() {
     std::println("skipped: GStreamer lacks {}", missing);
     return ::test::kSkipExitCode;
   }
+  holdsTwoPicturesBeforeTheVideoSink(scratch);
   givesEachDecoderTheThreadsItsStreamNeeds(scratch);
   givesADeeperStreamMoreThreads(scratch);
   return 0;

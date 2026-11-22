@@ -67,10 +67,20 @@ namespace {
     return kAutoplugSkip;
   }
 
+  // The queue playsink puts before the video sink holds three pictures; two are enough, and a decoded picture is 12 MiB
+  // at 4K.
+  void limitVideoQueue(GstElement* element) {
+    if (std::string_view(GST_OBJECT_NAME(element)) == "vqueue"
+        && g_object_class_find_property(G_OBJECT_GET_CLASS(element), "max-size-buffers") != nullptr) {
+      g_object_set(element, "max-size-buffers", 2U, nullptr);
+    }
+  }
+
   // Refuses an element that would reach the network: it keeps its state and the bin ends with an error. A parser or
   // decoder bin is also told not to build one. A software video decoder is limited to the threads its stream needs.
   void refuseElement(GstBin* bin, GstBin* /*parent*/, GstElement* element, gpointer /*data*/) {
     luciole::media::limitDecoderThreads(element);
+    limitVideoQueue(element);
     if (g_signal_lookup("autoplug-select", G_OBJECT_TYPE(element)) != 0) {
       g_signal_connect(element, "autoplug-select", G_CALLBACK(refuseFactory), nullptr);
     }
