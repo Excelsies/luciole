@@ -21,7 +21,9 @@ linked, so it can be rebuilt with a modified copy of them.
 Every changed file begins with a notice that says so. The changes:
 
 - `src/bink2_dsp.c`: the loops of the motion compensation with a vector in one direction run along the rows, so
-  the compiler can vectorize them; the results are the same. Chroma motion compensation with a fraction in both
+  the compiler can vectorize them; the results are the same. The luma motion compensation with a fraction in both
+  directions does not clip between its two passes, as in the reference decoder (it clipped; pictures with sharp edges
+  differed). Chroma motion compensation with a fraction in both
   directions rounds once, after the vertical pass, instead of after each pass, as the reference decoder does.
 - `src/bink2_video.c`, `src/bink2_video.h`: one frame is decoded in steps (`bink2_video_job_begin`,
   `bink2_video_job_slice` once per slice, `bink2_video_job_end`) into planes the caller owns, with the row buffers
@@ -41,8 +43,9 @@ Every changed file begins with a notice that says so. The changes:
   (`bink2_idct_use_plain` runs that path, for tests). A block with no coefficient but its DC is a flat fill; the
   others go through the same arithmetic with the eight columns as the inner loop of each pass, so the compiler can
   vectorize it.
-- `src/bink2_video_new.c`: calls `bink2_idct.c`, and dequantizes only the coefficients that were read; a block with
-  none is not cleared or scanned. The plain path, kept for the same comparison, dequantizes all 64 of each block.
+- `src/bink2_video_new.c`: the DC of an inter block is limited to 2047 when the frame flag 0x40000 is set, as in the
+  reference decoder (it was always 1023, which damaged pictures of some files). It calls `bink2_idct.c`, and
+  dequantizes only the coefficients that were read; a block with none is not cleared or scanned. The plain path, kept for the same comparison, dequantizes all 64 of each block.
 - `meson.build` (new): builds the decoder sources, with the compiler flags upstream uses and at -O3 in every build type.
 
 The library starts no threads. Streams older than `KB2g` and streams with an alpha plane (refused at open for

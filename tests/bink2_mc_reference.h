@@ -1,8 +1,9 @@
 #pragma once
 
-// The motion compensation of the Bink 2 decoder as it was written before its loops were reordered for the compiler,
-// kept verbatim (apart from the names) as the reference the tests compare bink2_mc_luma and bink2_mc_chroma with, byte
-// for byte.
+// The motion compensation of the Bink 2 decoder, written the plain way (the loops as they were before they were
+// reordered for the compiler), as the reference the tests compare bink2_mc_luma and bink2_mc_chroma with, byte for
+// byte. The luma case with a fraction in both directions follows the reference decoder: no clipping between its passes.
+#include <cstdint>
 #include <cstring>
 
 namespace test::bink2::reference {
@@ -94,12 +95,13 @@ namespace test::bink2::reference {
         }
       }
     } else {
-      unsigned char temp[21 * 16];
+      // The horizontal pass keeps its rounded value unclipped: it can lie outside 0..255, as in the reference decoder.
+      std::int16_t temp[21 * 16];
 
       msrc -= 2 * ss;
       for (i = 0; i < 21; i++) {
         for (j = 0; j < 16; j++) {
-          temp[i * 16 + j] = (unsigned char)clip8(LH_FILTER(msrc + j));
+          temp[i * 16 + j] = static_cast<std::int16_t>(LH_FILTER(msrc + j));
         }
         msrc += ss;
       }

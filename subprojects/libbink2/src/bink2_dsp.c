@@ -7,10 +7,15 @@
  * Modified for Luciole, 2026-11-22: the loops of the motion compensation with
  * a vector in one direction run along the rows, so the compiler can vectorize
  * them. The results are the same.
+ *
+ * Modified for Luciole, 2026-11-22: the luma motion compensation with a
+ * fraction in both directions does not clip between its two passes, which
+ * makes the luma planes match the reference decoder bit for bit.
  */
 #include "bink2_dsp.h"
 
 #include <math.h>
+#include <stdint.h>
 #include <string.h>
 
 static int clip8(int v)
@@ -248,13 +253,14 @@ void bink2_mc_luma(unsigned char *dst, int dst_stride,
             msrc += ss;
         }
     } else {
-        unsigned char temp[21 * 16];
+        /* The horizontal pass keeps its rounded value unclipped, as in the
+         * reference decoder; it can lie outside 0..255 beside a sharp edge. */
+        int16_t temp[21 * 16];
 
         msrc -= 2 * ss;
         for (i = 0; i < 21; i++) {
             for (j = 0; j < 16; j++)
-                temp[i * 16 + j] =
-                    (unsigned char)clip8(LH_FILTER(msrc + j));
+                temp[i * 16 + j] = (int16_t)LH_FILTER(msrc + j);
             msrc += ss;
         }
         for (j = 0; j < 16; j++) {
