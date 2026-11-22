@@ -450,13 +450,16 @@ int main(int argc, char** argv) {
     return seekTo(argv[2]);
   }
   if (mode == "poster") {
-    return poster(argv[2], argc > 3 ? std::atoi(argv[3]) : 256);
+    return poster(argv[2], argc > 3 ? static_cast<int>(std::strtol(argv[3], nullptr, 10)) : 256);
   }
   if (mode == "seek") {
     return seek(argv[2]);
   }
   if (mode == "play") {
-    return play(argv[2], argc > 4 ? std::atoi(argv[3]) : 1280, argc > 4 ? std::atoi(argv[4]) : 720);
+    return play(
+        argv[2], argc > 4 ? static_cast<int>(std::strtol(argv[3], nullptr, 10)) : 1280,
+        argc > 4 ? static_cast<int>(std::strtol(argv[4], nullptr, 10)) : 720
+    );
   }
   std::println(stderr, "unknown mode {}", mode);
   return 2;
