@@ -222,6 +222,32 @@ namespace {
     TEST_CHECK(!luciole::readThumbnailPng(sharedPng(std::move(oversized), PNG_TEXT_COMPRESSION_zTXt), 128));
   }
 
+  // A picture of one-pixel black lines on white, eight pixels apart, shrunk eightfold: each result pixel covers one
+  // line, so in linear light it holds seven eighths of white, which is 240 in sRGB. Averaging the encoded values
+  // instead gives 223 and shows as a darker picture.
+  void testShrunkLinesKeepTheirBrightness() {
+    const GioPtr<GCancellable> cancel(g_cancellable_new());
+    LoadedImageFile lines{.rgba = std::vector<std::uint8_t>(1024U * 768U * 4U, 255), .width = 1024, .height = 768};
+    for (int y = 0; y < 768; ++y) {
+      for (int x = 0; x < 1024; x += 8) {
+        for (int c = 0; c < 3; ++c) {
+          lines.rgba[(static_cast<std::size_t>(y) * 1024 + x) * 4 + c] = 0;
+        }
+      }
+    }
+    const auto decoded = luciole::decodeRasterImage(png(lines), 128, 2'000'000, nullptr);
+    TEST_CHECK(decoded && decoded->width == 128 && decoded->height == 96);
+    double sum = 0;
+    int count = 0;
+    for (int y = 10; y < 86; ++y) {
+      for (int x = 10; x < 118; ++x) {
+        sum += decoded->rgba[(static_cast<std::size_t>(y) * 128 + x) * 4 + 1];
+        ++count;
+      }
+    }
+    TEST_CHECK(std::abs(sum / count - 240.4) < 4.0);
+  }
+
   void testCodecs() {
     const GioPtr<GCancellable> cancel(g_cancellable_new());
     const auto original = picture();
@@ -1364,6 +1390,7 @@ int main(int argc, char** argv) {
     }
     testSharedCacheInterop(fixture);
     testCodecs();
+    testShrunkLinesKeepTheirBrightness();
     testRasterFormats();
     testWorkerTransport();
     testCache();

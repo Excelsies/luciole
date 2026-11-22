@@ -24,12 +24,12 @@ namespace {
     state.width = width;
     state.height = height;
     state.rejected = width <= 0 || height <= 0 || static_cast<std::uint64_t>(width) * height > state.maxPixels;
-    const double ratio =
-        state.rejected ? 0 : std::min(1.0, static_cast<double>(state.target) / std::max(width, height));
-    gdk_pixbuf_loader_set_size(
-        loader, std::max(1, static_cast<int>(std::round(width * ratio))),
-        std::max(1, static_cast<int>(std::round(height * ratio)))
-    );
+    // The loader hands back the full picture and fitRasterPixels shrinks it with the app's resizer; asking the loader
+    // to scale (gdk_pixbuf_scale_simple, bilinear) is slower and softer. A refused picture is cut to one pixel, so
+    // nothing large is decoded for it.
+    if (state.rejected) {
+      gdk_pixbuf_loader_set_size(loader, 1, 1);
+    }
   }
 } // namespace
 
