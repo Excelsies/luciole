@@ -70,8 +70,11 @@ namespace {
   // The queue playsink puts before the video sink holds three pictures; two are enough, and a decoded picture is 12 MiB
   // at 4K.
   void limitVideoQueue(GstElement* element) {
-    if (std::string_view(GST_OBJECT_NAME(element)) == "vqueue"
-        && g_object_class_find_property(G_OBJECT_GET_CLASS(element), "max-size-buffers") != nullptr) {
+    if (std::string_view(GST_OBJECT_NAME(element)) != "vqueue") {
+      return;
+    }
+    GParamSpec* spec = g_object_class_find_property(G_OBJECT_GET_CLASS(element), "max-size-buffers");
+    if (spec != nullptr && (spec->flags & G_PARAM_WRITABLE) != 0 && spec->value_type == G_TYPE_UINT) {
       g_object_set(element, "max-size-buffers", 2U, nullptr);
     }
   }
