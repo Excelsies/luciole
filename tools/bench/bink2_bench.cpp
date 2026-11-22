@@ -1,7 +1,7 @@
 // Times Bink 2 decoding and playback of one file.
 //
 //   luciole-bink2-bench decode FILE [FRAMES]       milliseconds per frame, decoding in a loop, and the CPU time
-//   luciole-bink2-bench adler FILE [FIRST COUNT]   per picture: the Adler-32 of its visible planes, as "crc N 0x..."
+//   luciole-bink2-bench adler FILE [FIRST COUNT]   per picture: the Adler-32 of its visible planes, as "adler N 0x..."
 //   luciole-bink2-bench sum FILE [FRAMES]          one line per picture: a hash of each plane's visible bytes
 //   luciole-bink2-bench scan FILE [FIRST COUNT]    per picture: key frame flag, blockiness, flat share (numbers only)
 //   luciole-bink2-bench dump FILE FRAME OUT        the picture FRAME (decoded from its key frame) as raw I420 to OUT
@@ -271,7 +271,7 @@ namespace {
         return 1;
       }
       if (frame >= first) {
-        std::println("crc {} 0x{:08x}", frame, adler(now, stream->info(), layout));
+        std::println("adler {} 0x{:08x}", frame, adler(now, stream->info(), layout));
       }
       std::swap(before, now);
     }
@@ -308,7 +308,8 @@ namespace {
     return 0;
   }
 
-  void writePlanes(
+  // False when a write fails.
+  bool writePlanes(
       const Pictures& picture, const luciole::media::bink2::Info& info, const luciole::media::bink2::Layout& layout,
       std::FILE* out
   ) {
@@ -317,12 +318,17 @@ namespace {
       const int width = plane == 0 ? info.width : (info.width + 1) / 2;
       const int height = plane == 0 ? info.height : (info.height + 1) / 2;
       for (int row = 0; row < height; ++row) {
-        std::fwrite(
-            picture.planes.plane[at] + static_cast<std::size_t>(row) * static_cast<std::size_t>(layout.stride[at]), 1,
-            static_cast<std::size_t>(width), out
-        );
+        const auto size = static_cast<std::size_t>(width);
+        if (std::fwrite(
+                picture.planes.plane[at] + static_cast<std::size_t>(row) * static_cast<std::size_t>(layout.stride[at]),
+                1, size, out
+            )
+            != size) {
+          return false;
+        }
       }
     }
+    return true;
   }
 
   // Each picture FIRST to FIRST+COUNT-1, decoded from the key frame before FIRST, as DIR/fNNNNN.yuv.
@@ -335,9 +341,10 @@ namespace {
         from = key;
       }
     }
+    const std::uint64_t end = std::min(stream->info().frames, first + count);
     Pictures before(stream->layout());
     Pictures now(stream->layout());
-    for (std::uint64_t frame = from; frame < first + count; ++frame) {
+    for (std::uint64_t frame = from; frame < end; ++frame) {
       if (!stream->decode(frame, now.planes, frame == from ? nullptr : &before.planes)) {
         std::println(stderr, "frame {}: damaged", frame);
         return 1;
@@ -347,8 +354,11 @@ namespace {
         if (out == nullptr) {
           return 2;
         }
-        writePlanes(now, stream->info(), stream->layout(), out);
-        std::fclose(out);
+        const bool written = writePlanes(now, stream->info(), stream->layout(), out);
+        if (std::fclose(out) != 0 || !written) {
+          std::println(stderr, "cannot write picture {}", frame);
+          return 2;
+        }
       }
       std::swap(before, now);
     }
@@ -381,19 +391,11 @@ namespace {
     if (stream_out == nullptr) {
       return 2;
     }
-    for (int plane = 0; plane < 3; ++plane) {
-      const int width = plane == 0 ? info.width : (info.width + 1) / 2;
-      const int height = plane == 0 ? info.height : (info.height + 1) / 2;
-      for (int row = 0; row < height; ++row) {
-        std::fwrite(
-            now.planes.plane[static_cast<std::size_t>(plane)]
-                + static_cast<std::size_t>(row)
-                    * static_cast<std::size_t>(layout.stride[static_cast<std::size_t>(plane)]),
-            1, static_cast<std::size_t>(width), stream_out
-        );
-      }
+    const bool written = writePlanes(now, info, layout, stream_out);
+    if (std::fclose(stream_out) != 0 || !written) {
+      std::println(stderr, "cannot write {}", out);
+      return 2;
     }
-    std::fclose(stream_out);
     std::println("{} from key frame {}", target, from);
     return 0;
   }

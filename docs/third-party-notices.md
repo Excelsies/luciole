@@ -36,7 +36,8 @@ is built. libbink2 is licensed under the GNU Lesser General Public License, vers
 version; its license text is `subprojects/libbink2/LICENSE`. Luciole's own code stays under its own license. The
 copy carries local changes, listed in `subprojects/libbink2/README.md` and noted at the top of each changed file.
 The sources of the linked copy are all in that folder, so a modified copy of them can be built into Luciole in its
-place.
+place. `tests/bink2_mc_reference.h` holds motion compensation loops derived from `subprojects/libbink2/src/bink2_dsp.c`
+under the same license; it is a test reference and is not linked into the program.
 
 The decoder is derived from the unmerged FFmpeg Bink 2 video decoder by Konstantin Shishkov (copyright 2014) and
 Paul B Mahol (copyright 2019), and from FFmpeg's `binkaudio.c` by Peter Ross (copyright 2007-2011) and Daniel

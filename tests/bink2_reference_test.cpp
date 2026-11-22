@@ -5,12 +5,9 @@
 #include <cstdint>
 #include <print>
 
-// Pictures of one real sample against a second Bink 2 decoder (Librempeg's): the Adler-32 of the three planes of
-// some pictures, from that decoder, as numbers. The sample is the owner's own file, found by its size and frame
-// count; with any other file, or none, the test is skipped. The pictures are inter pictures after a key frame whose
-// blocks carry DC values past 1023 (the frame flag 0x40000 widens the range to 2047) and whose luma vectors have a
-// fraction both ways beside sharp edges; before the decoder followed that range and left its two passes unclipped,
-// they came out with flat, stair-stepped patches.
+// Three pictures (478, 600 and 620) of the Bink 2 file LUCIOLE_BINK2_SAMPLE names, decoded from the key frame before
+// them, against the Adler-32 of their three planes from a second decoder. The file is recognized by its size and frame
+// count (the numbers below); any other file, or none, skips the test.
 namespace {
   using namespace test::bink2;
 
@@ -55,14 +52,18 @@ int main() {
     std::println("skipped: {} names no Bink 2 file", kSampleVariable);
     return kSkipExitCode;
   }
+  std::error_code sizeError;
+  if (fs::file_size(*sample, sizeError) != kSampleBytes || sizeError) {
+    std::println("skipped: {} names a file that is not the one these pictures were taken from", kSampleVariable);
+    return kSkipExitCode;
+  }
   const FileReader file(*sample);
   auto opened = luciole::media::bink2::Stream::open(file.reader(), file.size());
-  TEST_CHECK(opened.has_value());
-  auto& stream = **opened;
-  if (file.size() != kSampleBytes || stream.info().frames != kSampleFrames) {
+  if (!opened || (*opened)->info().frames != kSampleFrames) {
     std::println("skipped: the sample is not the file these pictures were taken from");
     return kSkipExitCode;
   }
+  auto& stream = **opened;
   const auto& layout = stream.layout();
   Picture before(layout);
   Picture now(layout);

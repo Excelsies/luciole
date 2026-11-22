@@ -1,5 +1,9 @@
 #pragma once
 
+// The loops and filter macros below are derived from subprojects/libbink2/src/bink2_dsp.c (libbink2, licensed under
+// the GNU Lesser General Public License, version 2.1 or later; see subprojects/libbink2/LICENSE). They are a test
+// reference and are not linked into the program.
+
 // The motion compensation of the Bink 2 decoder, written the plain way (the loops as they were before they were
 // reordered for the compiler), as the reference the tests compare bink2_mc_luma and bink2_mc_chroma with, byte for
 // byte. The luma case with a fraction in both directions follows the reference decoder: no clipping between its passes.
