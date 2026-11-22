@@ -53,9 +53,8 @@ namespace {
   }
 
   // Shrinks rows that lie `stride` bytes apart to RGBA straight from the pixbuf; a packed copy of a large picture would
-  // double the helper's peak memory. The filter is stb's default (Mitchell when shrinking) applied to the stored
-  // values, as the loader's own scaling did: averaging in linear light lifts the mean of stripes, thin dark lines and
-  // small text on white, which then look fainter.
+  // double the helper's peak memory. The filter is stb's default (Mitchell when shrinking) on the stored values, which
+  // keeps the brightness of stripes, thin lines and small text.
   std::vector<std::uint8_t> resizeRows(
       const std::uint8_t* pixels, int width, int height, int stride, ResizeSourceLayout layout, ImageExtent target
   ) {

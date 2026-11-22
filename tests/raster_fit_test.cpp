@@ -23,13 +23,11 @@ namespace {
   };
   using Pixbuf = std::unique_ptr<GdkPixbuf, PixbufDeleter>;
 
-  // Colors that differ from pixel to pixel. Shrunk to 64 pixels across, the 2001 by 1500 picture of them comes out one
-  // level apart in one byte between the alpha-weighted path and the opaque path, which is what the opaque test needs.
+  // Colors that differ from pixel to pixel.
   std::uint8_t channel(int x, int y, int c) {
     const std::uint32_t noise = (static_cast<std::uint32_t>(x) * 374761393U
                                  + static_cast<std::uint32_t>(y) * 668265263U
-                                 + static_cast<std::uint32_t>(c) * 2147483647U
-                                 + 32U * 2654435761U)
+                                 + static_cast<std::uint32_t>(c) * 2147483647U)
         >> 13;
     return static_cast<std::uint8_t>((x * 7 + y * 13 + c * 61 + static_cast<int>(noise & 15U)) & 255);
   }
@@ -69,6 +67,7 @@ namespace {
 
   // A picture whose rows are `extra` bytes longer than its pixels. With `exact` the buffer ends with the last pixel, so
   // the last row is shorter than the stride and a read beyond the pixels is a read past the buffer.
+  // The exact-size cases show a read past the pixels only in a sanitizer build.
   struct Rows {
     std::unique_ptr<std::uint8_t[]> bytes;
     Pixbuf pixbuf;
@@ -188,7 +187,7 @@ namespace {
       worst = std::max(worst, std::abs(opaque[i] - straight[i]));
     }
     std::println("raster-fit: opaque and straight-alpha results differ by at most {} level(s)", worst);
-    TEST_CHECK(worst <= 1);
+    TEST_CHECK(worst == 0);
   }
 
   // A quarter of the picture is transparent or half transparent, with colors far from the rest: the alpha-weighted
