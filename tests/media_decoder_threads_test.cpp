@@ -5,14 +5,14 @@
 #include "test_check.h"
 
 #include <filesystem>
-#include <limits>
-#include <optional>
-#include <thread>
-#include <string_view>
 #include <format>
 #include <fstream>
+#include <limits>
+#include <optional>
 #include <print>
 #include <string>
+#include <string_view>
+#include <thread>
 
 // A software video decoder gets the threads its stream needs and no more: each extra frame thread holds a decoded
 // frame and a codec context, which at 4K is tens of megabytes.
@@ -74,10 +74,7 @@ namespace {
     gchar* converted = g_filename_to_uri(clip.c_str(), nullptr, nullptr);
     const std::string uri = converted;
     g_free(converted);
-    g_object_set(
-        playbin, "uri", uri.c_str(), "flags", 0x1U, "video-sink", video, "audio-sink",
-        audio, nullptr
-    );
+    g_object_set(playbin, "uri", uri.c_str(), "flags", 0x1U, "video-sink", video, "audio-sink", audio, nullptr);
     luciole::media::refuseNetwork(playbin);
     (void)gst_element_set_state(playbin, GST_STATE_PAUSED);
     std::optional<Decoder> found;
@@ -88,7 +85,8 @@ namespace {
       for (int step = 0; step < 4096 && gst_iterator_next(items, &value) == GST_ITERATOR_OK; ++step) {
         auto* element = GST_ELEMENT(g_value_get_object(&value));
         GstElementFactory* factory = gst_element_get_factory(element);
-        const char* klass = factory != nullptr ? gst_element_factory_get_metadata(factory, GST_ELEMENT_METADATA_KLASS) : "";
+        const char* klass =
+            factory != nullptr ? gst_element_factory_get_metadata(factory, GST_ELEMENT_METADATA_KLASS) : "";
         if (std::string_view(klass).contains("Decoder") && std::string_view(klass).contains("Video")) {
           found = Decoder{.element = GST_OBJECT_NAME(factory)};
           for (const char* name : {"max-threads", "n-threads", "threads"}) {
@@ -132,8 +130,11 @@ namespace {
       TEST_CHECK(writeH264(clip, item.width, item.height, item.fps, item.fps));
       const auto decoder = decoderOf(clip);
       TEST_CHECK(decoder.has_value());
-      const int expected = decoderThreads(item.width, item.height, item.fps, 1, static_cast<int>(std::thread::hardware_concurrency()));
-      std::println("{}x{} at {}: {} has {} threads", item.width, item.height, item.fps, decoder->element, decoder->threads);
+      const int expected =
+          decoderThreads(item.width, item.height, item.fps, 1, static_cast<int>(std::thread::hardware_concurrency()));
+      std::println(
+          "{}x{} at {}: {} has {} threads", item.width, item.height, item.fps, decoder->element, decoder->threads
+      );
       TEST_CHECK(decoder->threads == expected);
     }
   }
@@ -151,8 +152,10 @@ int main() {
   Scratch scratch;
   // Starts GStreamer as the player does, which also puts decoders on a graphics device behind the software ones.
   TEST_CHECK(luciole::media::startProblem().empty());
-  if (const auto missing = missingElements({"videotestsrc", "x264enc", "h264parse", "mp4mux", "filesink",
-                                            "avdec_h264", "playbin", "appsink", "videoconvertscale", "fakesink"});
+  if (const auto missing = missingElements(
+          {"videotestsrc", "x264enc", "h264parse", "mp4mux", "filesink", "avdec_h264", "playbin", "appsink",
+           "videoconvertscale", "fakesink"}
+      );
       !missing.empty()) {
     std::println("skipped: GStreamer lacks {}", missing);
     return ::test::kSkipExitCode;

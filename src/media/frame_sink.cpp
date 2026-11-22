@@ -54,7 +54,8 @@ namespace {
     pipeline->video = true;
     if (GST_VIDEO_INFO_FPS_N(&video) > 0) {
       pipeline->stats.frameLength = gst_util_uint64_scale(
-          GST_SECOND, static_cast<guint64>(GST_VIDEO_INFO_FPS_D(&video)), static_cast<guint64>(GST_VIDEO_INFO_FPS_N(&video))
+          GST_SECOND, static_cast<guint64>(GST_VIDEO_INFO_FPS_D(&video)),
+          static_cast<guint64>(GST_VIDEO_INFO_FPS_N(&video))
       );
     }
     (void)luciole::media::fitFrames(*pipeline);
@@ -242,9 +243,11 @@ std::optional<luciole::MediaFrame> luciole::media::takeFrame(Pipeline& pipeline)
   const auto* pixels = static_cast<const std::uint8_t*>(GST_VIDEO_FRAME_PLANE_DATA(&held->frame, 0));
   const std::span rgba(pixels, static_cast<std::size_t>(width) * static_cast<std::size_t>(height) * 4);
   const std::int64_t time = streamTime(sample);
-  return MediaFrame{.width = width,
-                    .height = height,
-                    .rgba = rgba,
-                    .hold = std::move(held),
-                    .time = time >= 0 ? static_cast<double>(time) / static_cast<double>(GST_SECOND) : -1};
+  return MediaFrame{
+      .width = width,
+      .height = height,
+      .rgba = rgba,
+      .hold = std::move(held),
+      .time = time >= 0 ? static_cast<double>(time) / static_cast<double>(GST_SECOND) : -1
+  };
 }

@@ -1,5 +1,5 @@
-#include "media_clips.h"
 #include "bink2_sample.h"
+#include "media_clips.h"
 #include "media_view_rig.h"
 #include "scene_capture.h"
 #include "test_check.h"
@@ -79,7 +79,8 @@ namespace {
     TEST_CHECK(rig.state() == MediaState::Playing && !rig.view->parked());
     rig.click(rig.view->stageArea());
     TEST_CHECK(rig.state() == MediaState::Paused);
-    // A seek is use: each one, and the settling after it, starts the wait again. Four of them take longer than one wait.
+    // A seek is use: each one, and the settling after it, starts the wait again. Four of them take longer than one
+    // wait.
     for (int i = 0; i < 4; ++i) {
       rig.pump.run(kLongIdle / 3);
       rig.key(XKB_KEY_Right);

@@ -104,7 +104,8 @@ namespace {
 
   // The picture of a paused video after a seek: parked first, then asked to seek by `ask`; once it has settled the
   // picture must be the frame at the target, the one a seek on a live player shows, and not the kept frame.
-  void aSeekWhileParkedAndPausedShowsTheFrameAtTheTarget(::test::SceneCapture& capture, const fs::path& ball, bool byBar) {
+  void
+  aSeekWhileParkedAndPausedShowsTheFrameAtTheTarget(::test::SceneCapture& capture, const fs::path& ball, bool byBar) {
     ViewRig rig(capture);
     playsPausesAndParks(rig, ball, 4.0);
     rig.view->setIdleRelease(60s); // it stays open while the test looks at it
@@ -297,19 +298,43 @@ int main() {
   TEST_CHECK(writeClip(shortClip, {.width = 64, .height = 48, .seconds = 3}));
   TEST_CHECK(writeClip(copy, {.width = 64, .height = 48, .seconds = 12}));
   TEST_CHECK(writeH264(slow, 3840, 2160, 15, 250));
-  { ViewRig rig(*capture); repeatedKeysWhileTheFileReopensAccumulate(rig, clip30); }
-  { ViewRig rig(*capture); anEndedVideoNeverShowsATimePastItsEnd(rig, shortClip); }
-  { ViewRig rig(*capture); leftWhileParkedSeeksBack(rig, clip30); }
+  {
+    ViewRig rig(*capture);
+    repeatedKeysWhileTheFileReopensAccumulate(rig, clip30);
+  }
+  {
+    ViewRig rig(*capture);
+    anEndedVideoNeverShowsATimePastItsEnd(rig, shortClip);
+  }
+  {
+    ViewRig rig(*capture);
+    leftWhileParkedSeeksBack(rig, clip30);
+  }
   neverShowsTheFirstFrameWhileResuming(*capture, ball);
   aSeekWhileParkedAndPausedShowsTheFrameAtTheTarget(*capture, ball, false);
   aSeekWhileParkedAndPausedShowsTheFrameAtTheTarget(*capture, ball, true);
   aDragRightAfterAReopenShowsFramesBeforeTheRelease(*capture, ball);
   anEndedFileReopenedForASeekNeverShowsTheFirstFrame(*capture, shortBall);
-  { ViewRig rig(*capture); aReopenShowsTheSeekingNotice(rig, slow); }
-  { ViewRig rig(*capture); aNewSourceWhileParkedLeavesNothingBehind(rig, clip30, other); }
-  { ViewRig rig(*capture); hidingAParkedViewClearsIt(rig, clip30); }
-  { ViewRig rig(*capture); aFileDeletedWhileParkedEndsInAnErrorWithNoStaleFrame(rig, copy); }
-  { ViewRig rig(*capture); loopAndMuteChosenWhileParkedApplyOnResume(rig, clip30); }
+  {
+    ViewRig rig(*capture);
+    aReopenShowsTheSeekingNotice(rig, slow);
+  }
+  {
+    ViewRig rig(*capture);
+    aNewSourceWhileParkedLeavesNothingBehind(rig, clip30, other);
+  }
+  {
+    ViewRig rig(*capture);
+    hidingAParkedViewClearsIt(rig, clip30);
+  }
+  {
+    ViewRig rig(*capture);
+    aFileDeletedWhileParkedEndsInAnErrorWithNoStaleFrame(rig, copy);
+  }
+  {
+    ViewRig rig(*capture);
+    loopAndMuteChosenWhileParkedApplyOnResume(rig, clip30);
+  }
   {
     // Destroyed while parked: the file is closed and nothing waits.
     {

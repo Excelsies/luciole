@@ -102,8 +102,10 @@ int main() {
     return ::test::kSkipExitCode;
   }
   Scratch scratch;
-  if (const auto missing = missingElements({"videotestsrc", "avimux", "filesink", "capsfilter", "avidemux", "playbin",
-                                            "appsink", "videoconvertscale", "fakesink"});
+  if (const auto missing = missingElements(
+          {"videotestsrc", "avimux", "filesink", "capsfilter", "avidemux", "playbin", "appsink", "videoconvertscale",
+           "fakesink"}
+      );
       !missing.empty()) {
     std::println("skipped: GStreamer lacks {}", missing);
     return ::test::kSkipExitCode;

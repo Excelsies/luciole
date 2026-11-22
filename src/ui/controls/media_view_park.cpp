@@ -29,8 +29,9 @@ void MediaView::park() {
     return;
   }
   const bool ended = m_player->state() == luciole::MediaState::Ended;
-  m_parked = Parked{.at = ended ? m_player->duration() : m_player->position(), .duration = m_player->duration(),
-                    .ended = ended};
+  m_parked = Parked{
+      .at = ended ? m_player->duration() : m_player->position(), .duration = m_player->duration(), .ended = ended
+  };
   m_player.reset();
   m_clock.stop();
   clearSeek();

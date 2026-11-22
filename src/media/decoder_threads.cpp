@@ -26,7 +26,8 @@ namespace {
 
   bool isVideoDecoder(GstElement* element) {
     GstElementFactory* factory = gst_element_get_factory(element);
-    const char* klass = factory != nullptr ? gst_element_factory_get_metadata(factory, GST_ELEMENT_METADATA_KLASS) : nullptr;
+    const char* klass =
+        factory != nullptr ? gst_element_factory_get_metadata(factory, GST_ELEMENT_METADATA_KLASS) : nullptr;
     const std::string_view text = klass != nullptr ? klass : "";
     return text.contains("Decoder") && text.contains("Video");
   }
@@ -39,7 +40,8 @@ namespace {
     }
     GstCaps* caps = nullptr;
     gst_event_parse_caps(event, &caps);
-    const GstStructure* shape = caps != nullptr && gst_caps_get_size(caps) > 0 ? gst_caps_get_structure(caps, 0) : nullptr;
+    const GstStructure* shape =
+        caps != nullptr && gst_caps_get_size(caps) > 0 ? gst_caps_get_structure(caps, 0) : nullptr;
     auto* element = static_cast<GstElement*>(data);
     GParamSpec* spec = threadProperty(element);
     int width = 0;
@@ -76,8 +78,8 @@ int luciole::media::decoderThreads(int width, int height, int rateNumerator, int
   if (width <= 0 || height <= 0 || cores <= 0) {
     return 0;
   }
-  const double rate = rateNumerator > 0 && rateDenominator > 0 ? static_cast<double>(rateNumerator) / rateDenominator
-                                                                : kAssumedRate;
+  const double rate =
+      rateNumerator > 0 && rateDenominator > 0 ? static_cast<double>(rateNumerator) / rateDenominator : kAssumedRate;
   // In double, clamped before it becomes an int: a crafted stream can state any size and rate.
   const double needed = std::ceil(static_cast<double>(width) * height * rate / kPixelsPerThread);
   return static_cast<int>(std::clamp(needed, 1.0, static_cast<double>(std::min(cores, kMaxDecoderThreads))));
