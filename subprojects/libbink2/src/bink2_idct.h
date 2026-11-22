@@ -21,5 +21,7 @@ void bink2_idct_add_plain(unsigned char *dst, int stride, const int16_t block[64
 /* Makes bink2_idct_put and bink2_idct_add run the plain C path while `on` is not zero. For tests; set it while no
  * frame is being decoded. */
 void bink2_idct_use_plain(int on);
+/* Whether the plain C paths are asked for; the other fast paths of the decoder read it too. */
+int bink2_idct_plain_requested(void);
 
 #endif

@@ -1,6 +1,7 @@
 /*
  * Modified for Luciole, 2026-11-22: the inverse transform of a block goes through bink2_idct_put and
- * bink2_idct_add (bink2_idct.c). Original: libbink2 commit ae2e413.
+ * bink2_idct_add (bink2_idct.c), and the AC levels of a block are dequantized where they were read, not for all 64
+ * places. Original: libbink2 commit ae2e413.
  */
 #include "bink2_tables.h"
 #include "bink2_video_new.h"
@@ -258,6 +259,89 @@ void bink2_new_read_dcs(Bink2Bits *bits, int32_t dcs[16], int count, int q)
     }
 }
 
+/*
+ * Reads one coded AC block as a list: `count` places in natural order and the
+ * quantized value at each, none of them zero. Returns 0, or -1 when the bits
+ * fail. A block that is not coded has an empty list.
+ */
+static int read_acs_listed(Bink2Bits *bits, uint8_t pos[64], int32_t val[64],
+                           int *count, uint32_t cbp)
+{
+    const uint16_t *skip_codes;
+    const uint8_t *skip_bits;
+    int idx = 1;
+    int next = 0;
+
+    *count = 0;
+    if (!(cbp & 1))
+        return 0;
+
+    if (cbp & 0xFFFF0000u) {
+        skip_codes = bink2g_ac_skip_codes[1];
+        skip_bits = bink2g_ac_skip_bits[1];
+    } else {
+        skip_codes = bink2g_ac_skip_codes[0];
+        skip_bits = bink2g_ac_skip_bits[0];
+    }
+
+    while (idx < 64) {
+        int level;
+
+        next--;
+        if (next < 1) {
+            int skip = new_read_vlc(bits, skip_codes, skip_bits, 14);
+
+            if (skip < 0) {
+                mark_failed(bits);
+                return -1;
+            }
+            next = bink2_next_skips[skip];
+            skip = new_skips[skip];
+            if (skip == 11) {
+                skip = bink2_bits_read(bits, 6);
+                if (skip < 0) {
+                    mark_failed(bits);
+                    return -1;
+                }
+            }
+            idx += skip;
+            if (idx >= 64)
+                break;
+        }
+
+        level = bink2_bits_read_unary(bits, 0, 12) + 1;
+        if (level < 1) {
+            mark_failed(bits);
+            return -1;
+        }
+        if (level > 3) {
+            int nbits = level - 3;
+            int extra = bink2_bits_read(bits, nbits);
+
+            if (extra < 0) {
+                mark_failed(bits);
+                return -1;
+            }
+            level = extra + (1 << nbits) + 2;
+        }
+        {
+            int sign = bink2_bits_read1(bits);
+
+            if (sign < 0) {
+                mark_failed(bits);
+                return -1;
+            }
+            if (sign)
+                level = -level;
+        }
+        pos[*count] = (uint8_t)bink2g_scan[idx];
+        val[*count] = level;
+        (*count)++;
+        idx++;
+    }
+    return 0;
+}
+
 void bink2_new_read_acs(Bink2Bits *bits, int32_t levels[64],
                         const uint16_t qmat[4][64], int q, uint32_t cbp)
 {
@@ -353,7 +437,15 @@ static int new_decode_dc(Bink2Video *v, Bink2Bits *bits, int is_luma,
     return 0;
 }
 
-static int new_decode_ac(Bink2Bits *bits, int16_t block[4][64],
+/* The quantized levels of a block, dequantized into block[]. */
+static int16_t dequant(int32_t level, const uint16_t *qmat, int q, int pos)
+{
+    int64_t scaled = (int64_t)level * qmat[pos] * ((int64_t)1 << (q >> 2));
+
+    return (int16_t)((scaled + 64) >> 7);
+}
+
+static int new_decode_ac_plain(Bink2Bits *bits, int16_t block[4][64],
                          unsigned cbp, int q,
                          const uint16_t qmat[4][64])
 {
@@ -372,6 +464,31 @@ static int new_decode_ac(Bink2Bits *bits, int16_t block[4][64],
 
             block[i][j] = (int16_t)((level + 64) >> 7);
         }
+    }
+    return 0;
+}
+
+static int new_decode_ac(Bink2Bits *bits, int16_t block[4][64],
+                         unsigned cbp, int q,
+                         const uint16_t qmat[4][64])
+{
+    int i, j;
+
+    if (bink2_idct_plain_requested())
+        return new_decode_ac_plain(bits, block, cbp, q, qmat);
+    for (i = 0; i < 4; i++) {
+        uint8_t pos[64];
+        int32_t val[64];
+        int count;
+        uint32_t block_cbp = (cbp & 0xFFFF0000u) | ((cbp >> i) & 1u);
+
+        if (read_acs_listed(bits, pos, val, &count, block_cbp) != 0 ||
+            bink2_bits_failed(bits))
+            return -1;
+        /* A place no level was read for dequantizes to (0 + 64) >> 7, zero. */
+        memset(block[i], 0, sizeof(block[i]));
+        for (j = 0; j < count; j++)
+            block[i][pos[j]] = dequant(val[j], qmat[q & 3], q, pos[j]);
     }
     return 0;
 }

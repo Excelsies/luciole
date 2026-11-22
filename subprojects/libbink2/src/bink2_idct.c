@@ -14,6 +14,11 @@ void bink2_idct_use_plain(int on)
     use_plain = on;
 }
 
+int bink2_idct_plain_requested(void)
+{
+    return use_plain;
+}
+
 void bink2_idct_put_plain(unsigned char *dst, int stride, const int16_t block[64])
 {
     int32_t tmp[64];
