@@ -2449,6 +2449,7 @@ void BrowserPage::prepareFrame(bool, bool layout) {
   m_sidebar.onFrame();
   m_mountController.onFrame();
   m_archiveController.onFrame();
+  m_transferController.onFrame();
   m_transferController.syncConflict();
   m_trashController.onFrame();
   m_createController.onFrame();
