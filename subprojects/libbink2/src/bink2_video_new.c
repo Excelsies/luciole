@@ -1,3 +1,7 @@
+/*
+ * Modified for Luciole, 2026-11-22: the inverse transform of a block goes through bink2_idct_put and
+ * bink2_idct_add (bink2_idct.c). Original: libbink2 commit ae2e413.
+ */
 #include "bink2_tables.h"
 #include "bink2_video_new.h"
 #include "bink2_video.h"
