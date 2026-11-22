@@ -52,8 +52,10 @@ namespace {
     return true;
   }
 
-  // Shrinks rows that lie `stride` bytes apart to RGBA straight from the pixbuf, as resizeToRgba does for packed rows
-  // (same filters and color handling); a packed copy of a large picture would double the helper's peak memory.
+  // Shrinks rows that lie `stride` bytes apart to RGBA straight from the pixbuf; a packed copy of a large picture would
+  // double the helper's peak memory. The filter is stb's default (Mitchell when shrinking) applied to the stored
+  // values, as the loader's own scaling did: averaging in linear light lifts the mean of stripes, thin dark lines and
+  // small text on white, which then look fainter.
   std::vector<std::uint8_t> resizeRows(
       const std::uint8_t* pixels, int width, int height, int stride, ResizeSourceLayout layout, ImageExtent target
   ) {
@@ -62,8 +64,7 @@ namespace {
     const auto stbLayout = packedRgb ? STBIR_RGB : (layout == ResizeSourceLayout::Rgba ? STBIR_RGBA : STBIR_RGBA_PM);
     STBIR_RESIZE resize;
     stbir_resize_init(
-        &resize, pixels, width, height, stride, out.data(), target.width, target.height, 0, stbLayout,
-        STBIR_TYPE_UINT8_SRGB
+        &resize, pixels, width, height, stride, out.data(), target.width, target.height, 0, stbLayout, STBIR_TYPE_UINT8
     );
     if (stbir_resize_extended(&resize) == 0) {
       return {};
@@ -227,8 +228,7 @@ luciole::fitRasterPixels(GdkPixbuf* pixbuf, int target, std::uint64_t maxPixels)
     const auto layout = channels == 3             ? ResizeSourceLayout::Rgb
         : isOpaque(pixels, width, height, stride) ? ResizeSourceLayout::Rgbx
                                                   : ResizeSourceLayout::Rgba;
-    auto resized = stride == width * channels ? resizeToRgba(pixels, width, height, layout, fitted.width, fitted.height)
-                                              : resizeRows(pixels, width, height, stride, layout, fitted);
+    auto resized = resizeRows(pixels, width, height, stride, layout, fitted);
     if (resized.empty()) {
       return std::unexpected("cannot scale decoded image");
     }

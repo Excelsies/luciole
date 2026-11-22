@@ -222,30 +222,47 @@ namespace {
     TEST_CHECK(!luciole::readThumbnailPng(sharedPng(std::move(oversized), PNG_TEXT_COMPRESSION_zTXt), 128));
   }
 
-  // A picture of one-pixel black lines on white, eight pixels apart, shrunk eightfold: each result pixel covers one
-  // line, so in linear light it holds seven eighths of white, which is 240 in sRGB. Averaging the encoded values
-  // instead gives 223 and shows as a darker picture.
+  // Pictures of one-pixel lines (or alternating columns) eight pixels apart, shrunk eightfold: each result pixel covers
+  // one period, so the mean stored level of the result is the mean of the source, and averaging in linear light would
+  // lift it (a half and half stripe picture from 127.5 to about 138, black lines on white from 223 to about 240).
+  // The mean of the middle of the result must stay within 2.5 levels of the source's.
   void testShrunkLinesKeepTheirBrightness() {
-    const GioPtr<GCancellable> cancel(g_cancellable_new());
-    LoadedImageFile lines{.rgba = std::vector<std::uint8_t>(1024U * 768U * 4U, 255), .width = 1024, .height = 768};
-    for (int y = 0; y < 768; ++y) {
-      for (int x = 0; x < 1024; x += 8) {
-        for (int c = 0; c < 3; ++c) {
-          lines.rgba[(static_cast<std::size_t>(y) * 1024 + x) * 4 + c] = 0;
+    struct Case {
+      const char* name;
+      int background;
+      int line;
+      int period;
+      int lineWidth;
+    };
+    for (const Case& test :
+         {Case{"dark lines on white", 255, 0, 8, 1}, Case{"light lines on black", 0, 255, 8, 1},
+          Case{"stripes", 0, 255, 8, 4}}) {
+      LoadedImageFile lines{.rgba = std::vector<std::uint8_t>(1024U * 768U * 4U, 255), .width = 1024, .height = 768};
+      for (int y = 0; y < 768; ++y) {
+        for (int x = 0; x < 1024; ++x) {
+          const int level = x % test.period < test.lineWidth ? test.line : test.background;
+          for (int c = 0; c < 3; ++c) {
+            lines.rgba[(static_cast<std::size_t>(y) * 1024 + x) * 4 + c] = static_cast<std::uint8_t>(level);
+          }
         }
       }
-    }
-    const auto decoded = luciole::decodeRasterImage(png(lines), 128, 2'000'000, nullptr);
-    TEST_CHECK(decoded && decoded->width == 128 && decoded->height == 96);
-    double sum = 0;
-    int count = 0;
-    for (int y = 10; y < 86; ++y) {
-      for (int x = 10; x < 118; ++x) {
-        sum += decoded->rgba[(static_cast<std::size_t>(y) * 128 + x) * 4 + 1];
-        ++count;
+      const double expected = (test.background * (test.period - test.lineWidth) + test.line * test.lineWidth)
+          / static_cast<double>(test.period);
+      const auto decoded = luciole::decodeRasterImage(png(lines), 128, 2'000'000, nullptr);
+      TEST_CHECK(decoded && decoded->width == 128 && decoded->height == 96);
+      double sum = 0;
+      int count = 0;
+      for (int y = 10; y < 86; ++y) {
+        for (int x = 10; x < 118; ++x) {
+          sum += decoded->rgba[(static_cast<std::size_t>(y) * 128 + x) * 4 + 1];
+          ++count;
+        }
       }
+      if (std::abs(sum / count - expected) >= 2.5) {
+        std::println(stderr, "{}: mean {:.1f}, source {:.1f}", test.name, sum / count, expected);
+      }
+      TEST_CHECK(std::abs(sum / count - expected) < 2.5);
     }
-    TEST_CHECK(std::abs(sum / count - 240.4) < 4.0);
   }
 
   void testCodecs() {

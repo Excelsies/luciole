@@ -10,6 +10,7 @@
 #include <gdk-pixbuf/gdk-pixbuf.h>
 #include <memory>
 #include <print>
+#include <stb/stb_image_resize2.h>
 #include <string>
 #include <sys/resource.h>
 #include <sys/wait.h>
@@ -100,6 +101,34 @@ namespace {
   const Alpha kOpaque = [](int, int) -> std::uint8_t { return 255; };
   const Alpha kVaried = [](int x, int y) { return channel(x, y, 3); };
 
+  // The shrink the thumbnails are made with, done independently on packed rows: stb's default filter on the stored
+  // values, straight alpha weighted, opaque ("Rgbx") without weighting and with alpha 255.
+  std::vector<std::uint8_t> reference(
+      const std::uint8_t* rows, int width, int height, ResizeSourceLayout layout, int targetWidth, int targetHeight
+  ) {
+    const bool rgb = layout == ResizeSourceLayout::Rgb;
+    const auto stbLayout = rgb ? STBIR_RGB : (layout == ResizeSourceLayout::Rgba ? STBIR_RGBA : STBIR_RGBA_PM);
+    const std::size_t pixels = static_cast<std::size_t>(targetWidth) * targetHeight;
+    std::vector<std::uint8_t> shrunk(pixels * (rgb ? 3U : 4U));
+    TEST_CHECK(
+        stbir_resize(
+            rows, width, height, 0, shrunk.data(), targetWidth, targetHeight, 0, stbLayout, STBIR_TYPE_UINT8,
+            STBIR_EDGE_CLAMP, STBIR_FILTER_DEFAULT
+        )
+        != nullptr
+    );
+    std::vector<std::uint8_t> out(pixels * 4U, 255);
+    for (std::size_t i = 0; i < pixels; ++i) {
+      for (std::size_t c = 0; c < 3; ++c) {
+        out[i * 4U + c] = shrunk[i * (rgb ? 3U : 4U) + c];
+      }
+      if (layout == ResizeSourceLayout::Rgba) {
+        out[i * 4U + 3U] = shrunk[i * 4U + 3U];
+      }
+    }
+    return out;
+  }
+
   ResizeSourceLayout layoutOf(int channels) {
     return channels == 4 ? ResizeSourceLayout::Rgba : ResizeSourceLayout::Rgb;
   }
@@ -111,7 +140,7 @@ namespace {
       const auto fitted = luciole::fitRasterPixels(pixbuf, 128, 10'000'000);
       TEST_CHECK(fitted && fitted->width == 128 && fitted->height == 82);
       const auto rows = packed(pixbuf);
-      TEST_CHECK(fitted->rgba == resizeToRgba(rows.data(), 1001, 640, layoutOf(channels), 128, 82));
+      TEST_CHECK(fitted->rgba == reference(rows.data(), 1001, 640, layoutOf(channels), 128, 82));
     };
     const auto rgb = make(1001, 640, false, -1);
     TEST_CHECK(gdk_pixbuf_get_rowstride(rgb.get()) != 1001 * 3);
@@ -134,7 +163,7 @@ namespace {
       const auto fitted = luciole::fitRasterPixels(pixbuf, 64, 10'000'000);
       TEST_CHECK(fitted && fitted->width == 64 && fitted->height == 48);
       const auto rows = packed(pixbuf);
-      TEST_CHECK(fitted->rgba == resizeToRgba(rows.data(), 2001, 1500, ResizeSourceLayout::Rgbx, 64, 48));
+      TEST_CHECK(fitted->rgba == reference(rows.data(), 2001, 1500, ResizeSourceLayout::Rgbx, 64, 48));
       for (std::size_t i = 0; i < fitted->rgba.size(); ++i) {
         TEST_CHECK(i % 4 == 3 ? fitted->rgba[i] == 255 : std::abs(fitted->rgba[i] - plain->rgba[i]) <= 1);
       }
@@ -151,8 +180,8 @@ namespace {
   void theOpaqueAndStraightAlphaPathsAgreeOnAnOpaquePicture() {
     const auto pixbuf = make(2001, 1500, true, 255);
     const auto rows = packed(pixbuf.get());
-    const auto opaque = resizeToRgba(rows.data(), 2001, 1500, ResizeSourceLayout::Rgbx, 64, 48);
-    const auto straight = resizeToRgba(rows.data(), 2001, 1500, ResizeSourceLayout::Rgba, 64, 48);
+    const auto opaque = reference(rows.data(), 2001, 1500, ResizeSourceLayout::Rgbx, 64, 48);
+    const auto straight = reference(rows.data(), 2001, 1500, ResizeSourceLayout::Rgba, 64, 48);
     TEST_CHECK(opaque.size() == straight.size() && !opaque.empty());
     int worst = 0;
     for (std::size_t i = 0; i < opaque.size(); ++i) {
@@ -178,8 +207,8 @@ namespace {
           const auto fitted = luciole::fitRasterPixels(picture.pixbuf.get(), 128, 10'000'000);
           TEST_CHECK(fitted && fitted->width == 128 && fitted->height == 82);
           const auto rows = packed(picture.pixbuf.get());
-          TEST_CHECK(fitted->rgba == resizeToRgba(rows.data(), 1001, 640, ResizeSourceLayout::Rgba, 128, 82));
-          const auto opaque = resizeToRgba(rows.data(), 1001, 640, ResizeSourceLayout::Rgbx, 128, 82);
+          TEST_CHECK(fitted->rgba == reference(rows.data(), 1001, 640, ResizeSourceLayout::Rgba, 128, 82));
+          const auto opaque = reference(rows.data(), 1001, 640, ResizeSourceLayout::Rgbx, 128, 82);
           int worstColor = 0;
           bool translucent = false;
           for (std::size_t i = 0; i < fitted->rgba.size(); ++i) {
