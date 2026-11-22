@@ -10,6 +10,8 @@ namespace {
   constexpr double kPixelsPerThread = 60e6;
   constexpr int kMaxDecoderThreads = 16;
   constexpr int kAssumedRate = 60;
+  // What a sample deeper than 8 bits costs to decode, against one of 8 bits.
+  constexpr double kDeepCost = 1.5;
 
   // The writable property that bounds a software decoder's threads, or null.
   GParamSpec* threadProperty(GstElement* element) {
@@ -55,9 +57,12 @@ namespace {
       return GST_PAD_PROBE_OK;
     }
     (void)gst_structure_get_fraction(shape, "framerate", &numerator, &denominator);
+    guint depth = 8; // the parser states it for HEVC and the like; absent, the stream counts as 8 bits
+    (void)gst_structure_get_uint(shape, "bit-depth-luma", &depth);
     // No count of cores (0) leaves the decoder to its own choice.
     const int threads = luciole::media::decoderThreads(
-        width, height, numerator, denominator, static_cast<int>(std::thread::hardware_concurrency())
+        width, height, numerator, denominator, static_cast<int>(std::thread::hardware_concurrency()),
+        static_cast<int>(depth)
     );
     if (threads > 0) {
       GValue value = G_VALUE_INIT;
@@ -74,14 +79,17 @@ namespace {
   }
 } // namespace
 
-int luciole::media::decoderThreads(int width, int height, int rateNumerator, int rateDenominator, int cores) {
+int luciole::media::decoderThreads(
+    int width, int height, int rateNumerator, int rateDenominator, int cores, int bitDepth
+) {
   if (width <= 0 || height <= 0 || cores <= 0) {
     return 0;
   }
   const double rate =
       rateNumerator > 0 && rateDenominator > 0 ? static_cast<double>(rateNumerator) / rateDenominator : kAssumedRate;
   // In double, clamped before it becomes an int: a crafted stream can state any size and rate.
-  const double needed = std::ceil(static_cast<double>(width) * height * rate / kPixelsPerThread);
+  const double cost = bitDepth > 8 ? kDeepCost : 1.0;
+  const double needed = std::ceil(static_cast<double>(width) * height * rate * cost / kPixelsPerThread);
   return static_cast<int>(std::clamp(needed, 1.0, static_cast<double>(std::min(cores, kMaxDecoderThreads))));
 }
 

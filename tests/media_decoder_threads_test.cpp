@@ -4,6 +4,7 @@
 #include "media_clips.h"
 #include "test_check.h"
 
+#include <cstdlib>
 #include <filesystem>
 #include <format>
 #include <fstream>
@@ -33,6 +34,15 @@ namespace {
     TEST_CHECK(decoderThreads(3840, 2160, 60, 1, kCores) == 9);
     // 29.97 and 59.94 frames a second are the same cost as 30 and 60.
     TEST_CHECK(decoderThreads(3840, 2160, 30000, 1001, kCores) == 5);
+  }
+
+  // A stream deeper than 8 bits per sample is counted at one and a half times its pixel rate.
+  void countsDeeperStreamsAtOneAndAHalfTimes() {
+    TEST_CHECK(decoderThreads(3840, 2160, 60, 1, kCores, 10) == 13);
+    TEST_CHECK(decoderThreads(3840, 2160, 30, 1, kCores, 10) == 7);
+    TEST_CHECK(decoderThreads(3840, 2160, 30, 1, kCores, 8) == 5);
+    TEST_CHECK(decoderThreads(3840, 2160, 30, 1, kCores, 0) == 5);
+    TEST_CHECK(decoderThreads(1280, 720, 30, 1, kCores, 12) == 1);
   }
 
   void boundsThreadsByTheCoresAndTheDecoderLimit() {
@@ -118,6 +128,25 @@ namespace {
     );
   }
 
+  // A 10-bit HEVC clip made with ffmpeg when it is there: its decoder gets the count of one and a half times the rate.
+  void givesADeeperStreamMoreThreads(Scratch& scratch) {
+    const auto clip = scratch.path("deep.mp4");
+    const auto make = std::format(
+        "ffmpeg -hide_banner -loglevel error -y -f lavfi -i testsrc2=s=3840x2160:r=30:d=1 -c:v libx265 -preset "
+        "ultrafast -x265-params log-level=error -pix_fmt yuv420p10le -an \"{}\"",
+        clip.string()
+    );
+    if (std::system(make.c_str()) != 0 || !fs::exists(clip)) {
+      std::println("a 10-bit stream is not checked: ffmpeg made no file");
+      return;
+    }
+    const auto decoder = decoderOf(clip);
+    TEST_CHECK(decoder.has_value());
+    const int cores = static_cast<int>(std::thread::hardware_concurrency());
+    std::println("10-bit 4K30: {} has {} threads", decoder->element, decoder->threads);
+    TEST_CHECK(decoder->threads == decoderThreads(3840, 2160, 30, 1, cores, 10));
+  }
+
   // The decoder gets the count the pure function gives for the stream, read from the element itself.
   void givesEachDecoderTheThreadsItsStreamNeeds(Scratch& scratch) {
     struct Case {
@@ -142,6 +171,7 @@ namespace {
 
 int main() {
   countsThreadsFromThePixelRate();
+  countsDeeperStreamsAtOneAndAHalfTimes();
   boundsThreadsByTheCoresAndTheDecoderLimit();
   survivesCraftedValues();
   leavesUnknownStreamsToTheDecoder();
@@ -161,5 +191,6 @@ int main() {
     return ::test::kSkipExitCode;
   }
   givesEachDecoderTheThreadsItsStreamNeeds(scratch);
+  givesADeeperStreamMoreThreads(scratch);
   return 0;
 }
