@@ -452,7 +452,7 @@ private:
   DragDropController m_dragDrop{*this,   m_connection, m_pins,    m_transferController, m_thumbnails,
                                 m_icons, m_miller,     m_sidebar, m_locationBar};
   FileKeyboardController m_fileKeys{*this, m_textInput, m_miller, m_menuController, m_locationBar, m_statusBar};
-  StatusBarController m_statusBar{*this, m_pins, m_settingsController, m_fileKeys};
+  StatusBarController m_statusBar{*this, m_animations, m_pins, m_settingsController, m_fileKeys};
   std::size_t m_gridZoom = 1;
   int m_listIconSize = 0;
   int m_millerIconSize = 0;
