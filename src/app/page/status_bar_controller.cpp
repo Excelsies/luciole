@@ -314,6 +314,16 @@ void StatusBarController::arrange(Renderer& renderer, float width, float height)
   const float inset = Style::spaceSm;
   const float trailing = inset + Style::scrollbarWidth + Style::scrollbarGap;
   const float maximum = std::max(1.0F, width - inset - trailing);
+  // Text budget inside the tab; the message gives way first so the status after it stays readable.
+  float budget = maximum - 2.0F * Style::spaceMd;
+  if (m_freeSpace->visible()) {
+    budget -= Style::spaceMd + m_freeSpace->Node::measure(renderer, {}).width;
+  }
+  budget = std::max(1.0F, budget);
+  m_status->setMaxWidth(budget);
+  m_message->setMaxWidth(
+      m_message->visible() ? std::max(1.0F, budget - m_status->Node::measure(renderer, {}).width) : 0.0F
+  );
   LayoutConstraints constraints;
   constraints.setMaxWidth(maximum);
   const auto size = m_pill->measure(renderer, constraints);
