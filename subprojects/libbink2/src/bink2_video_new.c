@@ -1,7 +1,7 @@
 /*
  * Modified for Luciole, 2026-11-22: the inverse transform of a block goes through bink2_idct_put and
  * bink2_idct_add (bink2_idct.c), and the AC levels of a block are dequantized where they were read, not for all 64
- * places. The DC of an inter block is limited to 2047 when the frame flag 0x40000 is set (it was always 1023), as in
+ * places. The DC of an inter block is limited to 2047 when the frame flag 0x40000 is set and to 1023 otherwise, as in
  * the reference decoder. Original: libbink2 commit ae2e413.
  */
 #include "bink2_tables.h"
@@ -910,8 +910,8 @@ static int new_decode_inter_luma(Bink2Video *v, Bink2Bits *bits,
         return -1;
     *prev_cbp = cbp;
     (void)flags;
-    if (new_decode_dc(v, bits, 1, q, -bink2_new_inter_dc_limit(v), bink2_new_inter_dc_limit(v),
-                      0xA8) != 0)
+    if (new_decode_dc(v, bits, 1, q, -bink2_new_inter_dc_limit(v),
+                      bink2_new_inter_dc_limit(v), 0xA8) != 0)
         return -1;
 
     for (i = 0; i < 4; i++) {
@@ -943,8 +943,8 @@ static int new_decode_inter_chroma(Bink2Video *v, Bink2Bits *bits,
     if (bink2_bits_failed(bits))
         return -1;
     *prev_cbp = cbp;
-    if (new_decode_dc(v, bits, 0, q, -bink2_new_inter_dc_limit(v), bink2_new_inter_dc_limit(v),
-                      0xA8) != 0)
+    if (new_decode_dc(v, bits, 0, q, -bink2_new_inter_dc_limit(v),
+                      bink2_new_inter_dc_limit(v), 0xA8) != 0)
         return -1;
     if (new_decode_ac(bits, block, cbp, q, bink2g_inter_qmat, &coded) != 0)
         return -1;
