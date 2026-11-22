@@ -245,37 +245,10 @@ void MediaView::onKey(const InputArea::KeyData& key) {
   }
 }
 
-bool MediaView::openPlayer() {
-  m_player = std::make_unique<luciole::MediaPlayer>(m_audio);
-  m_player->setChangedCallback([this] { playerChanged(); });
-  m_player->setFrameCallback([this] { scheduleCatchUp(); });
-  m_player->setMuted(m_muted);
-  m_player->setLoop(m_looping);
-  m_player->setFrameSize(m_stagePixels.first, m_stagePixels.second);
-  m_askedPixels = m_stagePixels;
-  if (!m_player->open(m_path)) {
-    refreshControls();
-    return false;
-  }
-  return true;
-}
-
-// Play: a parked video goes on from where it stopped, an ended one from the start.
-void MediaView::start() {
-  if (!openPlayer()) {
-    return;
-  }
-  if (m_parked && !m_parked->ended) {
-    m_player->seek(m_parked->at);
-    watchSeek();
-  }
-  m_playRequested = true;
-  m_player->play();
-}
-
 void MediaView::stop() {
   m_player.reset();
   m_parked.reset();
+  m_awaiting.reset();
   m_idle.stop();
   m_clock.stop();
   clearSeek();
@@ -313,6 +286,9 @@ void MediaView::scrub(double fraction, SeekMode mode, bool done) {
   if (!m_player || duration <= 0) {
     return;
   }
+  if (m_player->state() != MediaState::Loading) {
+    m_awaiting.reset(); // a seek on a file that has loaded flushes what came before it
+  }
   m_dragging = !done;
   m_dragSeconds = std::clamp(fraction, 0.0, 1.0) * duration;
   m_player->seek(m_dragSeconds, mode);
@@ -326,6 +302,9 @@ void MediaView::playerChanged() {
   const auto state = m_player->state();
   if (m_parked && state != MediaState::Loading && !m_player->seeking()) {
     m_parked.reset();
+  }
+  if (m_awaiting) {
+    scheduleCatchUp(); // the frame at the place may be waiting, and the wait ends once the player has settled
   }
   if (state == MediaState::Ended || state == MediaState::Error) {
     m_playRequested = false;
@@ -467,13 +446,20 @@ void MediaView::catchUp() {
     m_askedPixels = m_stagePixels;
     m_player->setFrameSize(m_stagePixels.first, m_stagePixels.second);
   }
-  // A parked file opening again shows its kept frame until the one at the place it goes on from arrives.
-  if (const auto frame = m_parked ? std::nullopt : m_player->takeFrame()) {
-    const bool first = !m_showingFrame;
-    showFrame(*frame);
-    if (first) {
-      refreshControls();
+  if (const auto frame = m_player->takeFrame()) {
+    // A parked file opening again keeps its frame until one from the place it goes on from arrives; a frame from
+    // before that place is dropped. A frame with no time is the one a seek leaves, which has none.
+    if (!m_awaiting || frame->time < 0 || frame->time >= *m_awaiting - kFrameSlack) {
+      m_awaiting.reset();
+      const bool first = !m_showingFrame;
+      showFrame(*frame);
+      if (first) {
+        refreshControls();
+      }
     }
+  }
+  if (m_awaiting && m_player->state() != MediaState::Loading && !m_player->seeking()) {
+    m_awaiting.reset(); // settled with no frame from the place: the kept one stands
   }
 }
 

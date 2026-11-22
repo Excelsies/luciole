@@ -44,6 +44,8 @@ public:
   // A seek in flight this long shows "Seeking..." beside the time; the watch looks every kSeekWatchInterval.
   static constexpr std::chrono::milliseconds kSeekNoticeDelay{300};
   static constexpr std::chrono::milliseconds kSeekWatchInterval{100};
+  // A frame this much before the place a reopened file goes on from still counts as at it.
+  static constexpr double kFrameSlack = 0.5;
 
   // A video that sits paused or ended this long gives its pipeline back; its last frame, time and bar stay.
   static constexpr std::chrono::milliseconds kIdleRelease{30'000};
@@ -198,6 +200,8 @@ private:
     bool ended = false;
   };
   std::optional<Parked> m_parked;
+  // While a parked file opens again: where it goes on from. Frames from before that place are not shown.
+  std::optional<double> m_awaiting;
   Timer m_idle; // waits kIdleRelease after the video paused or ended
   std::chrono::milliseconds m_idleRelease = kIdleRelease;
   std::chrono::milliseconds m_seekNoticeDelay = kSeekNoticeDelay;

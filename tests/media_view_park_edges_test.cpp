@@ -8,6 +8,7 @@
 #include "ui/controls/media_view.h"
 
 #include <chrono>
+#include <cmath>
 #include <cstdlib>
 #include <filesystem>
 #include <format>
@@ -99,6 +100,83 @@ namespace {
       }
     }
     TEST_CHECK(rig.state() == MediaState::Playing);
+  }
+
+  // The picture of a paused video after a seek: parked first, then asked to seek by `ask`; once it has settled the
+  // picture must be the frame at the target, the one a seek on a live player shows, and not the kept frame.
+  void aSeekWhileParkedAndPausedShowsTheFrameAtTheTarget(::test::SceneCapture& capture, const fs::path& ball, bool byBar) {
+    ViewRig rig(capture);
+    playsPausesAndParks(rig, ball, 4.0);
+    rig.view->setIdleRelease(60s); // it stays open while the test looks at it
+    const auto kept = drawn(rig);
+    if (byBar) {
+      rig.click(rig.view->positionBar(), 0.75F);
+    } else {
+      rig.key(XKB_KEY_Right);
+    }
+    TEST_CHECK(rig.until([&] { return settledAndOpen(rig) && rig.state() == MediaState::Paused; }));
+    rig.pump.run(300ms);
+    const auto shown = drawn(rig);
+    // The same target again on the live player: a seek away and back.
+    const double target = rig.position();
+    rig.click(rig.view->positionBar(), 0.1F);
+    TEST_CHECK(rig.until([&] { return !rig.view->player()->seeking() && rig.position() < 3.0; }));
+    rig.click(rig.view->positionBar(), static_cast<float>(target / 12.0));
+    TEST_CHECK(rig.until([&] { return !rig.view->player()->seeking() && std::abs(rig.position() - target) < 0.2; }));
+    rig.pump.run(300ms);
+    const auto expected = drawn(rig);
+    TEST_CHECK(differing(kept, expected, rig.view->stageArea()) > 40);
+    TEST_CHECK(differing(shown, expected, rig.view->stageArea()) < 40);
+  }
+
+  // A drag on the bar right after a reopen shows frames along the way, before the button is released.
+  void aDragRightAfterAReopenShowsFramesBeforeTheRelease(::test::SceneCapture& capture, const fs::path& ball) {
+    ViewRig rig(capture);
+    playsPausesAndParks(rig, ball, 4.0);
+    rig.view->setIdleRelease(60s);
+    const auto& bar = rig.view->positionBar();
+    float x = 0;
+    float y = 0;
+    Node::absolutePosition(&bar, x, y);
+    rig.press(x + bar.width() * 0.5F, y + bar.height() / 2);
+    TEST_CHECK(rig.until([&] { return rig.view->player() != nullptr && rig.state() != MediaState::Loading; }));
+    rig.pump.run(300ms);
+    const auto first = drawn(rig);
+    rig.dispatcher.pointerMotion(x + bar.width() * 0.9F, y + bar.height() / 2, ++rig.serial);
+    rig.pump.run(600ms);
+    const auto later = drawn(rig);
+    TEST_CHECK(differing(first, later, rig.view->stageArea()) > 20);
+    rig.release(x + bar.width() * 0.9F, y + bar.height() / 2);
+  }
+
+  // An ended file reopened for a seek that yields no new frame keeps the last picture; the first frame of the file
+  // never shows, also when a catch-up comes later, as after a resize.
+  void anEndedFileReopenedForASeekNeverShowsTheFirstFrame(::test::SceneCapture& capture, const fs::path& shortBall) {
+    ::test::GlPixels first;
+    {
+      ViewRig rig(capture);
+      rig.view->setSource(shortBall.string());
+      rig.click(rig.view->stageArea());
+      rig.playing();
+      rig.click(rig.view->stageArea());
+      rig.click(rig.view->positionBar(), 0.0F);
+      first = drawn(rig);
+    }
+    ViewRig rig(capture);
+    rig.view->setIdleRelease(kIdle);
+    rig.view->setSource(shortBall.string());
+    rig.click(rig.view->stageArea());
+    TEST_CHECK(rig.until([&] { return rig.state() == MediaState::Ended; }, 10000ms));
+    TEST_CHECK(rig.until([&] { return rig.view->parked(); }, 5000ms));
+    rig.view->setIdleRelease(60s);
+    const auto kept = drawn(rig);
+    TEST_CHECK(differing(kept, first, rig.view->stageArea()) > 40);
+    rig.click(rig.view->positionBar(), 0.99F);
+    TEST_CHECK(rig.until([&] { return settledAndOpen(rig); }));
+    rig.width += 40; // a new size asks for a catch-up
+    for (int i = 0; i < 60; ++i) {
+      TEST_CHECK(differing(rig.frame(), first, rig.view->stageArea()) > 40);
+    }
   }
 
   // A reopen shows the notice a seek shows. The notice waits for a seek to take long; here it shows at the first look,
@@ -209,11 +287,13 @@ int main() {
   const auto ball = scratch.path("ball.avi");
   const auto other = scratch.path("other.avi");
   const auto shortClip = scratch.path("short3.avi");
+  const auto shortBall = scratch.path("shortball.avi");
   const auto copy = scratch.path("copy.avi");
   const auto slow = scratch.path("slow.mp4");
   TEST_CHECK(writeClip(clip30, {.width = 64, .height = 48, .seconds = 30}));
   TEST_CHECK(writeClip(ball, {.width = 64, .height = 48, .seconds = 12, .pattern = "ball"}));
   TEST_CHECK(writeClip(other, {.width = 64, .height = 48, .seconds = 12}));
+  TEST_CHECK(writeClip(shortBall, {.width = 64, .height = 48, .seconds = 3, .pattern = "ball"}));
   TEST_CHECK(writeClip(shortClip, {.width = 64, .height = 48, .seconds = 3}));
   TEST_CHECK(writeClip(copy, {.width = 64, .height = 48, .seconds = 12}));
   TEST_CHECK(writeH264(slow, 3840, 2160, 15, 250));
@@ -221,6 +301,10 @@ int main() {
   { ViewRig rig(*capture); anEndedVideoNeverShowsATimePastItsEnd(rig, shortClip); }
   { ViewRig rig(*capture); leftWhileParkedSeeksBack(rig, clip30); }
   neverShowsTheFirstFrameWhileResuming(*capture, ball);
+  aSeekWhileParkedAndPausedShowsTheFrameAtTheTarget(*capture, ball, false);
+  aSeekWhileParkedAndPausedShowsTheFrameAtTheTarget(*capture, ball, true);
+  aDragRightAfterAReopenShowsFramesBeforeTheRelease(*capture, ball);
+  anEndedFileReopenedForASeekNeverShowsTheFirstFrame(*capture, shortBall);
   { ViewRig rig(*capture); aReopenShowsTheSeekingNotice(rig, slow); }
   { ViewRig rig(*capture); aNewSourceWhileParkedLeavesNothingBehind(rig, clip30, other); }
   { ViewRig rig(*capture); hidingAParkedViewClearsIt(rig, clip30); }

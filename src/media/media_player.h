@@ -47,6 +47,7 @@ namespace luciole {
     int height = 0;
     std::span<const std::uint8_t> rgba;
     std::shared_ptr<const void> hold;
+    double time = -1; // seconds from the start of the file; -1 when the stream gave none
   };
 
   // Plays one local video or audio file. Decoding and pipeline changes run on other threads; every call here
