@@ -40,6 +40,15 @@ namespace {
     bink2_idct_add_plain(plainAdd.data(), kStride, block.data());
     TEST_CHECK(fastPut == plainPut);
     TEST_CHECK(fastAdd == plainAdd);
+    // A block known to hold only its first coefficient has its own entry.
+    if (std::all_of(block.begin() + 1, block.end(), [](std::int16_t value) { return value == 0; })) {
+      auto dcPut = start;
+      auto dcAdd = start;
+      bink2_idct_put_dc(dcPut.data(), kStride, block[0]);
+      bink2_idct_add_dc(dcAdd.data(), kStride, block[0]);
+      TEST_CHECK(dcPut == plainPut);
+      TEST_CHECK(dcAdd == plainAdd);
+    }
   }
 
   void extremeBlocks() {

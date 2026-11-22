@@ -447,10 +447,11 @@ static int16_t dequant(int32_t level, const uint16_t *qmat, int q, int pos)
 
 static int new_decode_ac_plain(Bink2Bits *bits, int16_t block[4][64],
                          unsigned cbp, int q,
-                         const uint16_t qmat[4][64])
+                         const uint16_t qmat[4][64], unsigned *coded)
 {
     int i, j;
 
+    *coded = 0xF;
     for (i = 0; i < 4; i++) {
         int32_t vals[64];
         uint32_t block_cbp = (cbp & 0xFFFF0000u) | ((cbp >> i) & 1u);
@@ -468,14 +469,19 @@ static int new_decode_ac_plain(Bink2Bits *bits, int16_t block[4][64],
     return 0;
 }
 
+/*
+ * Reads and dequantizes the AC levels of four blocks. `coded` gets a bit for
+ * each block that has a level: the others hold nothing but their DC.
+ */
 static int new_decode_ac(Bink2Bits *bits, int16_t block[4][64],
                          unsigned cbp, int q,
-                         const uint16_t qmat[4][64])
+                         const uint16_t qmat[4][64], unsigned *coded)
 {
     int i, j;
 
+    *coded = 0;
     if (bink2_idct_plain_requested())
-        return new_decode_ac_plain(bits, block, cbp, q, qmat);
+        return new_decode_ac_plain(bits, block, cbp, q, qmat, coded);
     for (i = 0; i < 4; i++) {
         uint8_t pos[64];
         int32_t val[64];
@@ -485,6 +491,9 @@ static int new_decode_ac(Bink2Bits *bits, int16_t block[4][64],
         if (read_acs_listed(bits, pos, val, &count, block_cbp) != 0 ||
             bink2_bits_failed(bits))
             return -1;
+        if (count == 0)
+            continue;
+        *coded |= 1u << i;
         /* A place no level was read for dequantizes to (0 + 64) >> 7, zero. */
         memset(block[i], 0, sizeof(block[i]));
         for (j = 0; j < count; j++)
@@ -493,10 +502,18 @@ static int new_decode_ac(Bink2Bits *bits, int16_t block[4][64],
     return 0;
 }
 
-static void new_idct_put(unsigned char *dst, int stride,
-                         const int16_t block[64])
+/* One block into the picture: its DC, from the predictor, and its AC levels if it has any. */
+static void new_block_put(unsigned char *dst, int stride, int16_t block[64],
+                          int coded, float dc)
 {
-    bink2_idct_put(dst, stride, block);
+    int16_t dc16 = (int16_t)(dc * 8.0f + 32.0f);
+
+    if (coded) {
+        block[0] = dc16;
+        bink2_idct_put(dst, stride, block);
+    } else {
+        bink2_idct_put_dc(dst, stride, dc16);
+    }
 }
 
 static int new_decode_intra_luma(Bink2Video *v, Bink2Bits *bits,
@@ -504,6 +521,7 @@ static int new_decode_intra_luma(Bink2Video *v, Bink2Bits *bits,
                                  unsigned char *dst, int stride, int flags)
 {
     int16_t block[4][64];
+    unsigned coded;
     float *dc = v->old_dc_cur[v->old_mb_pos].dc[v->old_comp];
     unsigned cbp;
     int i, j;
@@ -519,15 +537,15 @@ static int new_decode_intra_luma(Bink2Video *v, Bink2Bits *bits,
 
     for (i = 0; i < 4; i++) {
         if (new_decode_ac(bits, block, cbp >> (4 * i), q,
-                          bink2g_luma_intra_qmat) != 0) {
+                          bink2g_luma_intra_qmat, &coded) != 0) {
             return -1;
         }
         for (j = 0; j < 4; j++) {
             int pos = bink2_luma_repos[i * 4 + j];
             int off = (pos & 3) * 8 + (pos >> 2) * 8 * stride;
 
-            block[j][0] = (int16_t)(dc[i * 4 + j] * 8.0f + 32.0f);
-            new_idct_put(dst + off, stride, block[j]);
+            new_block_put(dst + off, stride, block[j], (coded >> j) & 1,
+                          dc[i * 4 + j]);
         }
     }
     return 0;
@@ -538,6 +556,7 @@ static int new_decode_intra_chroma(Bink2Video *v, Bink2Bits *bits,
                                    unsigned char *dst, int stride, int flags)
 {
     int16_t block[4][64];
+    unsigned coded;
     float *dc = v->old_dc_cur[v->old_mb_pos].dc[v->old_comp];
     unsigned cbp;
     int i;
@@ -548,14 +567,13 @@ static int new_decode_intra_chroma(Bink2Video *v, Bink2Bits *bits,
     *prev_cbp = cbp;
     if (new_decode_dc(v, bits, 0, q, 0, 2047, flags) != 0)
         return -1;
-    if (new_decode_ac(bits, block, cbp, q, bink2g_chroma_intra_qmat) != 0)
+    if (new_decode_ac(bits, block, cbp, q, bink2g_chroma_intra_qmat, &coded) != 0)
         return -1;
 
     for (i = 0; i < 4; i++) {
         int off = (i & 1) * 8 + (i >> 1) * 8 * stride;
 
-        block[i][0] = (int16_t)(dc[i] * 8.0f + 32.0f);
-        new_idct_put(dst + off, stride, block[i]);
+        new_block_put(dst + off, stride, block[i], (coded >> i) & 1, dc[i]);
     }
     return 0;
 }
@@ -857,10 +875,17 @@ static void new_average_chroma(const unsigned char *src, int stride, float *dc)
     }
 }
 
-static void new_idct_add(unsigned char *dst, int stride,
-                         const int16_t block[64])
+static void new_block_add(unsigned char *dst, int stride, int16_t block[64],
+                          int coded, float dc)
 {
-    bink2_idct_add(dst, stride, block);
+    int16_t dc16 = (int16_t)(dc * 8.0f + 32.0f);
+
+    if (coded) {
+        block[0] = dc16;
+        bink2_idct_add(dst, stride, block);
+    } else {
+        bink2_idct_add_dc(dst, stride, dc16);
+    }
 }
 
 static int new_decode_inter_luma(Bink2Video *v, Bink2Bits *bits,
@@ -868,6 +893,7 @@ static int new_decode_inter_luma(Bink2Video *v, Bink2Bits *bits,
                                  unsigned char *dst, int stride, int flags)
 {
     int16_t block[4][64];
+    unsigned coded;
     float *dc = v->old_dc_cur[v->old_mb_pos].dc[v->old_comp];
     unsigned cbp;
     int i, j;
@@ -883,14 +909,14 @@ static int new_decode_inter_luma(Bink2Video *v, Bink2Bits *bits,
 
     for (i = 0; i < 4; i++) {
         if (new_decode_ac(bits, block, cbp >> (4 * i), q,
-                          bink2g_inter_qmat) != 0)
+                          bink2g_inter_qmat, &coded) != 0)
             return -1;
         for (j = 0; j < 4; j++) {
             int pos = bink2_luma_repos[i * 4 + j];
             int off = (pos & 3) * 8 + (pos >> 2) * 8 * stride;
 
-            block[j][0] = (int16_t)(dc[i * 4 + j] * 8.0f + 32.0f);
-            new_idct_add(dst + off, stride, block[j]);
+            new_block_add(dst + off, stride, block[j], (coded >> j) & 1,
+                          dc[i * 4 + j]);
         }
     }
     return 0;
@@ -901,6 +927,7 @@ static int new_decode_inter_chroma(Bink2Video *v, Bink2Bits *bits,
                                    unsigned char *dst, int stride)
 {
     int16_t block[4][64];
+    unsigned coded;
     float *dc = v->old_dc_cur[v->old_mb_pos].dc[v->old_comp];
     unsigned cbp;
     int i;
@@ -911,14 +938,13 @@ static int new_decode_inter_chroma(Bink2Video *v, Bink2Bits *bits,
     *prev_cbp = cbp;
     if (new_decode_dc(v, bits, 0, q, -1023, 1023, 0xA8) != 0)
         return -1;
-    if (new_decode_ac(bits, block, cbp, q, bink2g_inter_qmat) != 0)
+    if (new_decode_ac(bits, block, cbp, q, bink2g_inter_qmat, &coded) != 0)
         return -1;
 
     for (i = 0; i < 4; i++) {
         int off = (i & 1) * 8 + (i >> 1) * 8 * stride;
 
-        block[i][0] = (int16_t)(dc[i] * 8.0f + 32.0f);
-        new_idct_add(dst + off, stride, block[i]);
+        new_block_add(dst + off, stride, block[i], (coded >> i) & 1, dc[i]);
     }
     return 0;
 }

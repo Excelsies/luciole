@@ -61,31 +61,62 @@ static int clip8(int v)
     return v < 0 ? 0 : v > 255 ? 255 : v;
 }
 
-void bink2_idct_put(unsigned char *dst, int stride, const int16_t block[64])
+static void put_flat(unsigned char *dst, int stride, int16_t dc)
 {
     int row;
 
-    if (use_plain || !dc_only(block)) {
-        bink2_idct_put_plain(dst, stride, block);
-        return;
-    }
     for (row = 0; row < 8; row++)
-        memset(dst + row * stride, clip8(block[0] >> 6), 8);
+        memset(dst + row * stride, clip8(dc >> 6), 8);
 }
 
-void bink2_idct_add(unsigned char *dst, int stride, const int16_t block[64])
+static void add_flat(unsigned char *dst, int stride, int16_t dc)
 {
     int row, col;
-    int add;
+    int add = dc >> 6;
 
-    if (use_plain || !dc_only(block)) {
-        bink2_idct_add_plain(dst, stride, block);
-        return;
-    }
-    add = block[0] >> 6;
     if (add == 0)
         return;
     for (row = 0; row < 8; row++, dst += stride)
         for (col = 0; col < 8; col++)
             dst[col] = (unsigned char)clip8(dst[col] + add);
+}
+
+void bink2_idct_put_dc(unsigned char *dst, int stride, int16_t dc)
+{
+    int16_t block[64] = {0};
+
+    if (use_plain) {
+        block[0] = dc;
+        bink2_idct_put_plain(dst, stride, block);
+        return;
+    }
+    put_flat(dst, stride, dc);
+}
+
+void bink2_idct_add_dc(unsigned char *dst, int stride, int16_t dc)
+{
+    int16_t block[64] = {0};
+
+    if (use_plain) {
+        block[0] = dc;
+        bink2_idct_add_plain(dst, stride, block);
+        return;
+    }
+    add_flat(dst, stride, dc);
+}
+
+void bink2_idct_put(unsigned char *dst, int stride, const int16_t block[64])
+{
+    if (use_plain || !dc_only(block))
+        bink2_idct_put_plain(dst, stride, block);
+    else
+        put_flat(dst, stride, block[0]);
+}
+
+void bink2_idct_add(unsigned char *dst, int stride, const int16_t block[64])
+{
+    if (use_plain || !dc_only(block))
+        bink2_idct_add_plain(dst, stride, block);
+    else
+        add_flat(dst, stride, block[0]);
 }

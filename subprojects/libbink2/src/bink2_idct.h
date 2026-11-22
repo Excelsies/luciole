@@ -14,6 +14,10 @@ void bink2_idct_put(unsigned char *dst, int stride, const int16_t block[64]);
 /* Adds the picture block of `block` to the 8x8 bytes at dst, saturating. */
 void bink2_idct_add(unsigned char *dst, int stride, const int16_t block[64]);
 
+/* The same for a block that has only a first coefficient, `dc`. */
+void bink2_idct_put_dc(unsigned char *dst, int stride, int16_t dc);
+void bink2_idct_add_dc(unsigned char *dst, int stride, int16_t dc);
+
 /* The plain C path, always. */
 void bink2_idct_put_plain(unsigned char *dst, int stride, const int16_t block[64]);
 void bink2_idct_add_plain(unsigned char *dst, int stride, const int16_t block[64]);
