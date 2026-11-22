@@ -1,7 +1,10 @@
 // Times Bink 2 decoding and playback of one file.
 //
 //   luciole-bink2-bench decode FILE [FRAMES]       milliseconds per frame, decoding in a loop, and the CPU time
+//   luciole-bink2-bench adler FILE [FIRST COUNT]   per picture: the Adler-32 of its visible planes, as "crc N 0x..."
 //   luciole-bink2-bench sum FILE [FRAMES]          one line per picture: a hash of each plane's visible bytes
+//   luciole-bink2-bench scan FILE [FIRST COUNT]    per picture: key frame flag, blockiness, flat share (numbers only)
+//   luciole-bink2-bench dump FILE FRAME OUT        the picture FRAME (decoded from its key frame) as raw I420 to OUT
 //   luciole-bink2-bench seekto FILE                the time to reach a picture at a quarter, half and three quarters
 //   luciole-bink2-bench play FILE [WIDTH HEIGHT]   plays the file once through playbin as the player does
 //   luciole-bink2-bench poster FILE [SIDE]         the poster the thumbnail path makes, five times
@@ -14,6 +17,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cstdio>
 #include <cstdlib>
 #include <ctime>
 #include <fcntl.h>
@@ -172,6 +176,225 @@ namespace {
       std::println("{}", line);
       std::swap(before, now);
     }
+    return 0;
+  }
+
+  // Luma measures of a picture, from every fourth row. Blockiness: the mean absolute step across the borders of the
+  // 8x8 blocks over the mean step inside them (about 1 in clean pictures). Flat share: the share of 8x8 blocks whose
+  // luma spans at most one level.
+  struct Look {
+    double blockiness = 0;
+    double flat = 0;
+  };
+
+  Look look(const std::uint8_t* luma, int stride, int width, int height) {
+    double across = 0;
+    double inside = 0;
+    std::uint64_t acrossCount = 0;
+    std::uint64_t insideCount = 0;
+    std::uint64_t flat = 0;
+    std::uint64_t blocks = 0;
+    for (int y = 0; y + 8 <= height; y += 4) {
+      const std::uint8_t* row = luma + static_cast<std::size_t>(y) * static_cast<std::size_t>(stride);
+      for (int x = 1; x < width; ++x) {
+        const int step = std::abs(static_cast<int>(row[x]) - static_cast<int>(row[x - 1]));
+        if ((x & 7) == 0) {
+          across += step;
+          ++acrossCount;
+        } else {
+          inside += step;
+          ++insideCount;
+        }
+      }
+    }
+    for (int by = 0; by + 8 <= height; by += 8) {
+      for (int bx = 0; bx + 8 <= width; bx += 8) {
+        int low = 255;
+        int high = 0;
+        for (int y = 0; y < 8; ++y) {
+          const std::uint8_t* row =
+              luma + static_cast<std::size_t>(by + y) * static_cast<std::size_t>(stride) + static_cast<std::size_t>(bx);
+          for (int x = 0; x < 8; ++x) {
+            low = std::min<int>(low, row[x]);
+            high = std::max<int>(high, row[x]);
+          }
+        }
+        flat += high - low <= 1 ? 1 : 0;
+        ++blocks;
+      }
+    }
+    const double inner = inside / static_cast<double>(std::max<std::uint64_t>(insideCount, 1));
+    return {
+        .blockiness = (across / static_cast<double>(std::max<std::uint64_t>(acrossCount, 1))) / std::max(inner, 0.01),
+        .flat = static_cast<double>(flat) / static_cast<double>(std::max<std::uint64_t>(blocks, 1))
+    };
+  }
+
+  // Adler-32 starting from zero over the visible bytes of the three planes in turn.
+  std::uint32_t
+  adler(const Pictures& picture, const luciole::media::bink2::Info& info, const luciole::media::bink2::Layout& layout) {
+    std::uint32_t low = 0;
+    std::uint32_t high = 0;
+    for (int plane = 0; plane < 3; ++plane) {
+      const auto at = static_cast<std::size_t>(plane);
+      const int width = plane == 0 ? info.width : (info.width + 1) / 2;
+      const int height = plane == 0 ? info.height : (info.height + 1) / 2;
+      for (int row = 0; row < height; ++row) {
+        const std::uint8_t* bytes =
+            picture.planes.plane[at] + static_cast<std::size_t>(row) * static_cast<std::size_t>(layout.stride[at]);
+        for (int x = 0; x < width; ++x) {
+          low += bytes[x];
+          high += low;
+          if ((x & 2047) == 2047) {
+            low %= 65521;
+            high %= 65521;
+          }
+        }
+        low %= 65521;
+        high %= 65521;
+      }
+    }
+    return (high << 16) | low;
+  }
+
+  // Decodes from the start; hashes the pictures FIRST to FIRST+COUNT-1.
+  int adlers(const char* path, std::uint64_t first, std::uint64_t count) {
+    const File file(path);
+    const auto stream = open(file);
+    const auto& layout = stream->layout();
+    const std::uint64_t end = std::min(stream->info().frames, first + count);
+    Pictures before(layout);
+    Pictures now(layout);
+    for (std::uint64_t frame = 0; frame < end; ++frame) {
+      if (!stream->decode(frame, now.planes, frame == 0 ? nullptr : &before.planes)) {
+        std::println("{} error", frame);
+        return 1;
+      }
+      if (frame >= first) {
+        std::println("crc {} 0x{:08x}", frame, adler(now, stream->info(), layout));
+      }
+      std::swap(before, now);
+    }
+    return 0;
+  }
+
+  int scan(const char* path, std::uint64_t first, std::uint64_t count) {
+    const File file(path);
+    const auto stream = open(file);
+    const auto& info = stream->info();
+    const auto& layout = stream->layout();
+    std::uint64_t from = 0;
+    for (const auto key : stream->keyFrames()) {
+      if (key <= first) {
+        from = key;
+      }
+    }
+    const std::uint64_t end = std::min(info.frames, first + count);
+    Pictures before(layout);
+    Pictures now(layout);
+    std::vector<std::uint32_t> keys(stream->keyFrames().begin(), stream->keyFrames().end());
+    for (std::uint64_t frame = from; frame < end; ++frame) {
+      if (!stream->decode(frame, now.planes, frame == from ? nullptr : &before.planes)) {
+        std::println("{} error", frame);
+        return 1;
+      }
+      if (frame >= first) {
+        const auto seen = look(now.planes.plane[0], layout.stride[0], info.width, info.height);
+        const bool key = std::ranges::binary_search(keys, static_cast<std::uint32_t>(frame));
+        std::println("{} {} {:.3f} {:.4f}", frame, key ? 1 : 0, seen.blockiness, seen.flat);
+      }
+      std::swap(before, now);
+    }
+    return 0;
+  }
+
+  void writePlanes(
+      const Pictures& picture, const luciole::media::bink2::Info& info, const luciole::media::bink2::Layout& layout,
+      std::FILE* out
+  ) {
+    for (int plane = 0; plane < 3; ++plane) {
+      const auto at = static_cast<std::size_t>(plane);
+      const int width = plane == 0 ? info.width : (info.width + 1) / 2;
+      const int height = plane == 0 ? info.height : (info.height + 1) / 2;
+      for (int row = 0; row < height; ++row) {
+        std::fwrite(
+            picture.planes.plane[at] + static_cast<std::size_t>(row) * static_cast<std::size_t>(layout.stride[at]), 1,
+            static_cast<std::size_t>(width), out
+        );
+      }
+    }
+  }
+
+  // Each picture FIRST to FIRST+COUNT-1, decoded from the key frame before FIRST, as DIR/fNNNNN.yuv.
+  int dumpRange(const char* path, std::uint64_t first, std::uint64_t count, const std::string& dir) {
+    const File file(path);
+    const auto stream = open(file);
+    std::uint64_t from = 0;
+    for (const auto key : stream->keyFrames()) {
+      if (key <= first) {
+        from = key;
+      }
+    }
+    Pictures before(stream->layout());
+    Pictures now(stream->layout());
+    for (std::uint64_t frame = from; frame < first + count; ++frame) {
+      if (!stream->decode(frame, now.planes, frame == from ? nullptr : &before.planes)) {
+        std::println(stderr, "frame {}: damaged", frame);
+        return 1;
+      }
+      if (frame >= first) {
+        std::FILE* out = std::fopen(std::format("{}/f{:05}.yuv", dir, frame).c_str(), "wb");
+        if (out == nullptr) {
+          return 2;
+        }
+        writePlanes(now, stream->info(), stream->layout(), out);
+        std::fclose(out);
+      }
+      std::swap(before, now);
+    }
+    return 0;
+  }
+
+  int dump(const char* path, std::uint64_t target, const char* out) {
+    const File file(path);
+    const auto stream = open(file);
+    const auto& info = stream->info();
+    const auto& layout = stream->layout();
+    std::uint64_t from = 0;
+    for (const auto key : stream->keyFrames()) {
+      if (key <= target) {
+        from = key;
+      }
+    }
+    Pictures before(layout);
+    Pictures now(layout);
+    for (std::uint64_t frame = from; frame <= target; ++frame) {
+      if (!stream->decode(frame, now.planes, frame == from ? nullptr : &before.planes)) {
+        std::println(stderr, "frame {}: damaged", frame);
+        return 1;
+      }
+      if (frame < target) {
+        std::swap(before, now);
+      }
+    }
+    FILE* stream_out = std::fopen(out, "wb");
+    if (stream_out == nullptr) {
+      return 2;
+    }
+    for (int plane = 0; plane < 3; ++plane) {
+      const int width = plane == 0 ? info.width : (info.width + 1) / 2;
+      const int height = plane == 0 ? info.height : (info.height + 1) / 2;
+      for (int row = 0; row < height; ++row) {
+        std::fwrite(
+            now.planes.plane[static_cast<std::size_t>(plane)]
+                + static_cast<std::size_t>(row)
+                    * static_cast<std::size_t>(layout.stride[static_cast<std::size_t>(plane)]),
+            1, static_cast<std::size_t>(width), stream_out
+        );
+      }
+    }
+    std::fclose(stream_out);
+    std::println("{} from key frame {}", target, from);
     return 0;
   }
 
@@ -385,6 +608,24 @@ int main(int argc, char** argv) {
   }
   if (mode == "sum") {
     return sum(argv[2], argc > 3 ? std::strtoull(argv[3], nullptr, 10) : 300);
+  }
+  if (mode == "adler") {
+    return adlers(
+        argv[2], argc > 3 ? std::strtoull(argv[3], nullptr, 10) : 0,
+        argc > 4 ? std::strtoull(argv[4], nullptr, 10) : ~0ULL >> 1
+    );
+  }
+  if (mode == "scan") {
+    return scan(
+        argv[2], argc > 3 ? std::strtoull(argv[3], nullptr, 10) : 0,
+        argc > 4 ? std::strtoull(argv[4], nullptr, 10) : 300
+    );
+  }
+  if (mode == "dumprange" && argc > 5) {
+    return dumpRange(argv[2], std::strtoull(argv[3], nullptr, 10), std::strtoull(argv[4], nullptr, 10), argv[5]);
+  }
+  if (mode == "dump" && argc > 4) {
+    return dump(argv[2], std::strtoull(argv[3], nullptr, 10), argv[4]);
   }
   if (mode == "seekto") {
     return seekTo(argv[2]);
