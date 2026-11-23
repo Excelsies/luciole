@@ -46,7 +46,11 @@ public:
   // Layout hook in BrowserPage::prepareFrame(): free space shows only in a pane at least that wide.
   void layout(float paneWidth);
   // Docks the tab to the bottom edge of the page body (`width` x `height`, body coordinates) at the trailing side.
-  void arrange(Renderer& renderer, float width, float height);
+  void arrange(Renderer& renderer, float width, float height) { arrange(renderer, LayoutRect{0, 0, width, height}); }
+  // The same inside `area` of the page body: the tab sits at the bottom edge and trailing side of the area.
+  void arrange(Renderer& renderer, const LayoutRect& area);
+  // The tab's height as last arranged; 0 before it was first shown.
+  float tabHeight() const noexcept { return m_tabHeight; }
   // True while the notice replaces the file list.
   bool noticeShown() const;
   // Scene rectangle of the status text, where the input method places its candidates.
@@ -72,6 +76,7 @@ private:
   bool m_freeSpaceAvailable = false;
   bool m_needed = false;
   float m_reveal = 0.0F;
+  float m_tabHeight = 0.0F;
   Glyph* m_noticeGlyph = nullptr;
   Label* m_notice = nullptr;
   Label* m_noticeDetail = nullptr;

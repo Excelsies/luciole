@@ -2,11 +2,11 @@
 #include "browser/workbench_services.h"
 #include "png_writer.h"
 #include "scene_capture.h"
+#include "status_tab_stand_in.h"
 #include "temp_folder.h"
 #include "test_check.h"
 #include "text_tile_view_rig.h"
 #include "thumbnails/file_icon_cache.h"
-#include "ui/browser/status_pill.h"
 #include "ui/builders.h"
 #include "ui/controls/box.h"
 #include "ui/controls/flex.h"
@@ -27,7 +27,7 @@
 #include <print>
 #include <string>
 
-// At these window sizes the cursor row walked to the list's last shown row stays whole and above the status pill,
+// At these window sizes the cursor row walked to the list's last shown row stays whole and above the status tab,
 // which lies in the room the session keeps at the bottom of the file pane.
 namespace {
   constexpr std::size_t kRows = 30;
@@ -67,7 +67,7 @@ namespace {
     }
   };
 
-  // The page body: the Workbench view where the file pane was, then the status pill placed in the place the session
+  // The page body: the Workbench view where the file pane was, then the status tab placed in the place the session
   // gives for it, as the page lays them out.
   class Body final : public Node {
   public:
@@ -92,15 +92,15 @@ namespace {
       pane->setPadding(0, Style::spaceSm, Style::spaceSm, Style::spaceSm);
       m_list->scrollView().setReserveScrollbarGutter(true);
       m_pane = addChild(std::move(pane));
-      addChild(buildStatusPill(m_pill));
-      m_pill.pill->setVisible(true);
-      (void)m_pill.status->setText("30 items · 1 selected · 49.3 KiB");
-      (void)m_pill.freeSpace->setText("880.6 GiB free");
+      addChild(buildStatusTab(m_tab));
+      m_tab.tab->setVisible(true);
+      (void)m_tab.status->setText("30 items · 1 selected · 49.3 KiB");
+      (void)m_tab.freeSpace->setText("880.6 GiB free");
     }
 
     Node& pane() const noexcept { return *m_pane; }
     VirtualGridView& list() const noexcept { return *m_list; }
-    const StatusPill& pill() const noexcept { return m_pill; }
+    const StatusTab& tab() const noexcept { return m_tab; }
     void setSession(luciole::WorkbenchSession* session) { m_session = session; }
 
   protected:
@@ -109,12 +109,13 @@ namespace {
       setSize(rect.width, rect.height);
       m_background->arrange(renderer, {0, 0, rect.width, rect.height});
       TEST_CHECK(m_session != nullptr);
+      m_session->setTabRoom(statusTabHeight(renderer, m_tab));
       for (std::size_t round = 0; round < 2; ++round) { // the view plans its regions, then places them
         m_session->view().arrange(renderer, {0, 0, rect.width, rect.height});
       }
       const auto area = m_session->paneArea(*this);
       TEST_CHECK(area.has_value());
-      arrangeStatusPill(renderer, m_pill, area.value_or(LayoutRect{}), true);
+      arrangeStatusTab(renderer, m_tab, area.value_or(LayoutRect{}), true);
     }
 
   private:
@@ -122,7 +123,7 @@ namespace {
     Box* m_background = nullptr; // the page body's fill
     Node* m_pane = nullptr;
     VirtualGridView* m_list = nullptr;
-    StatusPill m_pill;
+    StatusTab m_tab;
     luciole::WorkbenchSession* m_session = nullptr;
   };
 
@@ -152,26 +153,25 @@ namespace {
     list.setSelectedIndex(kCursor, true); // the Down key from the top: the list scrolls only as far as it must
     const auto pixels = capture.capture(body, width, height, window.scale);
     TEST_CHECK(pixels.width == static_cast<int>(std::lround(static_cast<float>(width) * window.scale)));
-    keepForViewing(pixels, std::format("workbench-list-pill-{}x{}-{}x.png", window.width, window.height, window.scale));
+    keepForViewing(pixels, std::format("workbench-list-tab-{}x{}-{}x.png", window.width, window.height, window.scale));
     const auto row = list.itemRect(kCursor);
-    const auto pill = sceneBox(*body.pill().pill);
+    const auto tab = sceneBox(*body.tab().tab);
     TEST_CHECK(row.has_value());
     if (!row) {
       return;
     }
     std::println(
-        "{}x{} at {}x: cursor row {:.0f}..{:.0f}, pill {:.0f}..{:.0f}, list ends at {:.0f}", window.width,
-        window.height, window.scale, row->y, row->y + row->height, pill.y, pill.y + pill.height,
-        sceneBox(list).y + list.height()
+        "{}x{} at {}x: cursor row {:.0f}..{:.0f}, tab {:.0f}..{:.0f}, list ends at {:.0f}", window.width, window.height,
+        window.scale, row->y, row->y + row->height, tab.y, tab.y + tab.height, sceneBox(list).y + list.height()
     );
     TEST_CHECK(list.scrollView().scrollOffset() > 0);
     TEST_NEAR(row->height, kRowHeight, 1e-3); // shown whole
-    TEST_CHECK(row->y + row->height <= pill.y);
-    TEST_CHECK(sceneBox(list).y + list.height() <= pill.y);
-    // the pill keeps to the pane's place
+    TEST_CHECK(row->y + row->height <= tab.y);
+    TEST_CHECK(sceneBox(list).y + list.height() <= tab.y);
+    // the tab keeps to the pane's place
     const auto pane = sceneBox(body.pane());
-    TEST_CHECK(pill.x >= pane.x && pill.x + pill.width <= pane.x + pane.width);
-    TEST_CHECK(pill.y + pill.height <= pane.y + pane.height);
+    TEST_CHECK(tab.x >= pane.x && tab.x + tab.width <= pane.x + pane.width);
+    TEST_CHECK(tab.y + tab.height <= pane.y + pane.height);
   }
 } // namespace
 
@@ -182,7 +182,7 @@ int main() {
     std::println("skipped: {}", reason);
     return ::test::kSkipExitCode;
   }
-  luciole::test::TempFolder home{"luciole-workbench-list-pill"};
+  luciole::test::TempFolder home{"luciole-workbench-list-tab"};
   for (const char* variable : {"HOME", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_DATA_DIRS"}) {
     g_setenv(variable, home.path().c_str(), TRUE);
   }
@@ -194,12 +194,12 @@ int main() {
       body.pane(), body.list().focusArea(), services.measureCache(), icons, [] { return 0U; },
       luciole::WorkbenchModelOptions{.ancestorLevels = 0}
   );
-  session.keepPillRoom(body.list());
+  session.keepTabRoom(body.list());
   session.update({}, {});
   body.setSession(&session);
   for (const auto window : kWindows) {
     checkWindow(*capture, body, window);
   }
-  std::println("workbench list pill checks passed");
+  std::println("workbench list tab checks passed");
   return 0;
 }

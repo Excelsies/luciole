@@ -3,12 +3,12 @@
 #include "model/details_columns.h"
 #include "png_writer.h"
 #include "scene_capture.h"
+#include "status_tab_stand_in.h"
 #include "system_text_scale.h"
 #include "text_clear.h"
 #include "text_tile_view_rig.h"
 #include "thumbnails/thumbnail_service.h"
 #include "ui/browser/file_view.h"
-#include "ui/browser/status_pill.h"
 #include "ui/builders.h"
 #include "ui/controls/box.h"
 #include "ui/controls/button.h"
@@ -39,7 +39,7 @@
 #include <vector>
 
 // The center at ordinary window sizes, laid out with the toolkit's text shaping over a real list in a file pane
-// built as the page builds it: list columns are left out whole and never scroll sideways, the status pill lies in
+// built as the page builds it: list columns are left out whole and never scroll sideways, the status tab lies in
 // the list's own place, and header titles are never cut inside a word.
 namespace {
   using namespace luciole;
@@ -51,7 +51,7 @@ namespace {
   constexpr float kPageLeft = 218;
   constexpr float kPageTop = 95;
   constexpr float kGutter = Style::scrollbarWidth + Style::scrollbarGap;
-  constexpr std::string_view kPillText = "13 items · 1 selected · 692.3 KiB";
+  constexpr std::string_view kTabText = "13 items · 1 selected · 692.3 KiB";
   constexpr std::string_view kFreeSpace = "881.3 GiB free";
   constexpr std::array<std::string_view, 4> kHeaderTexts{"Name", "Type", "Size", "Modified"};
 
@@ -207,19 +207,19 @@ namespace {
     Label* m_label = nullptr;
   };
 
-  // The page body: the view over all of it, then the status pill placed over the list's place, as the page lays
+  // The page body: the view over all of it, then the status tab placed over the list's place, as the page lays
   // them out.
   class Body final : public ::Node {
   public:
     Body(std::unique_ptr<::Node> view, const FilePane& files) : m_files(files) {
       m_view = addChild(std::move(view));
-      addChild(buildStatusPill(m_pill));
-      m_pill.pill->setVisible(true);
-      (void)m_pill.status->setText(kPillText);
-      (void)m_pill.freeSpace->setText(kFreeSpace);
+      addChild(buildStatusTab(m_tab));
+      m_tab.tab->setVisible(true);
+      (void)m_tab.status->setText(kTabText);
+      (void)m_tab.freeSpace->setText(kFreeSpace);
     }
 
-    const StatusPill& pill() const noexcept { return m_pill; }
+    const StatusTab& tab() const noexcept { return m_tab; }
     std::unique_ptr<::Node> release() { return removeChild(m_view); }
 
   protected:
@@ -228,13 +228,13 @@ namespace {
       setSize(rect.width, rect.height);
       m_view->arrange(renderer, {0, 0, rect.width, rect.height});
       const auto place = m_files.place();
-      arrangeStatusPill(renderer, m_pill, {place.x, place.y, place.width, place.height}, true);
+      arrangeStatusTab(renderer, m_tab, {place.x, place.y, place.width, place.height}, true);
     }
 
   private:
     const FilePane& m_files;
     ::Node* m_view = nullptr;
-    StatusPill m_pill;
+    StatusTab m_tab;
   };
 
   void keepForViewing(const GlPixels& pixels, const std::string& name) {
@@ -295,18 +295,18 @@ namespace {
     TEST_CHECK(values > 0 || !columns.visible(DetailsColumn::Size));
   }
 
-  // The pill as the page builds it, and each of its parts, lies inside the list's place and clear of every column
+  // The tab as the page builds it, and each of its parts, lies inside the list's place and clear of every column
   // ahead and preview.
-  void expectPillInside(const FilePane& files, const WorkbenchView& view, const Body& body) {
+  void expectTabInside(const FilePane& files, const WorkbenchView& view, const Body& body) {
     const auto place = files.place();
-    const auto& pill = body.pill();
-    std::vector<const ::Node*> parts{pill.pill, pill.status};
-    if (shown(pill.freeSpace) && pill.freeSpace->participatesInLayout()) {
-      parts.push_back(pill.freeSpace);
+    const auto& tab = body.tab();
+    std::vector<const ::Node*> parts{tab.tab, tab.status};
+    if (shown(tab.freeSpace) && tab.freeSpace->participatesInLayout()) {
+      parts.push_back(tab.freeSpace);
     }
     std::println(
-        "  pill {:.0f}..{:.0f} in list {:.0f}..{:.0f}, status {:.0f} px, free space {}", box(*pill.pill).x,
-        box(*pill.pill).right(), place.x, place.right(), pill.status->width(), parts.size() > 2 ? "shown" : "hidden"
+        "  tab {:.0f}..{:.0f} in list {:.0f}..{:.0f}, status {:.0f} px, free space {}", box(*tab.tab).x,
+        box(*tab.tab).right(), place.x, place.right(), tab.status->width(), parts.size() > 2 ? "shown" : "hidden"
     );
     for (const auto* part : parts) {
       const auto rect = box(*part);
@@ -370,7 +370,7 @@ namespace {
         columns.visible(DetailsColumn::Size), columns.visible(DetailsColumn::Modified)
     );
     expectColumnsFit(files, columns, measure);
-    expectPillInside(files, *rig.view, body);
+    expectTabInside(files, *rig.view, body);
     expectTitlesFit(*rig.view, measure);
     ::test::expectTextClear(body, measure.textScale());
   }

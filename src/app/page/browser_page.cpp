@@ -2645,9 +2645,14 @@ void BrowserPage::prepareFrame(bool, bool layout) {
   }
 }
 
+// Where the status tab docks in the page body: the whole body, or in Workbench the list pane's place.
+LayoutRect BrowserPage::statusArea() const {
+  return m_workbench.listArea(*m_body).value_or(LayoutRect{0, 0, m_pageBounds.width, m_pageBounds.height});
+}
+
 void BrowserPage::layoutFrame(Renderer& renderer) {
   UiPhaseScope phase(UiPhase::Layout);
-  m_statusBar.layout(m_pageBounds.width);
+  m_statusBar.layout(statusArea().width);
   auto placesFocus = m_sidebar.invalidate();
   m_dragDrop.applyScroll();
   m_sidebar.layout();
@@ -2706,7 +2711,8 @@ void BrowserPage::layoutFrame(Renderer& renderer) {
     m_body->arrange(renderer, m_pageBounds);
     m_detailsHeader.layoutHeader(renderer);
   }
-  m_statusBar.arrange(renderer, m_pageBounds.width, m_pageBounds.height);
+  m_statusBar.arrange(renderer, statusArea());
+  m_workbench.setTabRoom(m_statusBar.tabHeight());
   const bool columnHoverDirty = m_detailsHeader.takeHoverDirty();
   if (columnOrderChanged || columnHoverDirty) {
     dispatcher().syncPointerHover();

@@ -119,9 +119,15 @@ public:
   // own hit tests on it must check this first.
   bool coversFilePane() const;
   // The file pane's place in `frame`'s coordinates while the view shows it, with the room below the list's rows
-  // where the status pill floats; none otherwise. A change of folder slides the pane, not its place.
+  // where the status tab docks; none otherwise. A change of folder slides the pane, not its place.
   std::optional<LayoutRect> listArea(const Node& frame) const {
     return m_session ? m_session->paneArea(frame) : std::nullopt;
+  }
+  // The status tab at the pane's bottom edge is `tabHeight` high; the room below the list follows.
+  void setTabRoom(float tabHeight) {
+    if (m_session) {
+      m_session->setTabRoom(tabHeight);
+    }
   }
   // A divider of the view is dragged; BrowserPage::escapeGesture() cancels it.
   bool resizing() const;

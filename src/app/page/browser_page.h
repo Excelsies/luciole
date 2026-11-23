@@ -336,6 +336,7 @@ private:
   void revealPendingTargets();
   void prepareFrame(bool, bool layout);
   void layoutFrame(Renderer& renderer);
+  LayoutRect statusArea() const;
 
   // Scene.
   void buildScene();

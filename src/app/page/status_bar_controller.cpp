@@ -10,6 +10,7 @@
 #include "fs/gio_ptr.h"
 #include "platform/desktop_integration.h"
 #include "render/animation/animation_manager.h"
+#include "ui/browser/status_tab_place.h"
 #include "ui/builders.h"
 #include "ui/palette.h"
 #include "workbench/format.h"
@@ -323,14 +324,12 @@ void StatusBarController::layout(float paneWidth) {
   m_freeSpace->setParticipatesInLayout(showFreeSpace);
 }
 
-void StatusBarController::arrange(Renderer& renderer, float width, float height) {
+void StatusBarController::arrange(Renderer& renderer, const LayoutRect& area) {
   if (!m_pill->visible()) {
     return;
   }
-  // Docked to the bottom edge of the page body at its trailing corner, clear of the vertical scrollbar.
-  const float inset = Style::spaceSm;
-  const float trailing = inset + Style::scrollbarWidth + Style::scrollbarGap;
-  const float maximum = std::max(1.0F, width - inset - trailing);
+  // Docked to the bottom edge of the area at its trailing corner, clear of the vertical scrollbar.
+  const float maximum = luciole::statusTabRoom(area.width).maxWidth;
   // Text budget inside the tab; the message gives way first so the status after it stays readable.
   float budget = maximum - 2.0F * Style::spaceMd;
   if (m_freeSpace->visible()) {
@@ -344,10 +343,8 @@ void StatusBarController::arrange(Renderer& renderer, float width, float height)
   LayoutConstraints constraints;
   constraints.setMaxWidth(maximum);
   const auto size = m_pill->measure(renderer, constraints);
-  const float pillWidth = std::min(size.width, maximum);
-  m_pill->arrange(
-      renderer, {Style::rtl() ? trailing : width - trailing - pillWidth, height - size.height, pillWidth, size.height}
-  );
+  m_tabHeight = size.height;
+  m_pill->arrange(renderer, luciole::statusTabRect(area, size));
 }
 
 void StatusBarController::reveal() {

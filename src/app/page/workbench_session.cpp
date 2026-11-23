@@ -36,9 +36,8 @@ namespace luciole {
       return a.x == b.x && a.y == b.y && a.width == b.width && a.height == b.height;
     }
 
-    // Below the list, the pane's gap and this room hold the status pill and a margin above it; the pane's bottom
-    // padding is the pill's inset.
-    constexpr float kStatusPillRoom = Style::controlHeightSm + Style::spaceXs;
+    // The bottom padding of the file pane (BrowserPage::prepareFrame()), which lies under the status tab already.
+    constexpr float kPaneBottomPadding = Style::spaceSm;
 
     // Hands a wheel turned in `room` to the areas of `list` that take a wheel over the list, from its focus area up,
     // as the dispatcher walks them.
@@ -269,18 +268,26 @@ namespace luciole {
     m_parent->insertChildAt(index, std::move(pane));
   }
 
-  void WorkbenchSession::keepPillRoom(VirtualGridView& list) {
+  void WorkbenchSession::keepTabRoom(VirtualGridView& list) {
     if (m_room != nullptr) {
       return;
     }
     m_room = m_pane->addChild(
         ui::inputArea({
-            .height = kStatusPillRoom,
+            .height = 0.0F,
             .onAxisHandler = [this, &list](const InputArea::PointerData& data) {
               return scrollFromRoom(*m_room, list, data);
             },
         })
     );
+  }
+
+  void WorkbenchSession::setTabRoom(float tabHeight) {
+    const float height = std::max(0.0F, tabHeight - kPaneBottomPadding);
+    if (m_room != nullptr && m_room->height() != height) {
+      m_room->setSize(m_room->width(), height);
+      m_room->markLayoutDirty();
+    }
   }
 
   std::optional<LayoutRect> WorkbenchSession::paneArea(const Node& frame) const {

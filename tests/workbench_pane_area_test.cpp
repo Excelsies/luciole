@@ -3,10 +3,10 @@
 #include "metrics_renderer.h"
 #include "render/scene/input_area.h"
 #include "render/scene/input_dispatcher.h"
+#include "status_tab_stand_in.h"
 #include "temp_folder.h"
 #include "test_check.h"
 #include "thumbnails/file_icon_cache.h"
-#include "ui/browser/status_pill.h"
 #include "ui/builders.h"
 #include "ui/controls/flex.h"
 #include "ui/controls/label.h"
@@ -24,9 +24,9 @@
 #include <print>
 #include <wayland-client-protocol.h>
 
-// Where the page's status pill floats: the file pane's place in the page body while the Workbench view shows the
+// Where the page's status tab floats: the file pane's place in the page body while the Workbench view shows the
 // pane, and none while the expanded instrument covers it. A slide of the pane moves its drawing, not its place. The
-// pill takes the bottom of that place, below the list's rows, so it never covers the row under the cursor.
+// tab takes the bottom of that place, below the list's rows, so it never covers the row under the cursor.
 namespace {
   LayoutRect drawnAt(const Node& node) {
     LayoutRect rect{.width = node.width(), .height = node.height()};
@@ -104,10 +104,10 @@ namespace {
     }
   }
 
-  // The page's file pane in the page body, with the list's grid in it and the status pill beside it, the session
-  // mounted on the pane with the pill's room kept.
-  struct PillRig {
-    luciole::test::TempFolder home{"luciole-workbench-pane-pill"};
+  // The page's file pane in the page body, with the list's grid in it and the status tab beside it, the session
+  // mounted on the pane with the tab's room kept.
+  struct TabRig {
+    luciole::test::TempFolder home{"luciole-workbench-pane-tab"};
     luciole::WorkbenchServices services;
     luciole::FileIconCache icons;
     ::test::MetricsRenderer renderer;
@@ -115,11 +115,11 @@ namespace {
     Node body;
     Flex* pane = nullptr;
     VirtualGridView* list = nullptr;
-    StatusPill pill;
+    StatusTab tab;
     std::optional<luciole::WorkbenchSession> session;
     InputDispatcher dispatcher;
 
-    PillRig() {
+    TabRig() {
       setHome(home);
       body.setSize(1100, 700);
       pane = static_cast<Flex*>(body.addChild(
@@ -137,43 +137,44 @@ namespace {
               )
           )
       ));
-      body.addChild(buildStatusPill(pill));
-      pill.pill->setVisible(true);
-      (void)pill.status->setText("23 items · 1 selected · 49.3 KiB");
+      body.addChild(buildStatusTab(tab));
+      tab.tab->setVisible(true);
+      (void)tab.status->setText("23 items · 1 selected · 49.3 KiB");
       session.emplace(
           *pane, list->focusArea(), services.measureCache(), icons, [] { return 0U; },
           luciole::WorkbenchModelOptions{.ancestorLevels = 0}
       );
-      session->keepPillRoom(*list);
+      session->keepTabRoom(*list);
       session->update({}, {});
       dispatcher.setSceneRoot(&body);
       layout();
     }
-    PillRig(const PillRig&) = delete;
-    PillRig& operator=(const PillRig&) = delete;
-    PillRig(PillRig&&) = delete;
-    PillRig& operator=(PillRig&&) = delete;
-    ~PillRig() { session.reset(); } // before the body it took the pane from
+    TabRig(const TabRig&) = delete;
+    TabRig& operator=(const TabRig&) = delete;
+    TabRig(TabRig&&) = delete;
+    TabRig& operator=(TabRig&&) = delete;
+    ~TabRig() { session.reset(); } // before the body it took the pane from
 
-    // The page's frame: the view, then the pill in the place paneArea() gives.
+    // The page's frame: the view, then the tab in the place paneArea() gives.
     void layout() {
+      session->setTabRoom(statusTabHeight(renderer, tab));
       for (std::size_t round = 0; round < 2; ++round) { // the view plans its regions, then places them
         session->view().arrange(renderer, {0, 0, 1100, 700});
       }
       const auto area = session->paneArea(body);
       TEST_CHECK(area.has_value());
-      arrangeStatusPill(renderer, pill, area.value_or(LayoutRect{}), true);
+      arrangeStatusTab(renderer, tab, area.value_or(LayoutRect{}), true);
     }
   };
 
   // The cursor walks down the list as the Down key moves it; every row it reaches is shown whole and above the
-  // shown status pill, which floats in the place paneArea() gives.
-  void cursorRowStaysAboveThePill() {
-    PillRig rig;
-    const auto pillRect = drawnAt(*rig.pill.pill);
-    TEST_CHECK(pillRect.width > 100 && pillRect.height >= Style::controlHeightSm);
+  // shown status tab, which floats in the place paneArea() gives.
+  void cursorRowStaysAboveTheTab() {
+    TabRig rig;
+    const auto tabRect = drawnAt(*rig.tab.tab);
+    TEST_CHECK(tabRect.width > 100 && tabRect.height > 0);
     const auto pane = drawnAt(*rig.pane);
-    TEST_CHECK(pillRect.y + pillRect.height <= pane.y + pane.height); // the pill floats over the pane's own room
+    TEST_CHECK(tabRect.y + tabRect.height <= pane.y + pane.height); // the tab floats over the pane's own room
     for (std::size_t cursor = 0; cursor < kRows; ++cursor) {
       rig.list->setSelectedIndex(cursor, true);
       rig.layout();
@@ -183,20 +184,20 @@ namespace {
         continue;
       }
       TEST_NEAR(row->height, kRowHeight, 1e-3); // shown whole
-      TEST_CHECK(row->y + row->height <= drawnAt(*rig.pill.pill).y);
+      TEST_CHECK(row->y + row->height <= drawnAt(*rig.tab.tab).y);
     }
     TEST_CHECK(rig.list->scrollView().scrollOffset() > 0);
   }
 
-  // Beside the pill, below the list's rows, the room is the pane's: a drop there finds the pane and no row under it,
+  // Beside the tab, below the list's rows, the room is the pane's: a drop there finds the pane and no row under it,
   // so it goes to the folder, and a wheel turned there scrolls the list.
-  void roomBesideThePillIsThePanes() {
-    PillRig rig;
-    const auto pillRect = drawnAt(*rig.pill.pill);
+  void roomBesideTheTabIsThePanes() {
+    TabRig rig;
+    const auto tabRect = drawnAt(*rig.tab.tab);
     const auto grid = drawnAt(*rig.list);
     const float x = drawnAt(*rig.pane).x + 40;
-    const float y = pillRect.y + (pillRect.height / 2);
-    TEST_CHECK(x < pillRect.x && y > grid.y + grid.height);
+    const float y = tabRect.y + (tabRect.height / 2);
+    TEST_CHECK(x < tabRect.x && y > grid.y + grid.height);
     TEST_CHECK(rig.pane->containsScenePoint(x, y));
     TEST_CHECK(!rig.list->itemAtScene(x, y));
     TEST_CHECK(rig.list->scrollView().scrollOffset() == 0);
@@ -219,8 +220,8 @@ namespace {
 
 int main() {
   paneAreaIsThePanesPlace();
-  cursorRowStaysAboveThePill();
-  roomBesideThePillIsThePanes();
+  cursorRowStaysAboveTheTab();
+  roomBesideTheTabIsThePanes();
   std::println("workbench pane area checks passed");
   return 0;
 }

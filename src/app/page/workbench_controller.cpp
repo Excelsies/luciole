@@ -114,7 +114,7 @@ void WorkbenchController::mount() {
   m_session = std::make_unique<luciole::WorkbenchSession>(
       m_page.filePane(), m_page.fileList()->focusArea(), m_services->measureCache(), m_icons, m_hooks.modifiers
   );
-  m_session->keepPillRoom(*m_page.fileList());
+  m_session->keepTabRoom(*m_page.fileList());
   m_columnPreview = std::make_unique<luciole::WorkbenchPreview>(
       m_session->previewSlot(), m_services->previewWorkers(), luciole::MediaPlayer::available(),
       luciole::WorkbenchPreview::Hooks{

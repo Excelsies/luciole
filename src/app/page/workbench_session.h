@@ -124,10 +124,14 @@ namespace luciole {
     // Pushes what changed since the last call to the models and the view, then updates the view. Once per frame,
     // before layout.
     void update(const WorkbenchFeed& feed, const WorkbenchChoices& choices);
-    // Puts room for the page's status pill at the bottom of the pane, below `list`, which lies in the pane, so the
-    // pill covers no row. The room is the pane's, so a drop there finds the pane, and a wheel turned there scrolls
-    // `list`. Once per session; the session takes the room out again.
-    void keepPillRoom(VirtualGridView& list);
+    // Puts room for the page's status tab at the bottom of the pane, below `list`, which lies in the pane, so the
+    // tab covers no row. The room is the pane's, so a drop there finds the pane, and a wheel turned there scrolls
+    // `list`. It has no height until setTabRoom() gives it one. Once per session; the session takes the room out
+    // again.
+    void keepTabRoom(VirtualGridView& list);
+    // The tab docked at the pane's bottom edge is `tabHeight` high: the room below the list is what the pane's own
+    // bottom padding does not already hold.
+    void setTabRoom(float tabHeight);
 
     WorkbenchView& view() const noexcept { return *m_view; }
     // `node` lies in the view, and it and every node above it up to the view are visible.
@@ -135,7 +139,7 @@ namespace luciole {
     // The page's file pane is shown. False while the expanded instrument covers it: the pane keeps its geometry
     // then, so it must take no pointer input.
     bool showsPane() const { return shows(*m_pane); }
-    // The pane's place in `frame`'s coordinates while it is shown, where the page's status pill floats; none
+    // The pane's place in `frame`'s coordinates while it is shown, where the page's status tab docks; none
     // otherwise. A change of folder slides the pane, not its place.
     std::optional<LayoutRect> paneArea(const Node& frame) const;
     // Where the view shows a previewed file: empty until the page's column preview fills it.
