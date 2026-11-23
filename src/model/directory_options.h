@@ -20,6 +20,9 @@ namespace luciole {
   enum class ViewMode : std::uint8_t { List, Grid, Miller, Workbench };
   // List and Workbench show the current folder as details rows under a column header.
   constexpr bool showsDetailsRows(ViewMode mode) { return mode == ViewMode::List || mode == ViewMode::Workbench; }
+  // Whether rows bound for this mode start a walk for a folder's size in the Size column. Workbench measures the
+  // folders below the current one itself, so its rows do not.
+  constexpr bool rowsMeasureFolders(ViewMode mode) { return mode != ViewMode::Workbench; }
   // The mode after history reaches a visit saved in `saved`: Column view and Workbench stay on.
   constexpr ViewMode viewModeAfterVisit(ViewMode current, bool columnView, ViewMode saved) {
     if (columnView) {

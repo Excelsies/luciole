@@ -234,7 +234,7 @@ BrowserPage::BrowserPage(
         [this] { m_dragDrop.cancelFileDrag(); }
     );
   }
-  m_listAdapter.setFolderSizeEnabled(true);
+  m_listAdapter.setFolderSizeEnabled(luciole::rowsMeasureFolders(m_viewMode));
   m_hub.attach(m_workspaceId, *this);
   setEditing(pageEditing(m_workbench.editor()));
 }
@@ -2206,6 +2206,7 @@ void BrowserPage::setViewMode(luciole::ViewMode mode) {
 void BrowserPage::applyViewMode() {
   m_listAdapter.onPointerCancel();
   m_gridAdapter.onPointerCancel();
+  m_listAdapter.setFolderSizeEnabled(luciole::rowsMeasureFolders(m_viewMode));
   if (m_miller.enabled()) {
     m_regularList->setVisible(false);
     m_regularList->setParticipatesInLayout(false);

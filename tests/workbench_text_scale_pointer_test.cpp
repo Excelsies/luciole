@@ -256,6 +256,8 @@ namespace {
 } // namespace
 
 int main() {
+  // The list's rows ask for folder sizes in List, not in Workbench, which measures its folders itself.
+  static_assert(rowsMeasureFolders(ViewMode::List) && !rowsMeasureFolders(ViewMode::Workbench));
   ::test::setSystemTextScale(kLarge);
   wheelReachesTheScenePoint();
   anchoredRequestComesBackOnTheView();
