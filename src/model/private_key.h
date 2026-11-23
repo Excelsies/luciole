@@ -18,6 +18,9 @@ namespace luciole::private_key_detail {
       "AGE-SECRET-KEY-1"sv,
       "AGE-SECRET-KEY-PQ-1"sv
   };
+  inline constexpr std::array kKeyContentTypes{
+      "application/x-pem-file"sv, "application/x-pem-key"sv, "application/pgp-keys"sv
+  };
   inline constexpr auto kPemBegin = "-----BEGIN "sv;
   // "-----BEGIN" in base64, which starts every base64-encoded PEM file.
   inline constexpr auto kBase64PemBegin = "LS0tLS1CRUdJTi"sv;
@@ -129,6 +132,12 @@ namespace luciole::private_key_detail {
 } // namespace luciole::private_key_detail
 
 namespace luciole {
+  // Content types of key files. A preview reads them as text, so that it refuses their text, on a machine whose
+  // MIME database does not class them as text.
+  inline bool isKeyContentType(std::string_view type) {
+    return std::ranges::find(private_key_detail::kKeyContentTypes, type) != private_key_detail::kKeyContentTypes.end();
+  }
+
   // Whether the bytes hold private key material anywhere: a PEM BEGIN line naming a private key, a PGP, SSH2, PuTTY or
   // age key marker, a WireGuard PrivateKey or PresharedKey entry, or a base64-encoded PEM private key. Makes a fixed
   // number of scans over the given bytes plus one decode of at most 128 digits at each base64 PEM start.

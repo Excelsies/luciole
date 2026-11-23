@@ -130,6 +130,8 @@ namespace {
               "id_ed25519", "text/x-ssh-private-key", pem("OPENSSH PRIVATE KEY", body)
           },
           {"bundle.pem", "application/x-pem-file", std::format("{}{}", certificate, pem("PRIVATE KEY", body))},
+          // Key types the installed MIME database may not class as text: the file is still read and refused.
+          {"pgp.asc", "application/pgp-keys", pem("PGP PRIVATE KEY BLOCK", body)},
           {"windows.key", "text/plain", std::format("\xEF\xBB\xBF  {}", pem("RSA PRIVATE KEY", body, "\r\n"))},
           {"late.txt", "text/plain", std::format("{}{}", filler, pem("EC PRIVATE KEY", longBody))},
           {"keys.txt", "text/plain", "# public key: age1fakepublickey\nAGE-SECRET-KEY-1QQQQQQQQQQQQQQQQQQQQ\n"},

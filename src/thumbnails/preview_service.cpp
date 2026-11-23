@@ -302,7 +302,9 @@ void luciole::PreviewService::show(
   if (unchanged
       && (pixels == m_state->pixels
           || (pixels < m_state->pixels && !m_state->view.imageUpgradeFailed)
-          || (entry->contentType && luciole::contentTypeIsText(*entry->contentType)))) {
+          || (entry->contentType
+              && (luciole::contentTypeIsText(*entry->contentType)
+                  || luciole::isKeyContentType(*entry->contentType))))) {
     if (prepared && prepared->pixels && (!m_state->view.image || !m_state->view.image->pixels)) {
       m_state->view.image = std::move(prepared);
       m_state->view.status = PreviewStatus::Ready;
@@ -339,7 +341,8 @@ void luciole::PreviewService::show(
   state.view.message.clear();
   if (entry->type == luciole::FileType::Regular && !entry->symlink && luciole::entryAccess(*entry).read != false) {
     state.view.status = PreviewStatus::Loading;
-    if (entry->contentType && luciole::contentTypeIsText(*entry->contentType)) {
+    if (entry->contentType
+        && (luciole::contentTypeIsText(*entry->contentType) || luciole::isKeyContentType(*entry->contentType))) {
       state.pending = true;
       state.start();
     } else {
