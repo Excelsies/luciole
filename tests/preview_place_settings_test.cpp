@@ -42,9 +42,11 @@ namespace {
   public:
     std::vector<std::string> shown;
     std::string pick;
+    std::optional<std::uint32_t> serial; // the grab serial the dropdown was asked to use
 
     void openSelectDropdown(const DropdownRequest& request, DropdownCallbacks callbacks) override {
       shown = request.options;
+      serial = request.inputSerial;
       for (std::size_t index = 0; index < request.options.size(); ++index) {
         if (request.options[index] == pick && callbacks.onSelect) {
           callbacks.onSelect(index);
@@ -94,6 +96,7 @@ namespace {
     InputDispatcher dispatcher;
     std::vector<luciole::OverrideEdit> edits;
     std::uint32_t serial = 0;
+    std::uint32_t pressSerial = 0; // of the last click
 
     explicit Rig(::test::SceneCapture& rig) : capture(rig) {
       dialog = static_cast<SettingsDialog*>(root.addChild(
@@ -114,7 +117,8 @@ namespace {
       x += node.width() / 2;
       y += node.height() / 2;
       dispatcher.pointerEnter(x, y, ++serial);
-      dispatcher.pointerButton(x, y, BTN_LEFT, true, ++serial, 1000, false);
+      pressSerial = ++serial;
+      dispatcher.pointerButton(x, y, BTN_LEFT, true, pressSerial, 1000, false);
       dispatcher.pointerButton(x, y, BTN_LEFT, false, ++serial, 1100, false);
       dispatcher.pointerLeave();
       (void)frame();
@@ -148,6 +152,8 @@ namespace {
              "Replace Jump Ahead When It Does Not Fit", "Always Replace Jump Ahead", "Hide When It Does Not Fit"
          })
     );
+    // The dropdown grabs with the press's serial: GNOME dismisses a popup grabbed with the release's at once.
+    TEST_CHECK(rig.popup.serial == std::optional(rig.pressSerial) && rig.pressSerial != rig.serial);
     TEST_CHECK(rig.edits.size() == 1);
     TEST_CHECK(
         rig.edits.back().value(P::WorkbenchPreviewPlace) == std::optional(WorkbenchPreviewPlace::HiddenWhenNarrow)

@@ -6,6 +6,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -28,6 +29,9 @@ public:
     std::vector<ColorSwatchPreview> optionSwatchPreviews;
     std::size_t selectedIndex = static_cast<std::size_t>(-1);
     std::size_t maxVisibleOptions = 6;
+    // Serial of the press that opened the dropdown. Compositors that check popup grabs strictly
+    // (GNOME) dismiss a popup grabbed with any later serial, such as the release of a click.
+    std::optional<std::uint32_t> inputSerial = std::nullopt;
   };
 
   struct DropdownCallbacks {
