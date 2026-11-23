@@ -109,13 +109,13 @@ namespace {
       setSize(rect.width, rect.height);
       m_background->arrange(renderer, {0, 0, rect.width, rect.height});
       TEST_CHECK(m_session != nullptr);
-      m_session->setTabRoom(statusTabHeight(renderer, m_tab));
       for (std::size_t round = 0; round < 2; ++round) { // the view plans its regions, then places them
         m_session->view().arrange(renderer, {0, 0, rect.width, rect.height});
       }
       const auto area = m_session->paneArea(*this);
       TEST_CHECK(area.has_value());
-      arrangeStatusTab(renderer, m_tab, area.value_or(LayoutRect{}), true);
+      // The room the tab asks for is the view's from the next arrange on.
+      m_session->setTabRoom(arrangeStatusTab(renderer, m_tab, area.value_or(LayoutRect{}), true));
     }
 
   private:

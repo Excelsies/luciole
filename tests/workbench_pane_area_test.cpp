@@ -22,6 +22,7 @@
 #include <memory>
 #include <optional>
 #include <print>
+#include <vector>
 #include <wayland-client-protocol.h>
 
 // Where the page's status tab floats: the file pane's place in the page body while the Workbench view shows the
@@ -119,7 +120,7 @@ namespace {
     std::optional<luciole::WorkbenchSession> session;
     InputDispatcher dispatcher;
 
-    TabRig() {
+    explicit TabRig(bool shown = true) {
       setHome(home);
       body.setSize(1100, 700);
       pane = static_cast<Flex*>(body.addChild(
@@ -138,8 +139,9 @@ namespace {
           )
       ));
       body.addChild(buildStatusTab(tab));
-      tab.tab->setVisible(true);
-      (void)tab.status->setText("23 items · 1 selected · 49.3 KiB");
+      if (shown) {
+        showTab();
+      }
       session.emplace(
           *pane, list->focusArea(), services.measureCache(), icons, [] { return 0U; },
           luciole::WorkbenchModelOptions{.ancestorLevels = 0}
@@ -148,6 +150,7 @@ namespace {
       session->update({}, {});
       dispatcher.setSceneRoot(&body);
       layout();
+      layout(); // the room the tab asked for in the first frame is applied in the next
     }
     TabRig(const TabRig&) = delete;
     TabRig& operator=(const TabRig&) = delete;
@@ -155,17 +158,50 @@ namespace {
     TabRig& operator=(TabRig&&) = delete;
     ~TabRig() { session.reset(); } // before the body it took the pane from
 
-    // The page's frame: the view, then the tab in the place paneArea() gives.
+    void showTab() {
+      tab.tab->setVisible(true);
+      (void)tab.status->setText("23 items · 1 selected · 49.3 KiB");
+    }
+
+    // The page's frame: the view, then the tab in the place paneArea() gives, then the room it asks for, which the
+    // view takes in the next frame.
     void layout() {
-      session->setTabRoom(statusTabHeight(renderer, tab));
       for (std::size_t round = 0; round < 2; ++round) { // the view plans its regions, then places them
         session->view().arrange(renderer, {0, 0, 1100, 700});
       }
       const auto area = session->paneArea(body);
       TEST_CHECK(area.has_value());
-      arrangeStatusTab(renderer, tab, area.value_or(LayoutRect{}), true);
+      session->setTabRoom(arrangeStatusTab(renderer, tab, area.value_or(LayoutRect{}), true));
     }
   };
+
+  // Where the list's rows are, as far as the first rows tell.
+  std::vector<float> rowTops(const TabRig& rig) {
+    std::vector<float> tops;
+    for (std::size_t row = 0; row < 3; ++row) {
+      const auto rect = rig.list->itemRect(row);
+      TEST_CHECK(rect.has_value());
+      tops.push_back(rect ? rect->y : -1.0F);
+    }
+    return tops;
+  }
+
+  // The list is as tall before the tab was first shown as after: the room under it does not wait for the tab.
+  void listDoesNotMoveWhenTheTabFirstShows() {
+    TabRig rig(false);
+    const auto before = rowTops(rig);
+    const auto listBefore = drawnAt(*rig.list);
+    rig.showTab();
+    rig.layout();
+    rig.layout();
+    TEST_CHECK(before == rowTops(rig));
+    TEST_NEAR(listBefore.height, drawnAt(*rig.list).height, 1e-3);
+    rig.tab.tab->setVisible(false);
+    rig.layout();
+    rig.layout();
+    TEST_CHECK(before == rowTops(rig));
+    TEST_NEAR(listBefore.height, drawnAt(*rig.list).height, 1e-3);
+  }
 
   // The cursor walks down the list as the Down key moves it; every row it reaches is shown whole and above the
   // shown status tab, which floats in the place paneArea() gives.
@@ -221,6 +257,7 @@ namespace {
 int main() {
   paneAreaIsThePanesPlace();
   cursorRowStaysAboveTheTab();
+  listDoesNotMoveWhenTheTabFirstShows();
   roomBesideTheTabIsThePanes();
   std::println("workbench pane area checks passed");
   return 0;

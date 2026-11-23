@@ -326,6 +326,10 @@ void StatusBarController::layout(float paneWidth) {
 
 void StatusBarController::arrange(Renderer& renderer, const LayoutRect& area) {
   if (!m_pill->visible()) {
+    // The height is the same shown or not, so the room under the Workbench list is right before the first show.
+    LayoutConstraints hidden;
+    hidden.setMaxWidth(luciole::statusTabRoom(area.width).maxWidth);
+    m_tabHeight = m_pill->measure(renderer, hidden).height;
     return;
   }
   // Docked to the bottom edge of the area at its trailing corner, clear of the vertical scrollbar.

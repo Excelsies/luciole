@@ -60,9 +60,12 @@ inline float statusTabHeight(Renderer& renderer, const StatusTab& tab) {
 
 // Docks a shown tab at the bottom edge of `area`; the status ends in an ellipsis when it alone does not fit, and the
 // free space shows when `freeSpace` is set and fits after the whole status.
-inline void arrangeStatusTab(Renderer& renderer, const StatusTab& tab, const LayoutRect& area, bool freeSpace) {
+// Returns the tab's height as StatusBarController::tabHeight() does, shown or not.
+inline float arrangeStatusTab(Renderer& renderer, const StatusTab& tab, const LayoutRect& area, bool freeSpace) {
   if (!tab.tab->visible()) {
-    return;
+    LayoutConstraints constraints;
+    constraints.setMaxWidth(luciole::statusTabRoom(area.width).maxWidth);
+    return tab.tab->measure(renderer, constraints).height;
   }
   const float maximum = luciole::statusTabRoom(area.width).maxWidth;
   const float room = std::max(1.0F, maximum - 2.0F * Style::spaceMd);
@@ -76,5 +79,7 @@ inline void arrangeStatusTab(Renderer& renderer, const StatusTab& tab, const Lay
   tab.freeSpace->setParticipatesInLayout(showFreeSpace);
   LayoutConstraints constraints;
   constraints.setMaxWidth(maximum);
-  tab.tab->arrange(renderer, luciole::statusTabRect(area, tab.tab->measure(renderer, constraints)));
+  const auto size = tab.tab->measure(renderer, constraints);
+  tab.tab->arrange(renderer, luciole::statusTabRect(area, size));
+  return size.height;
 }
