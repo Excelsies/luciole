@@ -77,7 +77,7 @@ namespace luciole::editing {
     GateResult saveFinished(std::expected<SaveSucceeded, std::string> outcome);
     // The preview is about to show something else or go away. Proceeds at once when not editing.
     GateResult leave();
-    // The editor's Stop editing button or Escape. Proceeds with Stay unless a leave is pending.
+    // The editor's Stop Editing button or Escape. Proceeds with Stay unless a leave is pending.
     GateResult stop();
     // Refused with SaveRunning while the question's save runs; the question stays open until saveFinished.
     // A failed save keeps it open with the sentence for another answer, so the dialog must not close meanwhile.

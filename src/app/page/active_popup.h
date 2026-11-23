@@ -34,7 +34,7 @@ public:
     RunProgram,
     Operations,
     OperationDetails,
-    // "Save changes to <name>?" before an edited file is left; see PageEditing.
+    // "Save Changes to <name>?" before an edited file is left; see PageEditing.
     SaveChanges,
   };
 

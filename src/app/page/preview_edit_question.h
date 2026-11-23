@@ -9,7 +9,7 @@ class Flex;
 class Label;
 
 namespace luciole {
-  // The "Save changes to <name>?" question as a dialog root, with the parts kept while it is open.
+  // The "Save Changes to <name>?" question as a dialog root, with the parts kept while it is open.
   struct SaveQuestion {
     std::unique_ptr<Flex> root;
     Label* sentence = nullptr; // why a save failed; hidden while empty

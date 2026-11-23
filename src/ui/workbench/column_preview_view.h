@@ -17,7 +17,7 @@ namespace luciole {
     bool shown = false;
     bool editing = false;         // Save, Stop Editing and the unsaved mark; otherwise Enable Editing
     bool enableAvailable = false; // Enable Editing can be pressed
-    // Why Enable editing cannot be pressed, its tooltip.
+    // Why Enable Editing cannot be pressed, its tooltip.
     std::string reason = {}; // NOLINT(readability-redundant-member-init): bars use designated initializers.
     bool saveAvailable = false;
     bool unsaved = false;

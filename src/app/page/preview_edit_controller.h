@@ -128,7 +128,7 @@ namespace luciole {
     // Save and the save succeeded.
     // With `dismissCancels`, closing the question without choosing No keeps the changes and the editor, and `resume`
     // runs with the changes still unsaved. That holds only while every request waiting on the question is such a
-    // leave: a page's own leaves, Stop editing and another leave without it make the same dismissal mean No.
+    // leave: a page's own leaves, Stop Editing and another leave without it make the same dismissal mean No.
     bool leave(std::function<void()> resume, bool dismissCancels = false);
     // The page is deactivated while the question is shown: its popup closes without an answer and the question is
     // shown again by onFrame() once the page can show it.

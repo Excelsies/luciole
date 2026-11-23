@@ -17,7 +17,7 @@
 #include <print>
 #include <string>
 
-// The "Save changes to <name>?" question, laid out and drawn offscreen, answered through a real dispatcher.
+// The "Save Changes to <name>?" question, laid out and drawn offscreen, answered through a real dispatcher.
 namespace {
   constexpr int kWidth = 408;
   constexpr int kHeight = 200;

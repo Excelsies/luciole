@@ -364,7 +364,7 @@ namespace luciole::test::edit {
       frame();
     }
 
-    // Visits `name`, presses Enable editing and frames until the editor has the keyboard.
+    // Visits `name`, presses Enable Editing and frames until the editor has the keyboard.
     void edit(std::string_view name) {
       visit(name);
       TEST_CHECK(bar().enableAvailable);
