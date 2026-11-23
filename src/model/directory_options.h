@@ -23,12 +23,13 @@ namespace luciole {
   // Whether rows bound for this mode start a walk for a folder's size in the Size column. Workbench measures the
   // folders below the current one itself, so its rows do not.
   constexpr bool rowsMeasureFolders(ViewMode mode) { return mode != ViewMode::Workbench; }
-  // The mode after history reaches a visit saved in `saved`: Column view and Workbench stay on.
-  constexpr ViewMode viewModeAfterVisit(ViewMode current, bool columnView, ViewMode saved) {
+  // The mode after history reaches a visit saved in `saved`: Column view stays on. Workbench stays on too, unless
+  // per-folder views are on and `saved` is the folder's own mode or the default.
+  constexpr ViewMode viewModeAfterVisit(ViewMode current, bool columnView, ViewMode saved, bool folderModes = false) {
     if (columnView) {
       return ViewMode::Miller;
     }
-    return current == ViewMode::Workbench ? ViewMode::Workbench : saved;
+    return current == ViewMode::Workbench && !folderModes ? ViewMode::Workbench : saved;
   }
   // What sizes Workbench shapes and orders their entries.
   enum class WorkbenchMeasure : std::uint8_t { Bytes, Files, Items, Modified, Visits, Equal };

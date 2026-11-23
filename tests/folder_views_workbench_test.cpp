@@ -114,10 +114,12 @@ namespace {
     browser.open(c);
     TEST_CHECK(browser.viewport().mode == ViewMode::Workbench);
 
-    // Forgetting the folder's choice returns it to the default.
+    // Forgetting the folder's choice returns it to the default, which is List again.
+    browser.setDefaultViewMode(ViewMode::List);
     views.reset(a);
+    browser.open(b);
     browser.open(a);
-    TEST_CHECK(browser.viewport().mode == ViewMode::Workbench);
+    TEST_CHECK(browser.viewport().mode == ViewMode::List);
     pump.until([&] { return !views.busy(); });
   }
 } // namespace

@@ -2386,7 +2386,7 @@ void BrowserPage::syncBrowser() {
   if (m_visitSerial != browser().visitSerial()) {
     m_visitSerial = browser().visitSerial();
     const auto& viewport = browser().viewport();
-    m_viewMode = luciole::viewModeAfterVisit(m_viewMode, m_miller.enabled(), viewport.mode);
+    m_viewMode = luciole::viewModeAfterVisit(m_viewMode, m_miller.enabled(), viewport.mode, m_folderView.enabled());
     m_gridZoom = static_cast<std::size_t>(
         std::ranges::find(luciole::kGridIconSizes, viewport.iconSize) - luciole::kGridIconSizes.begin()
     );

@@ -30,11 +30,26 @@ namespace {
     // Column view switched off leaves Miller for the visit's saved mode.
     TEST_CHECK(viewModeAfterVisit(ViewMode::Miller, false, ViewMode::List) == ViewMode::List);
   }
+
+  // With per-folder views on, the folder's own mode (or the default when it has none) decides, Workbench included;
+  // Column view stays window-wide.
+  void testModeAfterVisitWithFolderModes() {
+    using luciole::ViewMode;
+    using luciole::viewModeAfterVisit;
+    TEST_CHECK(viewModeAfterVisit(ViewMode::Workbench, false, ViewMode::List, true) == ViewMode::List);
+    TEST_CHECK(viewModeAfterVisit(ViewMode::Workbench, false, ViewMode::Grid, true) == ViewMode::Grid);
+    TEST_CHECK(viewModeAfterVisit(ViewMode::Workbench, false, ViewMode::Workbench, true) == ViewMode::Workbench);
+    TEST_CHECK(viewModeAfterVisit(ViewMode::List, false, ViewMode::Workbench, true) == ViewMode::Workbench);
+    TEST_CHECK(viewModeAfterVisit(ViewMode::Grid, false, ViewMode::List, true) == ViewMode::List);
+    TEST_CHECK(viewModeAfterVisit(ViewMode::Workbench, true, ViewMode::List, true) == ViewMode::Miller);
+    TEST_CHECK(viewModeAfterVisit(ViewMode::Miller, true, ViewMode::Grid, true) == ViewMode::Miller);
+  }
 } // namespace
 
 int main() {
   testDetailsRows();
   testModeAfterVisit();
+  testModeAfterVisitWithFolderModes();
   std::println("view mode checks passed");
   return 0;
 }

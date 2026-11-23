@@ -64,7 +64,9 @@ void FolderViewController::apply() {
     m_page.sortChanged();
   }
   if (!m_miller.enabled()) {
-    m_page.showViewMode(m_page.browser().viewport().mode);
+    m_page.showViewMode(
+        luciole::viewModeAfterVisit(m_page.viewMode(), false, m_page.browser().viewport().mode, enabled())
+    );
   }
   m_page.requestSync();
 }
