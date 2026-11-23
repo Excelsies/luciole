@@ -101,6 +101,10 @@ Write test checks with `TEST_CHECK` and `TEST_NEAR` from `tests/test_check.h`, n
 
 Tests are listed in the table in `tests/meson.build`: each links the module libraries it exercises and never lists `src/` files.
 
+A test depends on nothing the CI image lacks. Library assets come from `lib/assets`: the test table gives every test `LUCIOLE_LIBRARY_ASSETS_DIR`, so no installed copy is needed. Fonts are the bundled icon font or the image's Noto and Adwaita fonts; a test of a fallback face skips, with its reason printed, on a machine whose fonts have no glyph for it. CI runs as root, which ignores permission bits, so a check that a mode refuses access runs only when `geteuid()` is not 0. Renderer output is checked by what it shows, with margins a GPU and Mesa's software renderer both meet. Processor time is not a unit check: the audio visual tests print it, and `just cpu-budget` runs their budget as a benchmark (`meson test --benchmark`, which sets `LUCIOLE_CPU_BUDGET`).
+
+`just ci-like` runs the unit suite the way CI does, without a container: a scratch build in `.tmp/ci` with a prefix that holds no installed copy and media off, a user namespace that maps you to root, Mesa's software renderer, and fonts from the Noto and Adwaita directories only. It needs no download; `tools/ci_like.sh` takes `meson test` arguments (`just ci-like font-preview`) and `CI_LIKE_FONTS` for other font directories. Run it before pushing a change to tests or to the test table.
+
 ## Contribution Rules
 
 ### One change per pull request

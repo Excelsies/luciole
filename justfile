@@ -62,6 +62,15 @@ test m=mode *args: (_ensure-configured m)
     if [[ "$(just _option "$1" tests)" != enabled ]]; then meson configure "build-$1" -Dtests=enabled; fi
     meson test -C "build-$1" --print-errorlogs "${@:2}"
 
+# The unit suite as CI runs it: no installed copy, no media, root, a software renderer, the image's fonts.
+ci-like *args:
+    tools/ci_like.sh "$@"
+
+# The processor-time budgets of the audio visuals, which the unit run only prints.
+[arg("m", pattern="debug|release|asan")]
+cpu-budget m=mode: (_ensure-configured m)
+    meson test -C "build-$1" --benchmark --print-errorlogs
+
 [arg("m", pattern="debug|release|asan")]
 install m:
     #!/usr/bin/env bash
