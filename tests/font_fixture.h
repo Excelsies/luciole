@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <cstdlib>
 #include <filesystem>
 #include <fontconfig/fontconfig.h>
 #include <fstream>
@@ -76,18 +77,10 @@ namespace luciole::test::fonts {
     FcBool value = FcFalse;
     return FcPatternGetBool(font, object, 0, &value) == FcResultMatch && value;
   }
-  inline bool noLanguages(FcPattern* font) {
-    FcLangSet* langs = nullptr;
-    if (FcPatternGetLangSet(font, FC_LANG, 0, &langs) != FcResultMatch) {
-      return false;
-    }
-    const std::unique_ptr<FcStrSet, decltype(&FcStrSetDestroy)> names(FcLangSetGetLangs(langs), &FcStrSetDestroy);
-    const std::unique_ptr<FcStrList, decltype(&FcStrListDone)> items(FcStrListCreate(names.get()), &FcStrListDone);
-    return FcStrListNext(items.get()) == nullptr;
-  }
 
   // Public fonts listed by the default fontconfig configuration: the smallest file of each kind under
-  // /usr/share/fonts. A kind the machine lacks is reported as skipped.
+  // /usr/share/fonts. A kind the machine lacks is reported as skipped. The symbol font is the bundled icon font, not
+  // a system one: the smallest system font without a language is a glyph test font on some installs.
   inline std::map<std::string, fs::path> findFonts(std::string_view suite) {
     const std::unique_ptr<FcPattern, decltype(&FcPatternDestroy)> any(FcPatternCreate(), &FcPatternDestroy);
     const std::unique_ptr<FcObjectSet, decltype(&FcObjectSetDestroy)> objects(
@@ -116,11 +109,9 @@ namespace luciole::test::fonts {
            double size = 0;
            return flag(font, FC_COLOR) && FcPatternGetDouble(font, FC_PIXEL_SIZE, 0, &size) == FcResultMatch;
          }},
-        {"non-Latin",
-         [](const auto&, auto* font) {
+        {"non-Latin", [](const auto&, auto* font) {
            return (hasLang(font, "ar") || hasLang(font, "he")) && !hasLang(font, "en") && !flag(font, FC_COLOR);
          }},
-        {"symbol", [](const auto&, auto* font) { return noLanguages(font) && !flag(font, FC_COLOR); }},
     };
     std::map<std::string, std::pair<std::uintmax_t, fs::path>> best;
     for (int i = 0; i < list->nfont; ++i) {
@@ -145,6 +136,12 @@ namespace luciole::test::fonts {
       }
     }
     std::map<std::string, fs::path> found;
+    const char* assets = std::getenv("LUCIOLE_LIBRARY_ASSETS_DIR");
+    TEST_CHECK(assets != nullptr);
+    const fs::path symbol = fs::path(assets != nullptr ? assets : "") / "fonts" / "noctalia-tabler.ttf";
+    TEST_CHECK(fs::is_regular_file(symbol));
+    std::println("{}: symbol font {}", suite, symbol.native());
+    found["symbol"] = symbol;
     for (const auto& [kind, slot] : best) {
       if (slot.second.empty()) {
         std::println("{}: skipped {}: fontconfig lists no such font under /usr/share/fonts", suite, kind);

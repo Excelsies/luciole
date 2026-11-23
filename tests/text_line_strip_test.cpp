@@ -1,3 +1,4 @@
+#include "font_coverage.h"
 #include "formats/styled_text.h"
 #include "imaging/text_line_strip.h"
 #include "test_check.h"
@@ -126,6 +127,10 @@ namespace {
 
   // Each CJK character is clearly wider than a monospace cell; the fallback face sets its width.
   void testWideCharacters() {
+    if (!luciole::test::installedFontCovers(0x6F22)) { // no font to fall back to for a CJK character
+      std::println("skipped wide characters: no installed font has CJK characters");
+      return;
+    }
     TextLineStrip strip(options());
     const auto line = plain("ab漢字cd");
     const double cell = strip.caretX(line, 1);

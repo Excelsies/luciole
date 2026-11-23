@@ -144,11 +144,16 @@ namespace {
       write(path, text);
       preview.show(entry(path, mime), 512);
       wait([&] { return !preview.busy(); });
+      constexpr std::string_view kRefusal = "This file looks like it contains a private key. Its text is not shown.";
+      if (preview.snapshot().message != kRefusal) { // what a failing run needs to name the case
+        std::println(
+            "{}: status {}, message \"{}\"", name, static_cast<int>(preview.snapshot().status),
+            preview.snapshot().message
+        );
+      }
       TEST_CHECK(preview.snapshot().status == luciole::PreviewStatus::Unavailable);
       TEST_CHECK(preview.snapshot().text.empty());
-      TEST_CHECK(
-          preview.snapshot().message == "This file looks like it contains a private key. Its text is not shown."
-      );
+      TEST_CHECK(preview.snapshot().message == kRefusal);
     }
     for (const auto& [name, mime, text] :
          {std::tuple<std::string, std::string, std::string>{"cert.pem", "application/x-pem-file", certificate},

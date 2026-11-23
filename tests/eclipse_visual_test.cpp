@@ -72,7 +72,9 @@ namespace {
     const int top = lit(first.pixels, box(-0.25F, -1.0F, 0.25F, -0.74F));
     const int bottom = lit(first.pixels, box(-0.25F, 0.74F, 0.25F, 1.0F));
     std::println("tone corona: right {}, left {}, top {}, bottom {}", right, left, top, bottom);
-    TEST_CHECK(right > 100 && left > 100);
+    // The streaks come from a noise of sines, so their count varies with the renderer: a GPU lights about 180 and
+    // 300 pixels, Mesa's software renderer 60 and 14. The top and the bottom stay dark in both.
+    TEST_CHECK(right > 10 && left > 10);
     TEST_CHECK(top == 0 && bottom == 0);
     const auto later = rig.run(*visual, source, 60, kPortrait);
     const int changed = test::audio::differingPixels(first.pixels, later.pixels, 24);

@@ -1,3 +1,4 @@
+#include "font_coverage.h"
 #include "formats/styled_text.h"
 #include "imaging/text_line_strip.h"
 #include "imaging/text_tile_renderer.h"
@@ -175,6 +176,10 @@ namespace {
 
   // A glyph from a taller fallback face does not move the line's baseline: the text before it draws as it does alone.
   void testSharedBaseline() {
+    if (!luciole::test::installedFontCovers(0x6F22)) { // no taller fallback face for a CJK character
+      std::println("skipped shared baseline: no installed font has CJK characters");
+      return;
+    }
     TextLineStrip strip(stripOptions(2.0));
     const auto mixed = document("ab \xE6\xBC\xA2\xE5\xAD\x97 cd")->blocks[0].lines[0];
     const auto alone = document("ab")->blocks[0].lines[0];
