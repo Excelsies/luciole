@@ -152,6 +152,8 @@ namespace {
     std::vector<fs::path> refused{fs::path("relative"), outer.path() / "missing"};
     if (::geteuid() != 0) { // permission bits do not stop the superuser
       refused.push_back(unreachable);
+    } else {
+      std::println("skipped unreachable parent: running as root");
     }
     for (const fs::path& parent : refused) {
       const auto child = runChild([&] {

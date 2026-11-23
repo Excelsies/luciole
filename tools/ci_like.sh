@@ -9,6 +9,9 @@ state=${CI_LIKE_DIR:-$root/.tmp/ci}
 build=$state/build
 fonts=${CI_LIKE_FONTS:-/usr/share/fonts/noto:/usr/share/fonts/Adwaita} # colon separated
 
+for dir in ${fonts//:/ }; do
+  [[ -d $dir ]] || echo "warning: font directory $dir does not exist; set CI_LIKE_FONTS" >&2
+done
 mkdir -p "$state/home" "$state/font-cache"
 if [[ ! -f $build/build.ninja ]]; then
   meson setup "$build" --buildtype=debug --prefix /nonexistent/luciole -Dmedia=disabled -Dtests=enabled

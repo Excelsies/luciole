@@ -10,6 +10,7 @@
 #include <format>
 #include <fstream>
 #include <functional>
+#include <print>
 #include <stdexcept>
 #include <string>
 #include <unistd.h>
@@ -297,6 +298,7 @@ namespace {
 
   void testUnreadableFolder() {
     if (::geteuid() == 0) { // permission bits do not stop the superuser
+      std::println("skipped unreadable folder: running as root");
       return;
     }
     Fixture fixture;

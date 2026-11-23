@@ -189,6 +189,8 @@ namespace {
       const auto refused = save(readOnly, "changed\n", load(readOnly));
       TEST_CHECK(refused.status == Status::ReadOnlyFile && !refused.identity && !refused.message.empty());
       TEST_CHECK(contents(readOnly) == "keep\n" && modeOf(readOnly) == 0444 && names(fixture.directory) == before);
+    } else {
+      std::println("skipped read-only file: running as root");
     }
   }
 
@@ -332,6 +334,7 @@ namespace {
 
   void testReadOnlyFolderRefused() {
     if (::geteuid() == 0) { // permission bits do not stop the superuser
+      std::println("skipped read-only folder: running as root");
       return;
     }
     const Fixture fixture;

@@ -73,8 +73,15 @@ namespace {
     const int bottom = lit(first.pixels, box(-0.25F, 0.74F, 0.25F, 1.0F));
     std::println("tone corona: right {}, left {}, top {}, bottom {}", right, left, top, bottom);
     // The streaks come from a noise of sines, so their count varies with the renderer: a GPU lights about 180 and
-    // 300 pixels, Mesa's software renderer 60 and 14. The top and the bottom stay dark in both.
-    TEST_CHECK(right > 10 && left > 10);
+    // 300 pixels, Mesa's software renderer 60 and 14. So the tone is compared with a silent frame of the same scene,
+    // which has no streaks, and the top and the bottom stay dark in both.
+    auto quiet = makeEclipseVisual();
+    AudioFrameSource silence(AudioScene::Silence);
+    const auto calm = rig.run(*quiet, silence, 120, kPortrait);
+    const int calmRight = lit(calm.pixels, box(0.74F, -0.25F, 1.0F, 0.25F));
+    const int calmLeft = lit(calm.pixels, box(-1.0F, -0.25F, -0.74F, 0.25F));
+    std::println("silent corona: right {}, left {}", calmRight, calmLeft);
+    TEST_CHECK(right > calmRight && left > calmLeft);
     TEST_CHECK(top == 0 && bottom == 0);
     const auto later = rig.run(*visual, source, 60, kPortrait);
     const int changed = test::audio::differingPixels(first.pixels, later.pixels, 24);

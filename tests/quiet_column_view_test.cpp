@@ -662,6 +662,8 @@ namespace {
       listed.follow("locked");
       rig.show(listed.content(4));
       checkNotice(rig, QuietNotice::Unreadable, "This folder could not be read");
+    } else {
+      std::println("skipped unreadable folder notice: running as root");
     }
     listed.follow("missing");
     rig.show(listed.content(5));
