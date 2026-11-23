@@ -48,6 +48,9 @@ namespace luciole {
     bool applySnapshot(
         DirectorySnapshot snapshot, std::unordered_map<EntryId, EntryId> parents = {}, bool preserveRootOrder = false
     );
+    // A file replaced at its path under a new identity, as an editor's save does, is not a removal: the cursor stays
+    // where it was instead of advancing. Off by default.
+    void setReplacementKeepsFocus(bool keep) { m_replacementKeepsFocus = keep; }
     std::optional<EntryId> treeParent(EntryId id) const;
     std::size_t treeDepth(EntryId id) const;
     void setChangedCallback(std::function<void()> callback);
@@ -149,6 +152,7 @@ namespace luciole {
     std::optional<EntryId> m_scrollAnchor;
     bool m_selectionAvailable = false;
     bool m_preserveRootOrder = false;
+    bool m_replacementKeepsFocus = false;
     bool m_singleSelection = false;
     EntryFilter m_entryFilter;
     std::function<void()> m_changed;

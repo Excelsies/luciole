@@ -993,6 +993,24 @@ namespace {
     TEST_CHECK(!tree.selection().focused);
   }
 
+  // A saved file is replaced at its path under a new identity. With the setting on, the entry is not removed, so the
+  // cursor does not advance to the next row, and the page finds the file again by its path; by default it advances.
+  void testReplacedFileIsNotARemoval() {
+    DirectoryModel advancing;
+    advancing.applySnapshot(snapshot({entry(1, "a"), entry(2, "b"), entry(3, "c")}));
+    TEST_CHECK(advancing.select(2));
+    advancing.applySnapshot(snapshot({entry(1, "a"), entry(22, "b"), entry(3, "c")}, 2));
+    selected(advancing, {3});
+
+    DirectoryModel model;
+    model.setReplacementKeepsFocus(true);
+    model.applySnapshot(snapshot({entry(1, "a"), entry(2, "b"), entry(3, "c")}));
+    TEST_CHECK(model.select(2));
+    model.applySnapshot(snapshot({entry(1, "a"), entry(22, "b"), entry(3, "c")}, 2));
+    TEST_CHECK(model.selection().focused != 3);
+    selected(model, {});
+  }
+
   struct Fixture {
     luciole::test::TempFolder tempFolder{"luciole-model-test"};
     std::filesystem::path path = tempFolder.path();
@@ -1082,6 +1100,7 @@ int main() {
     testSingleSelectionAndEntryFilter();
     testSnapshotReconciliation();
     testSelectionAfterRemoval();
+    testReplacedFileIsNotARemoval();
     testDirectoryServiceIntegration();
     std::println("directory model checks passed");
     return 0;

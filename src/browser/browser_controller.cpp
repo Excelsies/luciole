@@ -30,6 +30,7 @@ luciole::BrowserController::BrowserController(
     SortOptions sort, bool showHidden, bool showBackups, const FolderTotalsService::NetworkFilesystemCheck& networkCheck
 )
     : m_activation(std::make_shared<ActivationState>()) {
+  m_model.setReplacementKeepsFocus(true); // a save in the preview replaces the file it edits
   m_activation->resolved = [this](
                                EntryId id, const Location& target, std::uint64_t context,
                                const std::expected<FileType, FileError>& type

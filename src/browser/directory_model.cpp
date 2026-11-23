@@ -27,6 +27,15 @@ namespace {
     const luciole::GString collated(g_utf8_collate_key_for_filename(luciole::foldedDisplayText(text).c_str(), -1));
     return collated.get();
   }
+
+  bool listsLocation(const luciole::DirectoryEntries& entries, const luciole::Location& location) {
+    for (std::size_t index = 0; index < entries.size(); ++index) {
+      if (entries.location(index) == location) {
+        return true;
+      }
+    }
+    return false;
+  }
 } // namespace
 
 bool luciole::DirectoryModel::applySnapshot(
@@ -60,6 +69,7 @@ bool luciole::DirectoryModel::applySnapshot(
   const auto focused = m_selection.focused;
   const auto focusedRow = focused ? rowOf(*focused) : std::nullopt;
   const auto focusedParent = focused ? treeParent(*focused) : std::nullopt;
+  const auto* focusedEntry = focused ? entry(*focused) : nullptr;
   const bool focusedSelected = focused && m_selection.selected.contains(*focused);
   m_preserveRootOrder = preserveRootOrder;
   m_treeParents = std::move(parents);
@@ -132,7 +142,8 @@ bool luciole::DirectoryModel::applySnapshot(
   if (sameLocation
       && snapshot.status == DirectoryStatus::Ready
       && focusedRow
-      && (slots.empty() || slots[sourceSlot(slots, snapshot.entries, *focused)] == kNoRow)) {
+      && (slots.empty() || slots[sourceSlot(slots, snapshot.entries, *focused)] == kNoRow)
+      && !(m_replacementKeepsFocus && focusedEntry && listsLocation(snapshot.entries, focusedEntry->location()))) {
     // Keep the previous visible order only for an actual removal, never a filter or an incomplete scan.
     removalOrder.reserve(m_rows.size() - 1);
     removalOrder.insert(
