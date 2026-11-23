@@ -518,9 +518,15 @@ if media_playback
   ]
 endif
 
+library_assets_env = 'LUCIOLE_LIBRARY_ASSETS_DIR=' + (meson.project_source_root() / 'lib/assets')
+
 foreach entry : test_table
   name = entry['name']
   test_env = entry.get('env', [])
+  # Library assets come from the source tree, never from an installed copy.
+  if not test_env.contains(library_assets_env)
+    test_env += [library_assets_env]
+  endif
   if entry.get('system_font', false)
     # a test that sets the system font writes its own GTK settings, never the user's
     test_env += ['XDG_CONFIG_HOME=' + meson.current_build_dir() / ('xdg-' + name), 'GSETTINGS_BACKEND=memory']
@@ -535,7 +541,7 @@ foreach entry : test_table
     override_options: ['b_ndebug=false'],
   )
   if 'wrapper' in entry
-    test(name, python, args: [entry['wrapper'], exe], timeout: entry.get('timeout', 30), env: entry.get('env', []),
+    test(name, python, args: [entry['wrapper'], exe], timeout: entry.get('timeout', 30), env: test_env,
       is_parallel: entry.get('parallel', true))
   else
     test(name, exe, timeout: entry.get('timeout', 30), env: test_env, is_parallel: entry.get('parallel', true))
