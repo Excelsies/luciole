@@ -1,5 +1,6 @@
 #include "browser/workbench_snapshot.h"
 
+#include "browser/entry_details.h"
 #include "browser/location_presentation.h"
 
 #include <algorithm>
@@ -304,6 +305,22 @@ double luciole::WorkbenchSnapshot::share(const ListedEntry& entry) const {
 luciole::workbench::NodeId luciole::WorkbenchSnapshot::node(std::string_view name) const {
   const auto* found = findShare(shares, name);
   return found ? found->id : kNoNode;
+}
+
+std::string luciole::WorkbenchSnapshot::folderSizeText(std::string_view name) const {
+  const auto id = node(name);
+  if (notMeasured || id == kNoNode) {
+    return {};
+  }
+  const auto& found = tree.nodes[id];
+  if (!found.folder
+      || found.notMeasured
+      || found.otherFilesystem
+      || found.unreadable
+      || (found.partial && found.bytes <= 0)) {
+    return {};
+  }
+  return luciole::folderSizeText(static_cast<std::uint64_t>(found.bytes), found.partial || found.lowerBound);
 }
 
 std::optional<luciole::WorkbenchDraft> luciole::buildDraft(const WorkbenchBuildInput& input) {

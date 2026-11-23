@@ -285,6 +285,7 @@ test_table = [
   {'name': 'workbench-model', 'deps': [browser_dep, event_loop_dep], 'timeout': 90, 'env': gio_env},
   {'name': 'workbench-ancestor-measure', 'deps': [browser_dep, event_loop_dep], 'timeout': 90, 'env': gio_env},
   {'name': 'workbench-snapshot-graft', 'deps': [browser_dep], 'timeout': 60, 'env': gio_env},
+  {'name': 'workbench-folder-size', 'deps': [browser_dep, event_loop_dep], 'timeout': 60, 'env': gio_env},
   {'name': 'workbench-model-changes', 'deps': [browser_dep, event_loop_dep], 'timeout': 90, 'env': gio_env},
   {'name': 'link-target', 'deps': [fs_dep], 'env': gio_env},
   {'name': 'selection-details', 'deps': [browser_dep, event_loop_dep], 'timeout': 60, 'env': gio_env},

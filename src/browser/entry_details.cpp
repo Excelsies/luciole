@@ -69,17 +69,15 @@ std::string luciole::entryColumnText(const DirectoryEntry& entry, DetailsColumn 
 }
 
 std::string luciole::entryFolderSizeText(const FolderTotalsSnapshot& totals) {
-  if (totals.phase != FolderTotalsPhase::Complete) {
-    return {};
-  }
-  const GString size(g_format_size_full(totals.bytes, G_FORMAT_SIZE_IEC_UNITS));
+  return totals.phase == FolderTotalsPhase::Complete ? folderSizeText(totals.bytes, totals.partial()) : std::string{};
+}
+
+std::string luciole::folderSizeText(std::uint64_t bytes, bool lowerBound) {
+  const GString size(g_format_size_full(bytes, G_FORMAT_SIZE_IEC_UNITS));
   if (!size) {
     return {};
   }
-  if (totals.partial()) {
-    return std::format("≥ {}", size.get());
-  }
-  return size.get();
+  return lowerBound ? std::format("≥ {}", size.get()) : std::string(size.get());
 }
 
 std::optional<std::uint64_t> luciole::entrySortNumber(const DirectoryEntry& entry, SortField field) {

@@ -1,0 +1,152 @@
+#include "browser/workbench_model.h"
+#include "browser/workbench_services.h"
+#include "event_loop/glib_poll_source.h"
+#include "fs/file_query.h"
+#include "fs/folder_totals_walk.h"
+#include "fs/gio_ptr.h"
+#include "temp_folder.h"
+#include "test_check.h"
+
+#include <algorithm>
+#include <chrono>
+#include <filesystem>
+#include <fstream>
+#include <functional>
+#include <memory>
+#include <poll.h>
+#include <print>
+#include <string>
+#include <vector>
+
+namespace {
+  namespace fs = std::filesystem;
+  using luciole::Location;
+  using luciole::WorkbenchSnapshot;
+  using luciole::workbench::Node;
+
+  // A snapshot whose folder holds one child per node, named n0, n1, ...
+  WorkbenchSnapshot snapshotOf(const std::vector<Node>& children) {
+    luciole::workbench::Tree tree;
+    tree.root = 0;
+    tree.nodes.push_back({.name = "root", .folder = true});
+    std::vector<luciole::WorkbenchShare> shares;
+    for (const auto& child : children) {
+      const auto id = static_cast<luciole::workbench::NodeId>(tree.nodes.size());
+      tree.nodes.push_back(child);
+      tree.nodes.back().name = "n" + std::to_string(id);
+      shares.push_back({.name = "n" + std::to_string(id), .id = id, .share = 0});
+    }
+    std::ranges::sort(shares, {}, &luciole::WorkbenchShare::name);
+    return {
+        .serial = 1,
+        .location = Location::fromPath("/r"),
+        .settings = {},
+        .tree = std::move(tree),
+        .jump = {},
+        .jumpLocations = {},
+        .shares = std::move(shares),
+        .total = 0,
+        .error = std::nullopt,
+    };
+  }
+
+  // The same text as the List view's cell, with literals worked out by hand: 1536 bytes are 1.5\u00a0KiB.
+  void textOfMeasuredNodes() {
+    const auto snapshot = snapshotOf({
+        {.name = "", .bytes = 1536, .folder = true},                          // n1 measured
+        {.name = "", .bytes = 1536, .folder = true, .partial = true},         // n2 still measuring
+        {.name = "", .bytes = 1536, .folder = true, .lowerBound = true},      // n3 cut short
+        {.name = "", .bytes = 0, .folder = true, .partial = true},            // n4 nothing counted yet
+        {.name = "", .bytes = 1536, .folder = true, .notMeasured = true},     // n5
+        {.name = "", .bytes = 1536, .folder = true, .otherFilesystem = true}, // n6
+        {.name = "", .bytes = 1536, .folder = true, .unreadable = true},      // n7
+        {.name = "", .bytes = 0, .folder = true},                             // n8 empty and measured
+        {.name = "", .bytes = 1536, .folder = false},                         // n9 a file
+    });
+    TEST_CHECK(snapshot.folderSizeText("n1") == "1.5\u00a0KiB");
+    TEST_CHECK(snapshot.folderSizeText("n2") == "≥ 1.5\u00a0KiB");
+    TEST_CHECK(snapshot.folderSizeText("n3") == "≥ 1.5\u00a0KiB");
+    TEST_CHECK(snapshot.folderSizeText("n4").empty());
+    TEST_CHECK(snapshot.folderSizeText("n5").empty());
+    TEST_CHECK(snapshot.folderSizeText("n6").empty());
+    TEST_CHECK(snapshot.folderSizeText("n7").empty());
+    TEST_CHECK(snapshot.folderSizeText("n8") == "0 bytes");
+    TEST_CHECK(snapshot.folderSizeText("n9").empty());
+    TEST_CHECK(snapshot.folderSizeText("missing").empty());
+  }
+
+  void textOfAFolderTheSnapshotDoesNotMeasure() {
+    auto snapshot = snapshotOf({{.name = "", .bytes = 1536, .folder = true}});
+    snapshot.notMeasured = true;
+    TEST_CHECK(snapshot.folderSizeText("n1").empty());
+  }
+
+  void write(const fs::path& path, std::size_t bytes) {
+    fs::create_directories(path.parent_path());
+    std::ofstream(path) << std::string(bytes, 'x');
+  }
+
+  class Pump {
+  public:
+    void until(const std::function<bool()>& done) {
+      const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(30);
+      while (!done()) {
+        TEST_CHECK(std::chrono::steady_clock::now() < deadline);
+        std::vector<pollfd> fds;
+        const auto start = m_source.addPollFds(fds);
+        const int requested = m_source.pollTimeoutMs();
+        TEST_CHECK(::poll(fds.data(), fds.size(), requested < 0 ? 5 : std::min(requested, 5)) >= 0);
+        m_source.dispatch(fds, start);
+      }
+    }
+
+  private:
+    GlibPollSource m_source;
+  };
+
+  luciole::DirectoryEntry entryOf(const fs::path& path) {
+    luciole::DirectoryEntry result{
+        .place = Location::fromPath(path.native()), .name = {}, .size = {}, .modifiedSeconds = {}
+    };
+    const auto facts = luciole::readFileDetails(result.location(), {});
+    result.type = facts.type;
+    result.setIdentity(facts.identity);
+    result.setEtag(facts.etag);
+    result.contentRevision = facts.contentRevision;
+    return result;
+  }
+
+  // The folder `links` holds a 1000 byte file and a second name for it, `plain` one of 500 bytes. Workbench counts
+  // the linked file once; the List view's walk counts every name.
+  void hardLinkedFileCountsOnce(const fs::path& base) {
+    write(base / "links" / "a", 1000);
+    fs::create_hard_link(base / "links" / "a", base / "links" / "b");
+    write(base / "plain" / "c", 500);
+
+    luciole::WorkbenchServices services;
+    luciole::WorkbenchModel model(services.measureCache(), {.ancestorLevels = 0});
+    Pump pump;
+    model.setLocation(Location::fromPath(base.native()));
+    pump.until([&] { return model.snapshot() && !model.measuring(); });
+    const auto snapshot = model.snapshot();
+
+    const auto links = snapshot->node("links");
+    TEST_CHECK(links != luciole::workbench::kNoNode);
+    TEST_CHECK(snapshot->tree.nodes[links].bytes == 1000); // the instrument's number for the folder
+    TEST_CHECK(snapshot->folderSizeText("links") == "1000 bytes");
+    TEST_CHECK(snapshot->folderSizeText("plain") == "500 bytes");
+
+    // The List view's walk of the same folder adds the file at both of its names.
+    const auto totals = luciole::walkFolderTotals({entryOf(base / "links")}, {}, [](const auto&) {});
+    TEST_CHECK(totals.bytes == 2000 && !totals.partial());
+  }
+} // namespace
+
+int main() {
+  const luciole::test::TempFolder folder{"luciole-workbench-folder-size"};
+  textOfMeasuredNodes();
+  textOfAFolderTheSnapshotDoesNotMeasure();
+  hardLinkedFileCountsOnce(folder.path());
+  std::println("workbench folder size checks passed");
+  return 0;
+}

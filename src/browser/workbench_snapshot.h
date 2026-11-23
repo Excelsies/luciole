@@ -42,6 +42,10 @@ namespace luciole {
     double share(const ListedEntry& entry) const;
     // The node of an entry of the folder; kNoNode for a name the tree does not hold.
     workbench::NodeId node(std::string_view name) const;
+    // The Size cell of a folder of the listing, from this measure: a hard-linked file counts once, as in the
+    // instrument. Empty until the walk counted something, and for a folder that is not measured, is on another
+    // filesystem or could not be read; "≥ " first while the walk runs or was cut short.
+    std::string folderSizeText(std::string_view name) const;
   };
 
   // A child of the folder measured again on its own; it replaces what the folder's table says of the child, or is
