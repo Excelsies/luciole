@@ -173,9 +173,7 @@ namespace {
         TEST_CHECK(!shown || !text.empty());
         shown = shown || !text.empty();
       }
-      TEST_CHECK(
-          seen.back()->folderSizeText(name) == "4000 bytes" || seen.back()->folderSizeText(name) == "3.9\u00a0KiB"
-      );
+      TEST_CHECK(seen.back()->folderSizeText(name) == "3.9\u00a0KiB"); // 400 files of 10 bytes
       TEST_CHECK(!seen.back()->folderSizeText(name).starts_with("≥"));
     }
   }
