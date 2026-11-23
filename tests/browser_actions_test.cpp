@@ -971,7 +971,7 @@ namespace {
     model.applySnapshot(snapshot());
     luciole::ActionContext context{.model = model, .query = {}, .pinned = {}, .viewMode = luciole::ViewMode::Workbench};
     const auto request = R::capture(context);
-    TEST_CHECK(R::definition(A::Workbench).label == "Workbench view");
+    TEST_CHECK(R::definition(A::Workbench).label == "Workbench View");
     TEST_CHECK(R::state(A::Workbench, context, request).checked == 1);
     TEST_CHECK(R::state(A::List, context, request).checked == 0);
     TEST_CHECK(R::state(A::Miller, context, request).checked == 0);
@@ -1022,6 +1022,10 @@ namespace {
     TEST_CHECK(!luciole::shortcutMatches(A::Terminal, XKB_KEY_F4, KeyMod::Ctrl));
     TEST_CHECK(!luciole::shortcutMatches(A::Root, 0, 0));
     TEST_CHECK(luciole::shortcutAction({A::Grid, A::List, A::Miller}, XKB_KEY_2, KeyMod::Ctrl) == A::List);
+    TEST_CHECK(
+        luciole::shortcutAction({A::Grid, A::List, A::Miller, A::Workbench}, XKB_KEY_4, KeyMod::Ctrl) == A::Workbench
+    );
+    TEST_CHECK(luciole::shortcutMatches(A::Workbench, XKB_KEY_4, KeyMod::Ctrl));
     TEST_CHECK(!luciole::shortcutAction({A::Grid, A::List, A::Miller, A::Workbench}, XKB_KEY_4, 0));
     TEST_CHECK(luciole::shortcutAction({A::DeletePermanently, A::Trash}, XKB_KEY_Delete, 0) == A::Trash);
     TEST_CHECK(

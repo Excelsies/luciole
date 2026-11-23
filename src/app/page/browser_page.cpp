@@ -2457,6 +2457,9 @@ void BrowserPage::syncBrowser() {
   m_viewSwitch->setOptionTooltip(0, luciole::shortcutTooltip("Grid view", Action::Grid));
   m_viewSwitch->setOptionTooltip(1, luciole::shortcutTooltip("List view", Action::List));
   m_viewSwitch->setOptionTooltip(2, luciole::shortcutTooltip("Column view", Action::Miller));
+  if (!choosing()) {
+    m_viewSwitch->setOptionTooltip(3, luciole::shortcutTooltip("Workbench view", Action::Workbench));
+  }
   const bool showEmptyTrash = !choosing() && snapshot.location && snapshot.location->isTrash();
   m_emptyTrashButton->setVisible(showEmptyTrash);
   m_emptyTrashButton->setParticipatesInLayout(showEmptyTrash);
@@ -2930,7 +2933,9 @@ std::unique_ptr<Flex> BrowserPage::buildToolbar() {
                             .tooltip = luciole::shortcutTooltip("Column view", Action::Miller)}
                        );
                        views.push_back(
-                           {.label = "", .glyph = "layout-dashboard", .tooltip = "Workbench view (Ctrl+4)"}
+                           {.label = "",
+                            .glyph = "layout-dashboard",
+                            .tooltip = luciole::shortcutTooltip("Workbench view", Action::Workbench)}
                        );
                      }
                      return views;

@@ -185,6 +185,7 @@ namespace {
       {KeybindCommand::ViewGrid, KeybindScope::FileBrowser, "view_grid", "Grid View", {"Ctrl+1"}},
       {KeybindCommand::ViewList, KeybindScope::FileBrowser, "view_list", "List View", {"Ctrl+2"}},
       {KeybindCommand::ViewMiller, KeybindScope::FileBrowser, "view_miller", "Column View", {"Ctrl+3"}},
+      {KeybindCommand::ViewWorkbench, KeybindScope::FileBrowser, "view_workbench", "Workbench View", {"Ctrl+4"}},
       {KeybindCommand::ToggleHidden, KeybindScope::FileBrowser, "toggle_hidden", "Show Hidden", {"Ctrl+H"}},
       {KeybindCommand::ToggleSidebar, KeybindScope::FileBrowser, "toggle_sidebar", "Toggle Sidebar", {"F9"}},
       {KeybindCommand::TogglePreview, KeybindScope::FileBrowser, "toggle_preview", "Toggle Preview", {"F8"}},
@@ -281,7 +282,7 @@ namespace {
   );
 
   constexpr std::size_t kControlKeybindCount = 12;
-  constexpr std::size_t kFileBrowserKeybindCount = 41;
+  constexpr std::size_t kFileBrowserKeybindCount = 42;
   constexpr std::size_t kTabsAndWindowsKeybindCount = 22;
   static_assert(kControlKeybindCount + kFileBrowserKeybindCount + kTabsAndWindowsKeybindCount == kKeybindSpecs.size());
 } // namespace

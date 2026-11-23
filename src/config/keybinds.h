@@ -53,6 +53,7 @@ namespace luciole {
     ViewGrid,
     ViewList,
     ViewMiller,
+    ViewWorkbench,
     ToggleHidden,
     ToggleSidebar,
     TogglePreview,
@@ -109,7 +110,7 @@ namespace luciole {
     SelectTab8,
     SelectTab9,
   };
-  inline constexpr std::size_t kKeybindCommandCount = 75;
+  inline constexpr std::size_t kKeybindCommandCount = 76;
   inline constexpr std::size_t kMaxKeybindChords = 4;
   inline constexpr std::array<KeybindScope, 3> kKeybindScopes{
       KeybindScope::Controls, KeybindScope::FileBrowser, KeybindScope::TabsAndWindows
