@@ -59,6 +59,14 @@ namespace {
       luciole::KeybindCommand::SelectTab4, luciole::KeybindCommand::SelectTab5, luciole::KeybindCommand::SelectTab6,
       luciole::KeybindCommand::SelectTab7, luciole::KeybindCommand::SelectTab8, luciole::KeybindCommand::SelectTab9,
   };
+  // A tab being dragged fades in the strip while its copy follows the pointer.
+  constexpr float kDraggedTabOpacity = 0.4F;
+  constexpr float kTabGhostOpacity = 0.92F;
+  // Below this a dropped tab opens in a new window rather than moving within the strip.
+  constexpr float kTabDetachY = kTabStripHeight + kNavigationToolbarHeight - Style::spaceXs;
+  // Width of the zone at each end of the tab bar that scrolls it while a tab is dragged, and the fastest step.
+  constexpr float kTabEdgeZone = 48.0F;
+  constexpr float kTabEdgeStep = 14.0F;
 } // namespace
 
 WorkspaceApplication::WorkspaceApplication(
@@ -797,36 +805,8 @@ void WorkspaceApplication::pointer(const PointerEvent& event) {
   if (stripMovePointer(*host, event)) {
     return;
   }
-  if (host->pressedTab) {
-    if (event.type == PointerEvent::Type::Motion) {
-      host->tabDrag |= std::abs(x - host->pressX) > 8 || std::abs(y - host->pressY) > 8;
-      return;
-    }
-    if (event.type == PointerEvent::Type::Button && !event.pressed && event.button == BTN_LEFT) {
-      const auto tab = *std::exchange(host->pressedTab, std::nullopt);
-      if (host->tabDrag) {
-        if (y > kTabStripHeight + kNavigationToolbarHeight - Style::spaceXs) {
-          defer(host->id, tab, WorkspaceCommand::Detach);
-        } else {
-          std::size_t index = 0;
-          for (const auto& [id, button] : host->buttons) {
-            (void)id;
-            float bx = 0, by = 0;
-            Node::absolutePosition(button, bx, by);
-            if (x > bx + button->width() * 0.5F) {
-              ++index;
-            }
-          }
-          m_model.move(tab, host->id, index);
-          host->labels.clear();
-          host->surface.requestLayout();
-        }
-      } else {
-        select(host->id, tab);
-      }
-      host->tabDrag = false;
-      return;
-    }
+  if (tabDragPointer(*host, event, x, y)) {
+    return;
   }
   if (event.type == PointerEvent::Type::Button) {
     // Wayland uses evdev codes, not GTK/X11's numbered mouse buttons.
@@ -880,6 +860,10 @@ void WorkspaceApplication::pointer(const PointerEvent& event) {
           host->pressedTab = tab;
           host->pressX = x;
           host->pressY = y;
+          float bx = 0, by = 0;
+          Node::absolutePosition(button, bx, by);
+          host->grabX = x - bx;
+          host->grabY = y - by;
           return;
         }
       }
@@ -1491,6 +1475,184 @@ bool WorkspaceApplication::stripMovePointer(Host& host, const PointerEvent& even
   return false;
 }
 
+void WorkspaceApplication::buildTabDrag(Host& host) {
+  auto ghost = ui::row(
+      {.out = &host.tabGhost,
+       .align = FlexAlign::Center,
+       .paddingH = Style::spaceSm,
+       .fill = colorSpecFromRole(ColorRole::SurfaceContainerHighest),
+       .radius = Style::radiusMd,
+       .border = colorSpecFromRole(ColorRole::OutlineVariant),
+       .opacity = kTabGhostOpacity,
+       .visible = false,
+       .participatesInLayout = false},
+      ui::label(
+          {.out = &host.tabGhostLabel,
+           .color = colorSpecFromRole(ColorRole::OnSurface),
+           .maxLines = 1,
+           .textAlign = TextAlign::Center,
+           .ellipsize = TextEllipsize::End,
+           .flexGrow = 1}
+      )
+  );
+  ghost->setZIndex(60);
+  host.root->addChild(std::move(ghost));
+  auto marker = ui::box({.out = &host.tabDropMarker, .fill = colorSpecFromRole(ColorRole::Primary), .visible = false});
+  marker->setParticipatesInLayout(false);
+  marker->setRadius(1.5F);
+  // Under the copy, which usually covers the gap: the marker shows above and below it.
+  marker->setZIndex(55);
+  host.root->addChild(std::move(marker));
+}
+
+bool WorkspaceApplication::tabDragPointer(Host& host, const PointerEvent& event, float x, float y) {
+  if (!host.pressedTab) {
+    return false;
+  }
+  if (event.type == PointerEvent::Type::Motion) {
+    host.tabDrag |= std::abs(x - host.pressX) > 8 || std::abs(y - host.pressY) > 8;
+    if (host.tabDrag) {
+      updateTabEdgeScroll(host);
+      host.surface.requestLayout();
+    }
+    return true;
+  }
+  if (event.type != PointerEvent::Type::Button || event.pressed || event.button != BTN_LEFT) {
+    return false;
+  }
+  const auto tab = *std::exchange(host.pressedTab, std::nullopt);
+  if (!std::exchange(host.tabDrag, false)) {
+    select(host.id, tab);
+    return true;
+  }
+  if (tabDetaches(host, y)) {
+    defer(host.id, tab, WorkspaceCommand::Detach);
+  } else {
+    m_model.move(tab, host.id, tabDropIndex(host, tab, x));
+    host.labels.clear();
+  }
+  host.surface.requestLayout();
+  return true;
+}
+
+bool WorkspaceApplication::tabDetaches(const Host& host, float y) const {
+  // Single Window has no detach, and detaching a lone tab would only reopen its window.
+  return !m_defaults.singleWindow && m_model.windows().at(host.id).tabs.size() > 1 && y > kTabDetachY;
+}
+
+float WorkspaceApplication::tabEdgeScrollSpeed(const Host& host) const {
+  if (!host.pressedTab || !host.tabDrag || tabDetaches(host, host.pointerY) || !host.tabScroll->scrollable()) {
+    return 0;
+  }
+  float left = 0, top = 0;
+  Node::absolutePosition(host.tabScroll, left, top);
+  const float right = left + host.tabScroll->width();
+  const float offset = host.tabScroll->scrollOffset();
+  // Faster the nearer the pointer is to the end, and at full speed past it. Nothing once the bar is at that end,
+  // so the timer stops instead of relaying out the window with nothing to scroll.
+  if (host.pointerX < left + kTabEdgeZone) {
+    return offset <= 0.0F
+        ? 0.0F
+        : -kTabEdgeStep * std::clamp((left + kTabEdgeZone - host.pointerX) / kTabEdgeZone, 0.0F, 1.0F);
+  }
+  if (host.pointerX > right - kTabEdgeZone) {
+    return offset >= host.tabScroll->maxScrollOffset()
+        ? 0.0F
+        : kTabEdgeStep * std::clamp((host.pointerX - right + kTabEdgeZone) / kTabEdgeZone, 0.0F, 1.0F);
+  }
+  return 0;
+}
+
+void WorkspaceApplication::updateTabEdgeScroll(Host& host) {
+  if (tabEdgeScrollSpeed(host) == 0) {
+    host.tabEdgeScroll.stop();
+    return;
+  }
+  if (host.tabEdgeScroll.active()) {
+    return;
+  }
+  host.tabEdgeScroll.startRepeating(std::chrono::milliseconds(16), [this, &host] {
+    const float speed = tabEdgeScrollSpeed(host);
+    if (speed == 0) {
+      host.tabEdgeScroll.stop();
+      return;
+    }
+    auto* scroll = host.tabScroll;
+    scroll->requestScrollToOffset(std::clamp(scroll->scrollOffset() + speed, 0.0F, scroll->maxScrollOffset()));
+    host.surface.requestLayout();
+  });
+}
+
+std::size_t WorkspaceApplication::tabDropIndex(const Host& host, luciole::TabId tab, float x) {
+  // The dragged tab leaves its place first, so only the other tabs count.
+  std::size_t index = 0;
+  for (const auto& [id, button] : host.buttons) {
+    float bx = 0, by = 0;
+    Node::absolutePosition(button, bx, by);
+    if (id != tab && x > bx + button->width() * 0.5F) {
+      ++index;
+    }
+  }
+  return index;
+}
+
+void WorkspaceApplication::layoutTabDrag(Host& host, Renderer& renderer) const {
+  const auto dragged = host.pressedTab && host.tabDrag ? host.pressedTab : std::nullopt;
+  Button* source = nullptr;
+  for (const auto& [id, button] : host.buttons) {
+    button->setOpacity(id == dragged ? kDraggedTabOpacity : 1.0F);
+    if (id == dragged) {
+      source = button;
+    }
+  }
+  host.tabGhost->setVisible(source != nullptr);
+  host.tabDropMarker->setVisible(false);
+  if (source == nullptr) {
+    return;
+  }
+  const auto label = std::ranges::find(host.labels, *dragged, &std::pair<luciole::TabId, std::string>::first);
+  host.tabGhostLabel->setText(label != host.labels.end() ? label->second : std::string{});
+  const float width = source->width(), height = source->height();
+  const auto surfaceWidth = static_cast<float>(host.surface.width());
+  const auto surfaceHeight = static_cast<float>(host.surface.height());
+  const bool detach = tabDetaches(host, host.pointerY);
+  float sx = 0, sy = 0;
+  Node::absolutePosition(source, sx, sy);
+  // Within the strip the copy slides along it; pulled out, it follows the pointer freely.
+  const float x = std::clamp(host.pointerX - host.grabX, 0.0F, std::max(0.0F, surfaceWidth - width));
+  const float y = detach ? std::clamp(host.pointerY - host.grabY, 0.0F, std::max(0.0F, surfaceHeight - height)) : sy;
+  host.tabGhost->arrange(renderer, {x, y, width, height});
+  if (detach) {
+    return;
+  }
+  // The marker sits in the gap before the tab the dragged one would land in front of.
+  const auto index = tabDropIndex(host, *dragged, host.pointerX);
+  std::size_t position = 0;
+  float markerX = -1;
+  for (const auto& [id, button] : host.buttons) {
+    if (id == dragged) {
+      continue;
+    }
+    float bx = 0, by = 0;
+    Node::absolutePosition(button, bx, by);
+    if (position == index) {
+      markerX = bx - Style::spaceXs * 0.5F;
+      break;
+    }
+    markerX = bx + button->width() + Style::spaceXs * 0.5F;
+    ++position;
+  }
+  const auto current = static_cast<std::size_t>(
+      std::ranges::find(host.buttons, *dragged, &std::pair<luciole::TabId, Button*>::first) - host.buttons.begin()
+  );
+  // Dropping there would leave the tab where it is.
+  if (markerX < 0 || index == current) {
+    return;
+  }
+  host.tabDropMarker->setVisible(true);
+  host.tabDropMarker->arrange(renderer, {markerX - 1.5F, 0.0F, 3.0F, kTabStripHeight});
+}
+
 void WorkspaceApplication::tabMenu(Host& host, luciole::TabId tab, float x, float y) {
   auto& page = *m_pages.at(m_model.windows().at(host.id).active);
   std::vector<ContextMenuControlEntry> entries{
@@ -1829,6 +1991,7 @@ void WorkspaceApplication::prepare(Host& host) {
         ui::box({.out = &host.previewResizeLine, .fill = colorSpecFromRole(ColorRole::OutlineVariant), .width = 1})
     );
     host.root->addChild(std::move(preview));
+    buildTabDrag(host);
     auto bar = ui::box({.out = &host.activePaneBar, .fill = colorSpecFromRole(ColorRole::Primary), .visible = false});
     bar->setParticipatesInLayout(false);
     bar->setRadius(1.0F);
@@ -1916,6 +2079,7 @@ void WorkspaceApplication::prepare(Host& host) {
   const auto width = static_cast<float>(host.surface.width()), height = static_cast<float>(host.surface.height());
   host.root->arrange(renderer, {0, 0, width, height});
   host.strip->arrange(renderer, {0, 0, width, kTabStripHeight});
+  layoutTabDrag(host, renderer);
   const float footer = host.chooser ? kChooserFooterHeight : 0.0F;
   if (host.chooserFooter) {
     host.chooser->sync();
