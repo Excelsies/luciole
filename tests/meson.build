@@ -301,6 +301,7 @@ test_table = [
   {'name': 'visit-store', 'deps': [config_dep], 'env': gio_env},
   {'name': 'visit-service', 'deps': [config_dep, event_loop_dep], 'env': gio_env},
   {'name': 'folder-views', 'deps': [browser_dep, event_loop_dep], 'env': gio_env},
+  {'name': 'folder-views-workbench', 'deps': [browser_dep, event_loop_dep], 'env': gio_env},
   {'name': 'file-filter', 'deps': [fs_dep], 'env': gio_env},
   {'name': 'chooser-policy', 'deps': [browser_dep, event_loop_dep], 'env': gio_env},
   {'name': 'file-chooser-portal', 'deps': [platform_dep, event_loop_dep], 'env': gio_env},

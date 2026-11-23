@@ -70,8 +70,10 @@ namespace {
       if (const auto* field = table->get("view_mode")) {
         const auto* name = field->as_string();
         const auto mode = name != nullptr ? luciole::viewModeFromName(name->get()) : std::nullopt;
-        if (mode != luciole::ViewMode::List && mode != luciole::ViewMode::Grid) {
-          issue(*field, key + ".view_mode", "expected 'list' or 'grid'");
+        if (mode != luciole::ViewMode::List
+            && mode != luciole::ViewMode::Grid
+            && mode != luciole::ViewMode::Workbench) {
+          issue(*field, key + ".view_mode", "expected 'list', 'grid' or 'workbench'");
         } else {
           result.view.mode = mode;
         }
