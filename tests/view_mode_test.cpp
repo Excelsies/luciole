@@ -43,6 +43,8 @@ namespace {
     TEST_CHECK(viewModeAfterVisit(ViewMode::Grid, false, ViewMode::List, true) == ViewMode::List);
     TEST_CHECK(viewModeAfterVisit(ViewMode::Workbench, true, ViewMode::List, true) == ViewMode::Miller);
     TEST_CHECK(viewModeAfterVisit(ViewMode::Miller, true, ViewMode::Grid, true) == ViewMode::Miller);
+    TEST_CHECK(viewModeAfterVisit(ViewMode::Miller, false, ViewMode::Grid, true) == ViewMode::Grid);
+    TEST_CHECK(viewModeAfterVisit(ViewMode::Miller, false, ViewMode::Workbench, true) == ViewMode::Workbench);
   }
 } // namespace
 

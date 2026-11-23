@@ -37,7 +37,7 @@ private:
       luciole::PreferenceKey<T> key, const std::string& title, const Choices<T>& choices, std::string subtitle = {}
   );
   void addTerminal();
-  // The Workbench card on the Views page: its choices, the sound visualizer, Record visits and Clear visit history.
+  // The Workbench card on the Views page: its choices, the sound visualizer, Record Visits and Clear Visit History.
   void addWorkbenchCard(std::function<void()> clearVisits);
   void addKeybinds();
   void syncKeybinds();

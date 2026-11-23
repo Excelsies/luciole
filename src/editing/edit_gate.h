@@ -38,7 +38,7 @@ namespace luciole::editing {
     Stay,
   };
 
-  // The buttons of the "Save changes to <name>?" question.
+  // The buttons of the "Save Changes to <name>?" question.
   enum class Answer : std::uint8_t {
     Save,
     No,

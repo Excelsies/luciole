@@ -30,7 +30,7 @@ namespace luciole {
   class TableEditSession;
 
   // Editing a file in a Workbench column preview, by the rules of editing::EditGate: the edit bar, the read for
-  // editing, the save, and the one question "Save changes to <name>?" when unsaved changes are left. It belongs to
+  // editing, the save, and the one question "Save Changes to <name>?" when unsaved changes are left. It belongs to
   // the page and outlives the column preview it is attached to, so a question still opens, and Save still writes from
   // the model, after another view mode took the view away. Main context only.
   //

@@ -15,8 +15,8 @@ namespace luciole {
   // The edit bar under the header of a text preview.
   struct ColumnPreviewEditBar {
     bool shown = false;
-    bool editing = false;         // Save, Stop editing and the unsaved mark; otherwise Enable editing
-    bool enableAvailable = false; // Enable editing can be pressed
+    bool editing = false;         // Save, Stop Editing and the unsaved mark; otherwise Enable Editing
+    bool enableAvailable = false; // Enable Editing can be pressed
     // Why Enable editing cannot be pressed, its tooltip.
     std::string reason = {}; // NOLINT(readability-redundant-member-init): bars use designated initializers.
     bool saveAvailable = false;

@@ -20,7 +20,7 @@ struct PaneHeaderOptions {
 std::unique_ptr<Button>
 paneHeaderButton(std::string_view glyph, std::string_view tooltip, std::function<void()> onClick);
 
-// The title of a pane with its reason when the view closed it by force: "Jump ahead (closed: too short)". An empty
+// The title of a pane with its reason when the view closed it by force: "Jump Ahead (closed: too short)". An empty
 // reason gives the title as it is.
 std::string closedPaneTitle(std::string_view title, std::string_view reason);
 
