@@ -444,6 +444,42 @@ namespace {
     TEST_CHECK(bound() == colorForRole(ColorRole::OnSurface));
   }
 
+  // The list's rows ask for a folder's size in List view; entering Workbench stops that, which measures its folders
+  // itself, and leaving it starts it again.
+  void folderSizesFollowTheViewMode() {
+    Rig rig;
+    luciole::ThumbnailService thumbnails;
+    luciole::FileViewAdapter adapter(
+        rig.browser, rig.icons, thumbnails, luciole::ViewMode::List, [] { return 0U; }, [] { return false; }
+    );
+    const auto& model = rig.browser.model();
+    const auto big = luciole::rowOf(model, rig.fixture.at("big"));
+    const auto small = luciole::rowOf(model, rig.fixture.at("small"));
+    TEST_CHECK(big.has_value() && small.has_value());
+    auto tile = adapter.createTile();
+    const auto bind = [&](luciole::EntryId id) {
+      const auto index = static_cast<std::size_t>(std::ranges::find(model.rows(), id) - model.rows().begin());
+      adapter.bindTile(*tile, index, false, false);
+    };
+    const auto enter = [&](luciole::ViewMode mode) { adapter.setFolderSizeEnabled(luciole::rowsMeasureFolders(mode)); };
+    enter(luciole::ViewMode::List);
+    bind(*big);
+    rig.until([&] { return rig.browser.folderSize(*big) != nullptr; });
+    TEST_CHECK(rig.browser.folderSize(*big) != nullptr);
+
+    enter(luciole::ViewMode::Workbench);
+    bind(*small);
+    for (int round = 0; round < 40; ++round) {
+      rig.once();
+    }
+    TEST_CHECK(rig.browser.folderSize(*small) == nullptr);
+
+    enter(luciole::ViewMode::List);
+    bind(*small);
+    rig.until([&] { return rig.browser.folderSize(*small) != nullptr; });
+    TEST_CHECK(rig.browser.folderSize(*small) != nullptr);
+  }
+
   void switchingTwentyTimesLeavesNothing() {
     Rig rig;
     rig.select("big");
@@ -489,6 +525,7 @@ int main() {
   previewLeavesTheDividerItsEdge();
   moreMenuListsTheMergedEntries();
   linkedRowIsMarked();
+  folderSizesFollowTheViewMode();
   switchingTwentyTimesLeavesNothing();
   std::println("workbench session checks passed");
 }
