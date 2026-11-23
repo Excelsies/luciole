@@ -182,12 +182,14 @@ namespace {
       struct stat info{};
       TEST_CHECK(::stat(path.c_str(), &info) == 0 && info.st_uid == ::geteuid() && info.st_nlink == 1);
     }
-    const auto readOnly = fixture.directory / "read-only";
-    write(readOnly, "keep\n", 0444);
-    const auto before = names(fixture.directory);
-    const auto refused = save(readOnly, "changed\n", load(readOnly));
-    TEST_CHECK(refused.status == Status::ReadOnlyFile && !refused.identity && !refused.message.empty());
-    TEST_CHECK(contents(readOnly) == "keep\n" && modeOf(readOnly) == 0444 && names(fixture.directory) == before);
+    if (::geteuid() != 0) { // permission bits do not stop the superuser
+      const auto readOnly = fixture.directory / "read-only";
+      write(readOnly, "keep\n", 0444);
+      const auto before = names(fixture.directory);
+      const auto refused = save(readOnly, "changed\n", load(readOnly));
+      TEST_CHECK(refused.status == Status::ReadOnlyFile && !refused.identity && !refused.message.empty());
+      TEST_CHECK(contents(readOnly) == "keep\n" && modeOf(readOnly) == 0444 && names(fixture.directory) == before);
+    }
   }
 
   void testGroupKept() {
@@ -329,6 +331,9 @@ namespace {
   }
 
   void testReadOnlyFolderRefused() {
+    if (::geteuid() == 0) { // permission bits do not stop the superuser
+      return;
+    }
     const Fixture fixture;
     const auto folder = fixture.directory / "locked";
     fs::create_directory(folder);

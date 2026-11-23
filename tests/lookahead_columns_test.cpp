@@ -12,6 +12,7 @@
 #include <functional>
 #include <stdexcept>
 #include <string>
+#include <unistd.h>
 #include <vector>
 
 namespace {
@@ -295,6 +296,9 @@ namespace {
   }
 
   void testUnreadableFolder() {
+    if (::geteuid() == 0) { // permission bits do not stop the superuser
+      return;
+    }
     Fixture fixture;
     Pump pump;
     fs::create_directories(fixture.path / "locked" / "inside");

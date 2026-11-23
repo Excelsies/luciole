@@ -31,6 +31,7 @@
 #include <ranges>
 #include <string>
 #include <thread>
+#include <unistd.h>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -657,9 +658,11 @@ namespace {
     listed.follow("empty");
     rig.show(listed.content(3));
     checkNotice(rig, QuietNotice::Empty, "This folder is empty");
-    listed.follow("locked");
-    rig.show(listed.content(4));
-    checkNotice(rig, QuietNotice::Unreadable, "This folder could not be read");
+    if (::geteuid() != 0) { // permission bits do not stop the superuser
+      listed.follow("locked");
+      rig.show(listed.content(4));
+      checkNotice(rig, QuietNotice::Unreadable, "This folder could not be read");
+    }
     listed.follow("missing");
     rig.show(listed.content(5));
     checkNotice(rig, QuietNotice::Gone, "This folder no longer exists");

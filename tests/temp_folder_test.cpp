@@ -149,7 +149,11 @@ namespace {
     TEST_CHECK(!fs::exists(path) && fs::is_directory(outer.path()));
     lock(outer.path());
     const auto unreachable = outer.path() / "unreadable" / "inside";
-    for (const fs::path& parent : {fs::path("relative"), outer.path() / "missing", unreachable}) {
+    std::vector<fs::path> refused{fs::path("relative"), outer.path() / "missing"};
+    if (::geteuid() != 0) { // permission bits do not stop the superuser
+      refused.push_back(unreachable);
+    }
+    for (const fs::path& parent : refused) {
       const auto child = runChild([&] {
         const TempFolder folder("luciole-temp-folder-test", parent);
         std::println("made {}", folder.path().native());
