@@ -1703,6 +1703,65 @@ namespace {
     // 0 is the absence of a remembered list width, which the layout reads as none.
     TEST_CHECK(accepted({P::WorkbenchListWidth, 0}));
   }
+  // The Workbench view is a keybind command like Grid, List and Column view: Ctrl+4 until the config says otherwise.
+  void testWorkbenchViewKeybind() {
+    using K = luciole::KeybindCommand;
+    const auto chord = [](std::uint32_t sym, std::uint32_t modifiers) { return luciole::KeybindChord{sym, modifiers}; };
+    Fixture fixture;
+    luciole::ConfigService service(fixture.paths());
+    TEST_CHECK(service.reload());
+    TEST_CHECK(
+        service.settings().browser.keybinds.chords(K::ViewWorkbench)[0] == chord(XKB_KEY_4, luciole::KeybindMod::Ctrl)
+    );
+    TEST_CHECK(!service.settings().browser.keybinds.chords(K::ViewWorkbench)[1]);
+    TEST_CHECK(luciole::keybindCommandKey(K::ViewWorkbench) == "view_workbench");
+    TEST_CHECK(luciole::keybindCommandFromKey("view_workbench") == K::ViewWorkbench);
+
+    // A rebound command replaces its default and leaves the other views alone.
+    fixture.write("config.toml", "[browser.keybinds]\nview_workbench = [\"Ctrl+G\"]\n");
+    TEST_CHECK(service.reload());
+    const auto& rebound = service.settings().browser.keybinds;
+    TEST_CHECK(rebound.chords(K::ViewWorkbench)[0] == chord(XKB_KEY_g, luciole::KeybindMod::Ctrl));
+    TEST_CHECK(!rebound.chords(K::ViewWorkbench)[1]);
+    TEST_CHECK(rebound.chords(K::ViewMiller)[0] == chord(XKB_KEY_3, luciole::KeybindMod::Ctrl));
+    TEST_CHECK(luciole::keybindMatches(rebound, K::ViewWorkbench, XKB_KEY_g, luciole::KeybindMod::Ctrl));
+    TEST_CHECK(!luciole::keybindMatches(rebound, K::ViewWorkbench, XKB_KEY_4, luciole::KeybindMod::Ctrl));
+
+    // Absent from the file, the default comes back; an empty list unbinds it.
+    fixture.write("config.toml", "[browser]\n");
+    TEST_CHECK(service.reload());
+    TEST_CHECK(
+        service.settings().browser.keybinds.chords(K::ViewWorkbench)[0] == chord(XKB_KEY_4, luciole::KeybindMod::Ctrl)
+    );
+    fixture.write("config.toml", "[browser.keybinds]\nview_workbench = []\n");
+    TEST_CHECK(service.reload());
+    TEST_CHECK(!service.settings().browser.keybinds.chords(K::ViewWorkbench)[0]);
+
+    // The chord of another view in the same scope is refused.
+    fixture.write("config.toml", "[browser.keybinds]\nview_workbench = [\"Ctrl+3\"]\n");
+    TEST_CHECK(!service.reload());
+
+    // A choice made in the Keybinds page is saved under the command's key and read back.
+    fixture.write("config.toml", "[browser]\n");
+    TEST_CHECK(service.reload());
+    auto edited = service.settings().browser.keybinds;
+    luciole::setKeybindChord(edited, K::ViewWorkbench, 0, chord(XKB_KEY_g, luciole::KeybindMod::Ctrl));
+    const std::array edit{luciole::OverrideEdit{luciole::BrowserPreference::Keybinds, edited}};
+    TEST_CHECK(service.saveOverrides(edit) == luciole::AtomicWriteState::Durable);
+    TEST_CHECK(read(fixture.paths().overrides).contains("view_workbench"));
+    luciole::ConfigService reloaded(fixture.paths());
+    TEST_CHECK(reloaded.reload());
+    TEST_CHECK(
+        reloaded.settings().browser.keybinds.chords(K::ViewWorkbench)[0] == chord(XKB_KEY_g, luciole::KeybindMod::Ctrl)
+    );
+    // The action's shortcut follows the active bindings.
+    luciole::setActiveKeybinds(reloaded.settings().browser.keybinds);
+    TEST_CHECK(luciole::keybindMatches(K::ViewWorkbench, XKB_KEY_g, luciole::KeybindMod::Ctrl));
+    TEST_CHECK(!luciole::keybindMatches(K::ViewWorkbench, XKB_KEY_4, luciole::KeybindMod::Ctrl));
+    luciole::setActiveKeybinds(luciole::KeybindConfig{});
+    TEST_CHECK(luciole::keybindMatches(K::ViewWorkbench, XKB_KEY_4, luciole::KeybindMod::Ctrl));
+  }
+
   void testKeybinds() {
     using K = luciole::KeybindCommand;
     const auto chord = [](std::uint32_t sym, std::uint32_t modifiers) { return luciole::KeybindChord{sym, modifiers}; };
@@ -1943,6 +2002,7 @@ int main() {
     testInteractionModes();
     testThumbnailSettings();
     testKeybinds();
+    testWorkbenchViewKeybind();
     testOverrideSaving();
     testWorkbenchViewMode();
     testWorkbenchChoices();
