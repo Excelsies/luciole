@@ -46,7 +46,7 @@ namespace {
         const auto hit = hitShape(out.shapes, p, 0);
         const auto key = hit ? std::optional(keyOf(out.shapes[*hit])) : std::nullopt;
         // No other piece within 2 px: the topmost shape within reach is the same one.
-        bool stable = sameKey(hitShape(out.shapes, p, 2), out, key);
+        bool stable = key.has_value() && sameKey(hitShape(out.shapes, p, 2), out, key);
         for (const auto& [dx, dy] : {std::pair(-2.0F, 0.0F), {2.0F, 0.0F}, {0.0F, -2.0F}, {0.0F, 2.0F}}) {
           stable = stable && sameKey(hitShape(out.shapes, {.x = p.x + dx, .y = p.y + dy}, 0), out, key);
         }
@@ -59,9 +59,10 @@ namespace {
           ++agreed;
         }
         if (expected) {
-          const bool near = std::ranges::any_of(out.shapes, [&](const Shape& shape) {
-            return shape.hittable && keyOf(shape) == *expected && shapeContains(shape, p, slack);
-          });
+          // The shape under the point, when it is the expected piece, is within any slack: no need to look further.
+          const bool near = key == expected || std::ranges::any_of(out.shapes, [&](const Shape& shape) {
+                              return shape.hittable && keyOf(shape) == *expected && shapeContains(shape, p, slack);
+                            });
           if (!near) {
             std::println(stderr, "at {} {}: no shape of node {} near", x, y, expected->node);
           }
