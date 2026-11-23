@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <chrono>
 #include <filesystem>
+#include <format>
 #include <fstream>
 #include <functional>
 #include <memory>
@@ -140,6 +141,45 @@ namespace {
     const auto totals = luciole::walkFolderTotals({entryOf(base / "links")}, {}, [](const auto&) {});
     TEST_CHECK(totals.bytes == 2000 && !totals.partial());
   }
+  // Folders of 400 files each, walked with a snapshot per millisecond: once a cell shows a number it never goes blank
+  // again, a number is marked "≥" until the folder is done, and the last text has no mark.
+  void cellsGrowWithoutBlinking(const fs::path& base) {
+    for (int folder = 0; folder < 6; ++folder) {
+      for (int file = 0; file < 400; ++file) {
+        write(base / "grow" / std::format("d{}", folder) / std::format("f{:03}", file), 10);
+      }
+    }
+    luciole::MeasureServiceOptions options;
+    options.publishInterval = std::chrono::milliseconds(1);
+    luciole::SubtreeMeasureService service(options);
+    luciole::MeasureCache cache(service);
+    luciole::WorkbenchModel model(cache, {.ancestorLevels = 0});
+    std::vector<std::shared_ptr<const WorkbenchSnapshot>> seen;
+    model.setChangedCallback([&] {
+      if (const auto latest = model.snapshot(); latest && (seen.empty() || seen.back() != latest)) {
+        seen.push_back(latest);
+      }
+    });
+    Pump pump;
+    model.setLocation(Location::fromPath((base / "grow").native()));
+    pump.until([&] { return model.snapshot() && !model.measuring(); });
+    model.setChangedCallback({});
+    TEST_CHECK(seen.size() >= 2);
+    for (int folder = 0; folder < 6; ++folder) {
+      const auto name = std::format("d{}", folder);
+      bool shown = false;
+      for (const auto& snapshot : seen) {
+        const auto text = snapshot->folderSizeText(name);
+        TEST_CHECK(!shown || !text.empty());
+        shown = shown || !text.empty();
+      }
+      TEST_CHECK(
+          seen.back()->folderSizeText(name) == "4000 bytes" || seen.back()->folderSizeText(name) == "3.9\u00a0KiB"
+      );
+      TEST_CHECK(!seen.back()->folderSizeText(name).starts_with("≥"));
+    }
+  }
+
 } // namespace
 
 int main() {
@@ -147,6 +187,7 @@ int main() {
   textOfMeasuredNodes();
   textOfAFolderTheSnapshotDoesNotMeasure();
   hardLinkedFileCountsOnce(folder.path());
+  cellsGrowWithoutBlinking(folder.path());
   std::println("workbench folder size checks passed");
   return 0;
 }

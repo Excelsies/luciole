@@ -309,6 +309,14 @@ namespace luciole {
     };
   }
 
+  std::string WorkbenchSession::folderSizeText(const DirectoryEntry& entry) const {
+    const auto snapshot = m_model.snapshot();
+    if (!snapshot || !m_feed || !m_feed->folder || snapshot->location != *m_feed->folder) {
+      return {};
+    }
+    return snapshot->folderSizeText(entry.name);
+  }
+
   bool WorkbenchSession::shows(const Node& node) const {
     // Bounded by the depth of the scene.
     for (const Node* at = &node; at != nullptr; at = at->parent()) {

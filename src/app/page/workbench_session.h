@@ -149,6 +149,8 @@ namespace luciole {
     bool previewInJump() const { return m_view->previewHome() == workbench::PreviewHome::JumpAhead; }
     ColumnPreview& columnPreview() noexcept { return m_columnPreview; }
     WorkbenchModel& model() noexcept { return m_model; }
+    // The Size cell of a folder row of the list, from the measure; blank while the measure shows another folder.
+    std::string folderSizeText(const DirectoryEntry& entry) const;
     LookaheadColumns& lookahead() noexcept { return m_lookahead; }
     const LookaheadColumns& lookahead() const noexcept { return m_lookahead; }
     WorkbenchState& state() noexcept { return m_state; }

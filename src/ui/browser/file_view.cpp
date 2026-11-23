@@ -394,6 +394,23 @@ void luciole::FileViewAdapter::setTileVisible(Node& tile, bool visible) {
     reveal(tile, *state.entry);
   }
 }
+std::vector<luciole::EntryId> luciole::FileViewAdapter::staleFolderSizes() const {
+  std::vector<EntryId> stale;
+  if (m_folderSizes || !m_folderSizeText || !m_columns.visible(luciole::DetailsColumn::Size)) {
+    return stale;
+  }
+  const auto& model = m_browser.model();
+  for (const auto& [tile, state] : m_tiles) {
+    const auto* entry = state.entry ? model.entry(*state.entry) : nullptr;
+    if (entry != nullptr
+        && entry->type == luciole::FileType::Directory
+        && !entry->symlink
+        && state.folderSize != m_folderSizeText(*entry)) {
+      stale.push_back(*state.entry);
+    }
+  }
+  return stale;
+}
 void luciole::FileViewAdapter::releaseTile(Node& tile, Renderer& renderer) {
   m_tiles.erase(&tile);
   if (m_mode == ViewMode::Grid) {
@@ -463,12 +480,17 @@ void luciole::FileViewAdapter::bindTile(Node& tile, std::size_t index, bool, boo
     } else {
       std::string folderSize;
       const bool sizeColumnVisible = m_columns.visible(luciole::DetailsColumn::Size);
-      if (entry->type == luciole::FileType::Directory && !entry->symlink && m_folderSizes && sizeColumnVisible) {
-        m_browser.requestFolderSize(id);
-        if (const auto* totals = m_browser.folderSize(id)) {
-          folderSize = entryFolderSizeText(*totals);
+      if (entry->type == luciole::FileType::Directory && !entry->symlink && sizeColumnVisible) {
+        if (m_folderSizes) {
+          m_browser.requestFolderSize(id);
+          if (const auto* totals = m_browser.folderSize(id)) {
+            folderSize = entryFolderSizeText(*totals);
+          }
+        } else if (m_folderSizeText) {
+          folderSize = m_folderSizeText(*entry);
         }
       }
+      state.folderSize = folderSize;
       static_cast<FileRow&>(tile).bind(
           *entry, model.typeLabel(id), selected, ring, hovered, m_columns, m_columnOrder,
           m_cut && m_cut(entry->location()), (m_pathEntry == id && !m_columnActive) || m_linkedEntry == id,

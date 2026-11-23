@@ -162,6 +162,7 @@ private:
   // The page's preview over the column slot at `placement` with its text at `textSize`, or none.
   void overlay(const std::optional<luciole::ColumnPreview::Placement>& placement, float textSize);
   void markList(const std::optional<luciole::Location>& location);
+  void refreshFolderSizes();
   void rebindRow(std::optional<luciole::EntryId> id);
   void saveGeometry(const luciole::WorkbenchGeometry& geometry);
   void openInNewTab(const luciole::Location& location, std::uint32_t modifiers);
@@ -188,6 +189,7 @@ private:
   std::optional<luciole::Location> m_visited;
   std::unique_ptr<luciole::PreviewEditController> m_editor; // goes after the preview it is attached to
   std::unique_ptr<luciole::WorkbenchSession> m_session;
+  std::uint64_t m_sizesSerial = 0; // the measure the list's folder Size cells were last brought up to
   std::unique_ptr<luciole::WorkbenchPreview> m_columnPreview; // what the column slot shows; goes before the session
   Signal<>::ScopedConnection m_paletteConn;
   Timer m_restTimer;

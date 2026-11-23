@@ -7,6 +7,9 @@
 #include "ui/controls/virtual_grid_view.h"
 
 #include <chrono>
+#include <functional>
+#include <string>
+#include <vector>
 
 namespace luciole {
   class FileViewAdapter final : public VirtualGridAdapter {
@@ -40,6 +43,13 @@ namespace luciole {
     void setCutPredicate(std::function<bool(const Location&)> predicate) { m_cut = std::move(predicate); }
     // List rows only; other adapters stay dormant.
     void setFolderSizeEnabled(bool enabled) { m_folderSizes = enabled; }
+    // The Size cell of a folder row when the walk above is off: Workbench's own measure. Empty text is a blank cell;
+    // an empty function leaves the cell blank.
+    void setFolderSizeText(std::function<std::string(const DirectoryEntry&)> text) {
+      m_folderSizeText = std::move(text);
+    }
+    // Bound folder rows whose cell text is no longer what the function gives; bind them again to update.
+    std::vector<EntryId> staleFolderSizes() const;
     void setActivationMode(ActivationMode mode) { m_activationMode = mode; }
     void setPresentation(BrowsePresentation presentation, std::optional<bool> readOnly) {
       m_presentation = presentation;
@@ -60,6 +70,7 @@ namespace luciole {
     struct TileState {
       std::optional<EntryId> entry;
       bool visible = false;
+      std::string folderSize; // the Size cell text this tile was bound with, for a folder row
     };
     void reveal(Node& tile, EntryId id);
 
@@ -90,6 +101,7 @@ namespace luciole {
     BrowsePresentation m_presentation;
     std::optional<bool> m_readOnly;
     bool m_folderSizes = false;
+    std::function<std::string(const DirectoryEntry&)> m_folderSizeText;
     float m_gridIconSize = static_cast<float>(kDefaultGridIconSize);
     int m_rowIconSize = 0;
     DetailsColumns m_columns;

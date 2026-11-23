@@ -480,6 +480,42 @@ namespace {
     TEST_CHECK(rig.browser.folderSize(*small) != nullptr);
   }
 
+  // In Workbench the Size cell of a folder row shows the session's measure, and the list's own walk stays off. A row
+  // whose text the measure has changed since it was bound is reported, and only that one.
+  void workbenchFillsFolderSizeCells() {
+    Rig rig;
+    auto session = rig.mount();
+    luciole::ThumbnailService thumbnails;
+    luciole::FileViewAdapter adapter(
+        rig.browser, rig.icons, thumbnails, luciole::ViewMode::List, [] { return 0U; }, [] { return false; }
+    );
+    adapter.setFolderSizeEnabled(luciole::rowsMeasureFolders(luciole::ViewMode::Workbench));
+    adapter.setFolderSizeText([&](const luciole::DirectoryEntry& entry) { return session->folderSizeText(entry); });
+    const auto& model = rig.browser.model();
+    const auto big = luciole::rowOf(model, rig.fixture.at("big"));
+    const auto note = luciole::rowOf(model, rig.fixture.at("note.txt"));
+    TEST_CHECK(big.has_value() && note.has_value());
+    auto tile = adapter.createTile();
+    const auto bind = [&](luciole::EntryId id) {
+      const auto index = static_cast<std::size_t>(std::ranges::find(model.rows(), id) - model.rows().begin());
+      adapter.bindTile(*tile, index, false, false);
+    };
+    const std::string measured = "3.9\u00a0KiB"; // big holds 1000 and 3000 bytes: 4000 bytes
+    rig.frame(*session);
+    bind(*big);
+    TEST_CHECK(nameLabel(*tile, measured) == nullptr);
+    TEST_CHECK(adapter.staleFolderSizes().empty());
+
+    rig.settle(*session);
+    TEST_CHECK(adapter.staleFolderSizes() == std::vector<luciole::EntryId>{*big});
+    bind(*big);
+    TEST_CHECK(nameLabel(*tile, measured) != nullptr);
+    TEST_CHECK(adapter.staleFolderSizes().empty());
+    TEST_CHECK(rig.browser.folderSize(*big) == nullptr); // no walk of the list's own
+    bind(*note);
+    TEST_CHECK(nameLabel(*tile, measured) == nullptr);
+  }
+
   void switchingTwentyTimesLeavesNothing() {
     Rig rig;
     rig.select("big");
@@ -526,6 +562,7 @@ int main() {
   moreMenuListsTheMergedEntries();
   linkedRowIsMarked();
   folderSizesFollowTheViewMode();
+  workbenchFillsFolderSizeCells();
   switchingTwentyTimesLeavesNothing();
   std::println("workbench session checks passed");
 }

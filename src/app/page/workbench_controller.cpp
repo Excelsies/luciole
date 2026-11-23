@@ -107,7 +107,24 @@ void WorkbenchController::onFrame() {
   m_columnPreview->setAudioVisual(luciole::audioVisualChoice(m_settings.workbench));
   m_columnPreview->setMediaLoop(m_settings.workbench.mediaLoop);
   m_columnPreview->update();
+  refreshFolderSizes();
   restAt();
+}
+
+// The measure grows while a folder is walked; a row's cell is bound again only when its own text changed.
+void WorkbenchController::refreshFolderSizes() {
+  const auto serial = m_session->model().serial();
+  if (serial == m_sizesSerial) {
+    return;
+  }
+  m_sizesSerial = serial;
+  const auto stale = m_list.staleFolderSizes();
+  for (const auto id : stale) {
+    rebindRow(id);
+  }
+  if (!stale.empty()) {
+    frameNeeded();
+  }
 }
 
 void WorkbenchController::mount() {
@@ -115,6 +132,10 @@ void WorkbenchController::mount() {
       m_page.filePane(), m_page.fileList()->focusArea(), m_services->measureCache(), m_icons, m_hooks.modifiers
   );
   m_session->keepTabRoom(*m_page.fileList());
+  m_sizesSerial = 0;
+  m_list.setFolderSizeText([this](const luciole::DirectoryEntry& entry) {
+    return m_session ? m_session->folderSizeText(entry) : std::string{};
+  });
   m_columnPreview = std::make_unique<luciole::WorkbenchPreview>(
       m_session->previewSlot(), m_services->previewWorkers(), luciole::MediaPlayer::available(),
       luciole::WorkbenchPreview::Hooks{
@@ -157,6 +178,7 @@ void WorkbenchController::unmount() {
   markList(std::nullopt);
   m_preview.setTarget(std::nullopt);
   m_columnPreview.reset();
+  m_list.setFolderSizeText({});
   m_session.reset();
 }
 
