@@ -57,7 +57,7 @@ namespace {
         "{}: {:.4f} ms mean, {:.4f} ms max processor time per frame", what, capture.meanCpuMilliseconds,
         capture.maxCpuMilliseconds
     );
-    TEST_CHECK(capture.meanCpuMilliseconds < 0.5);
+    TEST_CHECK(test::audio::withinCpuBudget(capture.meanCpuMilliseconds));
   }
 
   test::audio::AudioVisualCapture

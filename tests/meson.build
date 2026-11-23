@@ -84,25 +84,25 @@ test_table = [
   {'name': 'audio-frame-sources', 'deps': [model_dep]},
   {'name': 'audio-visual-rig', 'deps': [ui_dep, dependency('zlib')], 'sources': files('png_writer.cpp'), 'timeout': 60},
   {'name': 'audio-visual-mesh', 'deps': [ui_dep]},
-  {'name': 'audio-visual-cosmic-peanut', 'deps': [ui_dep, dependency('zlib')], 'sources': files('png_writer.cpp'),
+  {'name': 'audio-visual-cosmic-peanut', 'cpu_budget': true, 'deps': [ui_dep, dependency('zlib')], 'sources': files('png_writer.cpp'),
     'timeout': 240},
-  {'name': 'audio-visual-pulsar', 'deps': [ui_dep, dependency('zlib')], 'sources': files('png_writer.cpp'),
+  {'name': 'audio-visual-pulsar', 'cpu_budget': true, 'deps': [ui_dep, dependency('zlib')], 'sources': files('png_writer.cpp'),
     'timeout': 240},
   {'name': 'corona-field', 'deps': [workbench_dep]},
   {'name': 'sun-horizon', 'deps': [workbench_dep]},
-  {'name': 'eclipse-visual', 'deps': [ui_dep, dependency('zlib')], 'sources': files('png_writer.cpp'), 'timeout': 240},
-  {'name': 'dark-sun-visual', 'deps': [ui_dep, dependency('zlib')], 'sources': files('png_writer.cpp'), 'timeout': 240},
+  {'name': 'eclipse-visual', 'cpu_budget': true, 'deps': [ui_dep, dependency('zlib')], 'sources': files('png_writer.cpp'), 'timeout': 240},
+  {'name': 'dark-sun-visual', 'cpu_budget': true, 'deps': [ui_dep, dependency('zlib')], 'sources': files('png_writer.cpp'), 'timeout': 240},
   {'name': 'workbench-spectrum-meter', 'deps': [workbench_dep]},
   {'name': 'workbench-hit-flash', 'deps': [workbench_dep]},
   {'name': 'workbench-bar-scene', 'deps': [workbench_dep]},
-  {'name': 'audio-visual-bars', 'deps': [ui_dep, dependency('zlib')], 'sources': files('png_writer.cpp'), 'timeout': 120},
+  {'name': 'audio-visual-bars', 'cpu_budget': true, 'deps': [ui_dep, dependency('zlib')], 'sources': files('png_writer.cpp'), 'timeout': 120},
   {'name': 'workbench-halo-field', 'deps': [workbench_dep]},
-  {'name': 'audio-visual-halo', 'deps': [ui_dep, dependency('zlib')], 'sources': files('png_writer.cpp'), 'timeout': 120},
+  {'name': 'audio-visual-halo', 'cpu_budget': true, 'deps': [ui_dep, dependency('zlib')], 'sources': files('png_writer.cpp'), 'timeout': 120},
   {'name': 'workbench-pillar-ring', 'deps': [workbench_dep]},
-  {'name': 'audio-visual-orbit', 'deps': [ui_dep, dependency('zlib')], 'sources': files('png_writer.cpp'), 'timeout': 120},
+  {'name': 'audio-visual-orbit', 'cpu_budget': true, 'deps': [ui_dep, dependency('zlib')], 'sources': files('png_writer.cpp'), 'timeout': 120},
   {'name': 'audio-history-canvas', 'deps': [ui_dep]},
-  {'name': 'audio-visual-radar', 'deps': [ui_dep, dependency('zlib')], 'sources': files('png_writer.cpp'), 'timeout': 300},
-  {'name': 'audio-visual-stargate', 'deps': [ui_dep, dependency('zlib')], 'sources': files('png_writer.cpp'),
+  {'name': 'audio-visual-radar', 'cpu_budget': true, 'deps': [ui_dep, dependency('zlib')], 'sources': files('png_writer.cpp'), 'timeout': 300},
+  {'name': 'audio-visual-stargate', 'cpu_budget': true, 'deps': [ui_dep, dependency('zlib')], 'sources': files('png_writer.cpp'),
     'timeout': 300},
   {'name': 'audio-visual-factory', 'deps': [ui_dep, dependency('zlib')], 'sources': files('png_writer.cpp'),
     'timeout': 240},
@@ -540,6 +540,10 @@ foreach entry : test_table
     cpp_args: local_gio ? ['-DLUCIOLE_TEST_LOCAL_GIO'] : [],
     override_options: ['b_ndebug=false'],
   )
+  if entry.get('cpu_budget', false)
+    # The processor-time budget of an audio visual runs as a benchmark: meson test --benchmark.
+    benchmark(name, exe, timeout: entry.get('timeout', 30), env: test_env + ['LUCIOLE_CPU_BUDGET=1'])
+  endif
   if 'wrapper' in entry
     test(name, python, args: [entry['wrapper'], exe], timeout: entry.get('timeout', 30), env: test_env,
       is_parallel: entry.get('parallel', true))

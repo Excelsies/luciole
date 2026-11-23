@@ -159,7 +159,7 @@ namespace test::audio::disc {
           "{} {}x{} at {}: {:.4f} ms mean, {:.4f} ms max processor time per frame", name, size.width, size.height,
           size.scale, capture.meanCpuMilliseconds, capture.maxCpuMilliseconds
       );
-      TEST_CHECK(capture.meanCpuMilliseconds < 0.5);
+      TEST_CHECK(test::audio::withinCpuBudget(capture.meanCpuMilliseconds));
       visual->release();
     }
   }

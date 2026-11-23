@@ -1,6 +1,7 @@
 #pragma once
 
 #include "audio_frame_sources.h"
+#include "cpu_budget.h"
 #include "gl_test_context.h"
 #include "png_writer.h"
 #include "render/core/mat3.h"

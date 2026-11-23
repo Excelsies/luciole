@@ -17,12 +17,9 @@
 
 // Checks of the AudioVisual contract that every visual's test runs: its output stays in its rectangle and leaves
 // the GL state alone at every capture size, hostile frames and empty rectangles, identical runs, a redraw without an
-// advance, the processor time of a frame, and the GL objects it frees.
+// advance, the processor time of a frame (held only by the benchmark), and the GL objects it frees.
 namespace test::audio {
   using VisualFactory = std::function<std::unique_ptr<AudioVisual>()>;
-
-  // Processor time one advance and draw may take in the debug build.
-  inline constexpr double kMaxMeanCpuMilliseconds = 0.5;
 
   // The names of every live program, buffer and texture up to a bound well above what the tests create.
   inline std::vector<GLuint> liveGlObjects() {
@@ -120,7 +117,7 @@ namespace test::audio {
           "{} {} {}x{} at {}: {:.4f} ms mean, {:.4f} ms max processor time per frame", name, sceneName, target.width,
           target.height, target.scale, capture.meanCpuMilliseconds, capture.maxCpuMilliseconds
       );
-      TEST_CHECK(capture.meanCpuMilliseconds < kMaxMeanCpuMilliseconds);
+      TEST_CHECK(withinCpuBudget(capture.meanCpuMilliseconds));
       keepForViewing(capture.pixels, captureName(name, sceneName, target));
       visual->release();
     }

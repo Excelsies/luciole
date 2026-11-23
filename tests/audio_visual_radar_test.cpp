@@ -108,7 +108,7 @@ namespace {
   void checkSound(const AudioVisualCapture& capture) {
     TEST_CHECK(capture.stateKept);
     TEST_CHECK(capture.insideOnly);
-    TEST_CHECK(capture.meanCpuMilliseconds < 0.5);
+    TEST_CHECK(test::audio::withinCpuBudget(capture.meanCpuMilliseconds));
   }
 
   // Band 30 of 63 sits at 0.48 of the radius: after a full turn of a steady tone a glowing ring lies there, brightest

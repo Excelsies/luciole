@@ -137,7 +137,7 @@ namespace {
   void checkSound(const AudioVisualCapture& capture) {
     TEST_CHECK(capture.stateKept);
     TEST_CHECK(capture.insideOnly);
-    TEST_CHECK(capture.meanCpuMilliseconds < 0.5);
+    TEST_CHECK(test::audio::withinCpuBudget(capture.meanCpuMilliseconds));
   }
 
   // A steady tone fills both planes with lanes, one above the rolled horizon and one below it, and the horizon glows.
