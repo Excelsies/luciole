@@ -1,3 +1,4 @@
+#include "cpu_budget.h"
 #include "formats/markdown.h"
 #include "test_check.h"
 
@@ -275,7 +276,7 @@ namespace {
     for (const std::string_view unit : {"*", "_", "**", "`", "[", "![", "](", "[a](", "<", "\\"}) {
       const std::clock_t start = std::clock();
       const Document document = parse(repeat(unit, 20000));
-      TEST_CHECK(millisecondsSince(start) < 3000);
+      TEST_CHECK(::test::withinBudget(millisecondsSince(start), 3000));
       const std::vector<Block> list = top(document);
       TEST_CHECK(list.size() == 1);
       // A line of only markers may be a thematic break or an unclosed fence.
@@ -293,7 +294,7 @@ namespace {
     for (const std::string& source : cases) {
       const std::clock_t start = std::clock();
       const Document document = parse(source);
-      TEST_CHECK(millisecondsSince(start) < 3000);
+      TEST_CHECK(::test::withinBudget(millisecondsSince(start), 3000));
       TEST_CHECK(!top(document).empty());
     }
   }
@@ -393,7 +394,7 @@ namespace {
     for (std::size_t k = 0; k < 4; ++k) {
       TEST_CHECK(!parse(stuckOpeners(48000)).truncated);
     }
-    TEST_CHECK(millisecondsSince(start) < 1500);
+    TEST_CHECK(::test::withinBudget(millisecondsSince(start), 1500));
   }
 
   void testOpenerCap() {

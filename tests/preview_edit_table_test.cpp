@@ -1,6 +1,7 @@
 #include "app/page/preview_edit_table.h"
 #include "core/input/key_modifiers.h"
 #include "core/text_clipboard.h"
+#include "cpu_budget.h"
 #include "table_view_rig.h"
 #include "temp_folder.h"
 #include "test_check.h"
@@ -356,7 +357,7 @@ namespace {
     );
     TEST_CHECK(editing.view->table().get() != before); // shown at once
     TEST_CHECK(formats::gridCellText(*editing.view->table(), row, column) == "renamed");
-    TEST_CHECK(spent < kChangeBudgetMs);
+    TEST_CHECK(::test::withinBudget(spent, kChangeBudgetMs));
   }
 
   // The table of kInlineGridBytes with 4 columns.

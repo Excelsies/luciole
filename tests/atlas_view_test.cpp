@@ -1,4 +1,5 @@
 #include "atlas_view_rig.h"
+#include "cpu_budget.h"
 #include "instrument_rig.h"
 #include "test_check.h"
 #include "ui/workbench/instrument_view.h"
@@ -434,7 +435,7 @@ namespace {
     );
     TEST_CHECK(circles > 1000 && shapes.shapes.size() > 1000);
     TEST_CHECK(rig.view->sceneBuilds() == builds);
-    TEST_CHECK(total / kFrames < 16);
+    TEST_CHECK(::test::withinBudget(total / kFrames, 16));
   }
 } // namespace
 

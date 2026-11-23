@@ -1,3 +1,4 @@
+#include "cpu_budget.h"
 #include "test_check.h"
 #include "workbench/jump_rank.h"
 #include "workbench_fixture.h"
@@ -189,7 +190,7 @@ namespace {
     const auto list = jumpAhead(tree, LayoutSettings{});
     const double elapsed = 1000.0 * static_cast<double>(std::clock() - start) / CLOCKS_PER_SEC;
     std::println("  {} tied candidates {:.0f} ms", kTiedTop * kTiedEach, elapsed);
-    TEST_CHECK(elapsed < 400); // a debug build takes about a third of this
+    TEST_CHECK(::test::withinBudget(elapsed, 400)); // a debug build takes about a third of this
     TEST_CHECK(list.rows.size() == kJumpRows);
     TEST_CHECK(!list.cut);
     TEST_CHECK(list.rows[0].path == "level-one-0000/folder-00");

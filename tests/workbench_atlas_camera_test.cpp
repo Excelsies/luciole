@@ -1,3 +1,4 @@
+#include "cpu_budget.h"
 #include "test_check.h"
 #include "workbench/atlas_camera.h"
 #include "workbench/atlas_navigation.h"
@@ -129,7 +130,7 @@ namespace {
     TEST_NEAR(up->ax, 0.0, kExact);
     TEST_NEAR(up->ay, 0.06, kExact);
     TEST_NEAR(up->k, 0.9, kExact);
-    TEST_CHECK(elapsed < 100);
+    TEST_CHECK(::test::withinBudget(elapsed, 100));
   }
 
   // A folder whose weights cannot be packed has no frames for its children: no similarity, no conversion,

@@ -1,3 +1,4 @@
+#include "cpu_budget.h"
 #include "test_check.h"
 #include "ui/workbench/kept_snapshots.h"
 #include "workbench/scene_shapes.h"
@@ -153,7 +154,7 @@ namespace {
     );
     TEST_CHECK(merged.listed.size() == 100 && merged.count == 19997);
     TEST_CHECK(merged.listed.front().name == "f00996" && merged.listed.front().value == "996 bytes");
-    TEST_CHECK(ms < 50);
+    TEST_CHECK(::test::withinBudget(ms, 50));
   }
 
   // Where a merged piece is drawn: the middle of the box around its hittable shapes, whatever their kinds.

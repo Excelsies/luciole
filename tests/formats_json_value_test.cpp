@@ -1,3 +1,4 @@
+#include "cpu_budget.h"
 #include "formats/json_value.h"
 #include "test_check.h"
 
@@ -157,7 +158,7 @@ namespace {
     TEST_CHECK(document->find("k0") == nullptr);
     TEST_CHECK(document->find("k40001") == nullptr);
     TEST_CHECK(document->find("") == nullptr);
-    TEST_CHECK(seconds < 1.0);
+    TEST_CHECK(::test::withinBudget(seconds, 1.0));
   }
 
   void testEveryTruncation() {

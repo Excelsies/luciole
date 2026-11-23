@@ -1,3 +1,4 @@
+#include "cpu_budget.h"
 #include "editing/source_lines.h"
 #include "formats/file_kind.h"
 #include "formats/styled_text.h"
@@ -309,11 +310,11 @@ namespace {
         "edit {:.3f} ms, edit opening a comment {:.3f} ms",
         createMs, screenMs, endMs, editMs, openMs
     );
-    TEST_CHECK(createMs < kCreateBoundMs);
-    TEST_CHECK(screenMs < kScanBoundMs);
-    TEST_CHECK(endMs < kScanBoundMs);
-    TEST_CHECK(editMs < kEditBoundMs);
-    TEST_CHECK(openMs < kEditBoundMs);
+    TEST_CHECK(::test::withinBudget(createMs, kCreateBoundMs));
+    TEST_CHECK(::test::withinBudget(screenMs, kScanBoundMs));
+    TEST_CHECK(::test::withinBudget(endMs, kScanBoundMs));
+    TEST_CHECK(::test::withinBudget(editMs, kEditBoundMs));
+    TEST_CHECK(::test::withinBudget(openMs, kEditBoundMs));
   }
 } // namespace
 

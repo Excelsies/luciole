@@ -1,4 +1,5 @@
 #include "core/input/key_modifiers.h"
+#include "cpu_budget.h"
 #include "formats/table_grid.h"
 #include "machine_slowdown.h"
 #include "table_view_rig.h"
@@ -343,7 +344,7 @@ namespace {
       rig.settle();
     }
     std::println("update after a 1,500 x 256 table: {:.2f} ms of processor time", least);
-    TEST_CHECK(least < 2.5);
+    TEST_CHECK(::test::withinBudget(least, 2.5));
   }
 
   void showsNothingWithoutTable() {

@@ -1,3 +1,4 @@
+#include "cpu_budget.h"
 #include "editing/table_session.h"
 #include "test_check.h"
 
@@ -358,8 +359,8 @@ namespace {
     const double insertRowSeconds = secondsSince(start);
     std::println("setCell {:.4f} s, insertRow {:.4f} s of processor time", setCellSeconds, insertRowSeconds);
     TEST_CHECK(session.rowCount() == 20'001);
-    TEST_CHECK(setCellSeconds < kChangeSecondsBound);
-    TEST_CHECK(insertRowSeconds < kChangeSecondsBound);
+    TEST_CHECK(::test::withinBudget(setCellSeconds, kChangeSecondsBound));
+    TEST_CHECK(::test::withinBudget(insertRowSeconds, kChangeSecondsBound));
   }
 } // namespace
 

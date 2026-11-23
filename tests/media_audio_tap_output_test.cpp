@@ -1,3 +1,4 @@
+#include "cpu_budget.h"
 #include "media/media_player.h"
 #include "media_clips.h"
 #include "media_tap_rig.h"
@@ -87,7 +88,7 @@ namespace {
         "{:.0f} ms on",
         off.size, on.size, switched.size, on.windows, switched.windows, off.busyMs, on.busyMs
     );
-    TEST_CHECK(on.busyMs - off.busyMs < 100);
+    TEST_CHECK(::test::withinBudget(on.busyMs - off.busyMs, 100));
     TEST_CHECK(off.size > 0 && off.gaps == 0 && off.windows == 0);
     TEST_CHECK(on.size == off.size && on.hash == off.hash && on.gaps == 0 && on.windows > 0);
     TEST_CHECK(switched.size == off.size && switched.hash == off.hash && switched.gaps == 0 && switched.windows > 0);

@@ -1,3 +1,4 @@
+#include "cpu_budget.h"
 #include "formats/delimited_detect.h"
 #include "formats/delimited_table.h"
 #include "formats/delimited_write.h"
@@ -378,7 +379,7 @@ namespace {
     TEST_CHECK(checked > 3 * 2000);
   }
 
-  // Each hostile operation must finish within this processor time, sanitizers included.
+  // Each hostile operation must finish within this processor time, sanitizers included; held by the benchmark.
   constexpr double kHostileCapMs = 2000.0;
   constexpr std::size_t kMebibyte = 1024 * 1024;
 
@@ -388,19 +389,23 @@ namespace {
     return 1000.0 * static_cast<double>(std::clock() - start) / CLOCKS_PER_SEC;
   }
 
+  template <typename Work> bool withinCap(const Work& work) {
+    return ::test::withinBudget(elapsedMs(work), kHostileCapMs);
+  }
+
   void testHostileQuotes() {
     const std::string even(kMebibyte, '"');
     Table table;
     Dialect dialect;
-    TEST_CHECK(elapsedMs([&] { dialect = detectDialect(even); }) < kHostileCapMs);
-    TEST_CHECK(elapsedMs([&] { table = readTable(even, dialect); }) < kHostileCapMs);
+    TEST_CHECK(withinCap([&] { dialect = detectDialect(even); }));
+    TEST_CHECK(withinCap([&] { table = readTable(even, dialect); }));
     TEST_CHECK(table.rows.size() == 1);
     TEST_CHECK(table.cells.size() == 1);
     TEST_CHECK(!table.unterminatedQuote);
     const CellText text = cellText(even, dialect, table.cells[0]);
     TEST_CHECK(text.clipped);
     TEST_CHECK(text.text == std::string(kMaxCellTextBytes, '"'));
-    TEST_CHECK(elapsedMs([&] { TEST_CHECK(edited(even, dialect, {}) == even); }) < kHostileCapMs);
+    TEST_CHECK(withinCap([&] { TEST_CHECK(edited(even, dialect, {}) == even); }));
 
     const std::string odd(kMebibyte + 1, '"');
     TEST_CHECK(readTable(odd, dialect).unterminatedQuote);
@@ -414,18 +419,15 @@ namespace {
       line += "a,";
     }
     Table table;
-    TEST_CHECK(elapsedMs([&] { TEST_CHECK(detectDialect(line).delimiter == Delimiter::Comma); }) < kHostileCapMs);
-    TEST_CHECK(elapsedMs([&] { table = readTable(line, Dialect{}); }) < kHostileCapMs);
+    TEST_CHECK(withinCap([&] { TEST_CHECK(detectDialect(line).delimiter == Delimiter::Comma); }));
+    TEST_CHECK(withinCap([&] { table = readTable(line, Dialect{}); }));
     TEST_CHECK(table.rows.size() == 1);
     TEST_CHECK(table.columnCount == TableLimits{}.maxColumns);
     TEST_CHECK(table.truncated);
     std::string out;
-    TEST_CHECK(
-        elapsedMs([&] { out = edited(line, Dialect{}, {{.row = 0, .column = kMebibyte / 2, .text = "z"}}); })
-        < kHostileCapMs
-    );
+    TEST_CHECK(withinCap([&] { out = edited(line, Dialect{}, {{.row = 0, .column = kMebibyte / 2, .text = "z"}}); }));
     TEST_CHECK(out == line + "z");
-    TEST_CHECK(elapsedMs([&] { out = written(deleteColumn(line, Dialect{}, 0)); }) < kHostileCapMs);
+    TEST_CHECK(withinCap([&] { out = written(deleteColumn(line, Dialect{}, 0)); }));
     TEST_CHECK(out == line.substr(2));
 
     const std::string letters(kMebibyte, 'a');
@@ -443,27 +445,24 @@ namespace {
     }
     Table table;
     Dialect dialect;
-    TEST_CHECK(elapsedMs([&] { dialect = detectDialect(column); }) < kHostileCapMs);
+    TEST_CHECK(withinCap([&] { dialect = detectDialect(column); }));
     TEST_CHECK(dialect.delimiter == Delimiter::Comma);
     TEST_CHECK(!dialect.header);
-    TEST_CHECK(elapsedMs([&] { table = readTable(column, dialect); }) < kHostileCapMs);
+    TEST_CHECK(withinCap([&] { table = readTable(column, dialect); }));
     TEST_CHECK(table.rows.size() == TableLimits{}.maxRows);
     TEST_CHECK(table.truncated);
-    TEST_CHECK(elapsedMs([&] { TEST_CHECK(columnTypes(column, dialect, table).size() == 1); }) < kHostileCapMs);
+    TEST_CHECK(withinCap([&] { TEST_CHECK(columnTypes(column, dialect, table).size() == 1); }));
 
     std::string out;
-    TEST_CHECK(
-        elapsedMs([&] { out = edited(column, dialect, {{.row = kRows - 1, .column = 0, .text = "x"}}); })
-        < kHostileCapMs
-    );
+    TEST_CHECK(withinCap([&] { out = edited(column, dialect, {{.row = kRows - 1, .column = 0, .text = "x"}}); }));
     TEST_CHECK(out.size() == column.size());
     TEST_CHECK(out.ends_with("1\nx\n"));
-    TEST_CHECK(elapsedMs([&] { out = written(deleteRow(column, dialect, kRows - 1)); }) < kHostileCapMs);
+    TEST_CHECK(withinCap([&] { out = written(deleteRow(column, dialect, kRows - 1)); }));
     TEST_CHECK(out.size() == column.size() - 2);
     const std::vector<std::string> cells{"2"};
-    TEST_CHECK(elapsedMs([&] { out = written(insertRow(column, dialect, kRows, cells)); }) < kHostileCapMs);
+    TEST_CHECK(withinCap([&] { out = written(insertRow(column, dialect, kRows, cells)); }));
     TEST_CHECK(out == column + "2\n");
-    TEST_CHECK(elapsedMs([&] { out = written(insertColumn(column, dialect, 1)); }) < kHostileCapMs);
+    TEST_CHECK(withinCap([&] { out = written(insertColumn(column, dialect, 1)); }));
     TEST_CHECK(out.size() == column.size() + kRows);
   }
 } // namespace

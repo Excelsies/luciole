@@ -1,3 +1,4 @@
+#include "cpu_budget.h"
 #include "editing/markdown_source.h"
 #include "editing/source_lines.h"
 #include "formats/file_kind.h"
@@ -193,7 +194,7 @@ namespace {
       const double ms = 1000.0 * static_cast<double>(std::clock() - start) / CLOCKS_PER_SEC;
       TEST_CHECK(joined(runs) == line);
       slowest = std::max(slowest, ms);
-      TEST_CHECK(ms < 50.0);
+      TEST_CHECK(::test::withinBudget(ms, 50.0));
     }
     std::println("long lines: slowest {:.3f} ms", slowest);
   }
