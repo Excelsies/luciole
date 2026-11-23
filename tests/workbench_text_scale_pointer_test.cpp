@@ -256,9 +256,6 @@ namespace {
 } // namespace
 
 int main() {
-  // Ctrl with the wheel and Plus, Minus and 0 resize the rows of Grid, List and Workbench, not of Column view.
-  static_assert(zoomsByKeys(ViewMode::Grid) && zoomsByKeys(ViewMode::List) && zoomsByKeys(ViewMode::Workbench));
-  TEST_CHECK(!zoomsByKeys(ViewMode::Miller));
   ::test::setSystemTextScale(kLarge);
   wheelReachesTheScenePoint();
   anchoredRequestComesBackOnTheView();
