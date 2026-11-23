@@ -6,11 +6,13 @@
 #include "app/workspace_layout.h"
 #include "browser/browser_controller.h"
 #include "browser/places.h"
+#include "browser/selection_size_note.h"
 #include "fs/gio_ptr.h"
 #include "platform/desktop_integration.h"
 #include "render/animation/animation_manager.h"
 #include "ui/builders.h"
 #include "ui/palette.h"
+#include "workbench/format.h"
 
 #include <algorithm>
 #include <cmath>
@@ -165,14 +167,17 @@ void StatusBarController::sync(bool miller) {
     role = ColorRole::Error;
   } else if (!m_page.browser().searchQuery().empty()) {
     status = std::format(
-        "{}{} results",
+        "{}{}",
         loading                                                      ? "Searching… · "
             : snapshot.status == luciole::DirectoryStatus::Cancelled ? "Search stopped · "
                                                                      : "",
-        model.rows().size()
+        luciole::workbench::countedText(static_cast<double>(model.rows().size()), "result")
     );
     if (m_page.browser().skippedSearchFolders() != 0) {
-      status += std::format(" · {} folders could not be searched", m_page.browser().skippedSearchFolders());
+      const auto skipped = m_page.browser().skippedSearchFolders();
+      status += std::format(
+          " · {} could not be searched", luciole::workbench::countedText(static_cast<double>(skipped), "folder")
+      );
     }
   } else if (loading) {
     status =
@@ -187,17 +192,22 @@ void StatusBarController::sync(bool miller) {
         hidden += snapshot.entries.brief(i).hidden;
       }
     }
-    status = std::format("{} items", model.rows().size());
+    status = luciole::workbench::itemsText(static_cast<double>(model.rows().size()));
     if (hidden > 0) {
-      status += std::format(" · {} hidden", hidden);
+      status += std::format(" · {} hidden", luciole::workbench::countText(static_cast<double>(hidden)));
     }
   }
   if (snapshot.location && snapshot.location->isTrash() && !snapshot.error && !refreshing) {
     append("Refresh to update");
   }
+  std::string sizeNote; // why the selection's size is not the whole of it, when the status says so
   if (!model.selection().selected.empty()) {
     needed = true;
-    append(std::format("{} selected", model.selection().selected.size()));
+    append(
+        std::format(
+            "{} selected", luciole::workbench::countText(static_cast<double>(model.selection().selected.size()))
+        )
+    );
     const auto summary = model.selectionSummary();
     if (summary.pendingSizes != 0) {
       append("reading file sizes…");
@@ -205,7 +215,9 @@ void StatusBarController::sync(bool miller) {
       append("file size exceeds limit");
     } else if (summary.files != 0 && summary.unknownSizes == summary.files) {
       append("file size unknown");
+      sizeNote = luciole::selectionSizeNote(summary);
     } else if (summary.files != 0) {
+      sizeNote = luciole::selectionSizeNote(summary);
       const luciole::GString size(g_format_size_full(summary.bytes, G_FORMAT_SIZE_IEC_UNITS));
       append(
           std::format(
@@ -226,6 +238,11 @@ void StatusBarController::sync(bool miller) {
     m_message->setVisible(!message.empty());
     m_message->setParticipatesInLayout(!message.empty());
     m_status->setText(!message.empty() && !status.empty() ? " · " + status : status);
+    if (sizeNote.empty()) {
+      m_status->clearTooltip();
+    } else {
+      m_status->setTooltip(sizeNote);
+    }
   }
   // The notice repeats the message, or the status when there is none.
   status = message.empty() ? status : message;
