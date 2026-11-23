@@ -133,7 +133,7 @@ namespace luciole::test::edit {
     int asks = 0;
     int dismissals = 0;
     int frameRequests = 0;
-    int reveals = 0; // cursors put back on a replaced file
+    int reveals = 0; // cursors the editor had to put back; none while the model keeps the cursor on a replaced file
     int width = kWidth;
     int height = kHeight;
     WorkbenchChoices choices;      // what the view is told each frame

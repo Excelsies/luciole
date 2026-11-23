@@ -48,8 +48,9 @@ namespace luciole {
     bool applySnapshot(
         DirectorySnapshot snapshot, std::unordered_map<EntryId, EntryId> parents = {}, bool preserveRootOrder = false
     );
-    // A file replaced at its path under a new identity, as an editor's save does, is not a removal: the cursor stays
-    // where it was instead of advancing. Off by default.
+    // A file replaced at its path under a new identity, as an editor's save does, is not a removal: the cursor, the
+    // anchor, the scroll anchor and the selection move to the new entry instead of the cursor advancing. Off by
+    // default. The new entry is looked up by name, so only a listing of the same folder qualifies.
     void setReplacementKeepsFocus(bool keep) { m_replacementKeepsFocus = keep; }
     std::optional<EntryId> treeParent(EntryId id) const;
     std::size_t treeDepth(EntryId id) const;
@@ -108,6 +109,11 @@ namespace luciole {
     // Open-addressing slot of `id` in `slots` over `entries`, or the empty slot where it would go.
     static std::size_t sourceSlot(const std::vector<std::uint32_t>& slots, const DirectoryEntries& entries, EntryId id);
 
+    // The tracked entries (cursor, anchor, scroll anchor, selection) that `snapshot` no longer lists by ID, each
+    // with the ID it lists under the same name: the entry replaced at its path. `slots` are those of `snapshot`.
+    std::unordered_map<EntryId, EntryId>
+    replacedIds(const DirectorySnapshot& snapshot, const std::vector<std::uint32_t>& slots) const;
+    void followReplacements(const std::unordered_map<EntryId, EntryId>& replaced);
     void prepareSortKeys();
     void rebuildProjection(bool resort = true);
     void reconcileSelection();

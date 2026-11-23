@@ -167,7 +167,7 @@ namespace {
   }
 
   // Escape and Stop Editing take the same path and end on the same file, read-only and freshly loaded, with the
-  // keyboard back in the list. A save that replaced the file puts the list's cursor back on it.
+  // keyboard back in the list. A save that replaced the file leaves the list's cursor on it.
   void testStopEditing(::test::SceneCapture& capture) {
     const Folder folder;
     Rig rig(folder.files, capture, folder.files.folder);
@@ -187,7 +187,9 @@ namespace {
     rig.answerSave();
     TEST_CHECK(rig.dispatcher.focusedArea() == rig.listFocus);
     rig.skew += luciole::WorkbenchPreview::kDwell;
-    rig.frames([&] { return rig.offered() && rig.reveals == 1; }); // the listing sees the save after the editor went
+    const auto rows = rig.browser.model().snapshot().generation;
+    // the listing sees the save after the editor went
+    rig.frames([&] { return rig.offered() && rig.browser.model().snapshot().generation != rows; });
     TEST_CHECK(rig.slot().nameLabel().text() == "a.txt" && folder.files.read("a.txt") == "1alpha\n");
     TEST_CHECK(cursorOn("a.txt"));
     rig.edit("a.txt");
@@ -201,7 +203,7 @@ namespace {
     rig.frames([&] { return rig.offered(); });
     TEST_CHECK(rig.slot().nameLabel().text() == "a.txt" && folder.files.read("a.txt") == "1alpha\n");
     TEST_CHECK(rig.tiles() != nullptr && rig.preview->loadsStarted() >= 4);
-    TEST_CHECK(rig.reveals == 1 && cursorOn("a.txt"));
+    TEST_CHECK(rig.reveals == 0 && cursorOn("a.txt"));
 
     // Once editing ended, a cursor that goes away takes the target with it.
     TEST_CHECK(rig.browser.model().setFocus(std::nullopt));

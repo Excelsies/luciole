@@ -993,22 +993,76 @@ namespace {
     TEST_CHECK(!tree.selection().focused);
   }
 
-  // A saved file is replaced at its path under a new identity. With the setting on, the entry is not removed, so the
-  // cursor does not advance to the next row, and the page finds the file again by its path; by default it advances.
-  void testReplacedFileIsNotARemoval() {
+  // A file replaced at its path under a new identity, as a save does. By default the cursor advances as for a
+  // removal. With the setting on, the entry counts as still there: the cursor, the anchor, the scroll anchor and the
+  // selection move to the new entry, and a real removal still advances.
+  void testReplacedFileKeepsTheCursor() {
+    const auto initial = snapshot({entry(1, "a"), entry(2, "b"), entry(3, "c"), entry(4, "d")});
     DirectoryModel advancing;
-    advancing.applySnapshot(snapshot({entry(1, "a"), entry(2, "b"), entry(3, "c")}));
+    advancing.applySnapshot(initial);
     TEST_CHECK(advancing.select(2));
-    advancing.applySnapshot(snapshot({entry(1, "a"), entry(22, "b"), entry(3, "c")}, 2));
+    advancing.applySnapshot(snapshot({entry(1, "a"), entry(22, "b"), entry(3, "c"), entry(4, "d")}, 2));
     selected(advancing, {3});
 
     DirectoryModel model;
     model.setReplacementKeepsFocus(true);
-    model.applySnapshot(snapshot({entry(1, "a"), entry(2, "b"), entry(3, "c")}));
+    model.applySnapshot(initial);
     TEST_CHECK(model.select(2));
-    model.applySnapshot(snapshot({entry(1, "a"), entry(22, "b"), entry(3, "c")}, 2));
-    TEST_CHECK(model.selection().focused != 3);
-    selected(model, {});
+    model.setScrollAnchor(2);
+    model.applySnapshot(snapshot({entry(1, "a"), entry(22, "b"), entry(3, "c"), entry(4, "d")}, 2));
+    selected(model, {22});
+    TEST_CHECK(model.selection().focused == 22 && model.selection().anchor == 22 && model.scrollAnchor() == 22);
+    model.applySnapshot(snapshot({entry(1, "a"), entry(222, "b"), entry(3, "c"), entry(4, "d")}, 3));
+    selected(model, {222}); // again, from the new identity
+    model.applySnapshot(snapshot({entry(1, "a"), entry(3, "c"), entry(4, "d")}, 4));
+    selected(model, {3}); // a removal still advances
+
+    DirectoryModel several;
+    several.setReplacementKeepsFocus(true);
+    several.applySnapshot(initial);
+    TEST_CHECK(several.select(2) && several.select(3, SelectionMode::Range));
+    several.applySnapshot(snapshot({entry(1, "a"), entry(22, "b"), entry(3, "c"), entry(4, "d")}, 2));
+    selected(several, {22, 3});
+    TEST_CHECK(several.selection().focused == 3 && several.selection().anchor == 22);
+    several.applySnapshot(snapshot({entry(1, "a"), entry(22, "b"), entry(33, "c"), entry(4, "d")}, 3));
+    selected(several, {22, 33});
+
+    DirectoryModel tree;
+    tree.setReplacementKeepsFocus(true);
+    tree.applySnapshot(
+        snapshot({entry(1, "folder", luciole::FileType::Directory), entry(2, "a"), entry(3, "b"), entry(4, "other")}),
+        {{2, 1}, {3, 1}}
+    );
+    TEST_CHECK(tree.select(2));
+    tree.applySnapshot(
+        snapshot(
+            {entry(1, "folder", luciole::FileType::Directory), entry(22, "a"), entry(3, "b"), entry(4, "other")}, 2
+        ),
+        {{22, 1}, {3, 1}}
+    );
+    selected(tree, {22});
+    TEST_CHECK(tree.treeParent(22) == 1);
+
+    // The new entry stays visible under a filter that matches its name: the cursor stays on it.
+    DirectoryModel filtered;
+    filtered.setReplacementKeepsFocus(true);
+    filtered.applySnapshot(snapshot({entry(1, "match-a"), entry(2, "match-b"), entry(3, "other")}));
+    filtered.setFilter({.text = "match"});
+    TEST_CHECK(filtered.select(2));
+    filtered.applySnapshot(snapshot({entry(1, "match-a"), entry(22, "match-b"), entry(3, "other")}, 2));
+    selected(filtered, {22});
+
+    // The new entry is hidden while hidden entries are not shown: it is not a row, so the cursor has nothing to
+    // stay on and drops, as for any entry that stops being shown.
+    DirectoryModel hidden;
+    hidden.setReplacementKeepsFocus(true);
+    hidden.applySnapshot(initial);
+    TEST_CHECK(hidden.select(2));
+    auto hiddenEntry = entry(22, "b");
+    hiddenEntry.hidden = true;
+    hidden.applySnapshot(snapshot({entry(1, "a"), hiddenEntry, entry(3, "c"), entry(4, "d")}, 2));
+    selected(hidden, {});
+    TEST_CHECK(!hidden.selection().focused);
   }
 
   struct Fixture {
@@ -1100,7 +1154,7 @@ int main() {
     testSingleSelectionAndEntryFilter();
     testSnapshotReconciliation();
     testSelectionAfterRemoval();
-    testReplacedFileIsNotARemoval();
+    testReplacedFileKeepsTheCursor();
     testDirectoryServiceIntegration();
     std::println("directory model checks passed");
     return 0;

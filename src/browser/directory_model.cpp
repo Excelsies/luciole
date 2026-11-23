@@ -27,15 +27,6 @@ namespace {
     const luciole::GString collated(g_utf8_collate_key_for_filename(luciole::foldedDisplayText(text).c_str(), -1));
     return collated.get();
   }
-
-  bool listsLocation(const luciole::DirectoryEntries& entries, const luciole::Location& location) {
-    for (std::size_t index = 0; index < entries.size(); ++index) {
-      if (entries.location(index) == location) {
-        return true;
-      }
-    }
-    return false;
-  }
 } // namespace
 
 bool luciole::DirectoryModel::applySnapshot(
@@ -69,7 +60,6 @@ bool luciole::DirectoryModel::applySnapshot(
   const auto focused = m_selection.focused;
   const auto focusedRow = focused ? rowOf(*focused) : std::nullopt;
   const auto focusedParent = focused ? treeParent(*focused) : std::nullopt;
-  const auto* focusedEntry = focused ? entry(*focused) : nullptr;
   const bool focusedSelected = focused && m_selection.selected.contains(*focused);
   m_preserveRootOrder = preserveRootOrder;
   m_treeParents = std::move(parents);
@@ -138,12 +128,14 @@ bool luciole::DirectoryModel::applySnapshot(
           entry.symlink || entry.type == FileType::Symlink || (!regular && entry.type != FileType::Unknown);
     }
   }
+  const auto replaced =
+      m_replacementKeepsFocus && sameLocation ? replacedIds(snapshot, slots) : std::unordered_map<EntryId, EntryId>{};
   std::vector<EntryId> removalOrder;
   if (sameLocation
       && snapshot.status == DirectoryStatus::Ready
       && focusedRow
       && (slots.empty() || slots[sourceSlot(slots, snapshot.entries, *focused)] == kNoRow)
-      && !(m_replacementKeepsFocus && focusedEntry && listsLocation(snapshot.entries, focusedEntry->location()))) {
+      && !replaced.contains(*focused)) {
     // Keep the previous visible order only for an actual removal, never a filter or an incomplete scan.
     removalOrder.reserve(m_rows.size() - 1);
     removalOrder.insert(
@@ -159,6 +151,7 @@ bool luciole::DirectoryModel::applySnapshot(
   m_sourceSlots = std::move(slots);
   m_typeLabels = std::move(labels);
   m_snapshot = std::move(snapshot);
+  followReplacements(replaced);
   rebuildProjection();
   if (!removalOrder.empty()) {
     const auto next = std::ranges::find_if(removalOrder, [&](EntryId id) {
@@ -176,6 +169,55 @@ bool luciole::DirectoryModel::applySnapshot(
   }
   notify();
   return true;
+}
+
+std::unordered_map<luciole::EntryId, luciole::EntryId>
+luciole::DirectoryModel::replacedIds(const DirectorySnapshot& snapshot, const std::vector<std::uint32_t>& slots) const {
+  std::unordered_map<std::string_view, EntryId> wanted; // name of a tracked entry that is gone -> its ID
+  const auto track = [&](EntryId id) {
+    if (slots.empty() || slots[sourceSlot(slots, snapshot.entries, id)] == kNoRow) {
+      if (const auto source = sourceOf(id)) {
+        wanted.emplace(m_snapshot.entries.brief(*source).name, id);
+      }
+    }
+  };
+  for (const auto id : {m_selection.focused, m_selection.anchor, m_scrollAnchor}) {
+    if (id) {
+      track(*id);
+    }
+  }
+  for (const auto id : m_selection.selected) {
+    track(id);
+  }
+  std::unordered_map<EntryId, EntryId> replaced;
+  if (wanted.empty()) {
+    return replaced;
+  }
+  for (std::size_t index = 0; index < snapshot.entries.size() && replaced.size() < wanted.size(); ++index) {
+    const auto brief = snapshot.entries.brief(index);
+    if (const auto found = wanted.find(brief.name); found != wanted.end()) {
+      replaced.emplace(found->second, brief.id);
+    }
+  }
+  return replaced;
+}
+
+void luciole::DirectoryModel::followReplacements(const std::unordered_map<EntryId, EntryId>& replaced) {
+  if (replaced.empty()) {
+    return;
+  }
+  for (auto* id : {&m_selection.focused, &m_selection.anchor, &m_scrollAnchor}) {
+    if (*id) {
+      if (const auto found = replaced.find(**id); found != replaced.end()) {
+        *id = found->second;
+      }
+    }
+  }
+  for (const auto& [from, to] : replaced) {
+    if (m_selection.selected.erase(from) != 0) {
+      m_selection.selected.insert(to);
+    }
+  }
 }
 
 void luciole::DirectoryModel::setChangedCallback(std::function<void()> callback) { m_changed = std::move(callback); }

@@ -79,9 +79,9 @@ namespace {
     TEST_CHECK(rig.bar().notice.empty());
     TEST_CHECK(rig.preview->loadsStarted() == 1);
     TEST_CHECK(rig.slot().factsLabel().text().starts_with("23 bytes")); // the facts follow the listing
-    // The save replaced the file, which took the list's cursor with its old entry: the cursor is back on it.
+    // The save replaced the file; the list's model moved the cursor to the new entry itself, so nothing was put back.
     const auto cursor = luciole::workbenchFeed(rig.browser).cursor;
-    TEST_CHECK(rig.reveals == 1 && cursor && cursor->location.basename() == "notes.md");
+    TEST_CHECK(rig.reveals == 0 && cursor && cursor->location.basename() == "notes.md");
     TEST_CHECK(rig.browser.model().selection().selected.size() == 1);
   }
 
