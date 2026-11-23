@@ -12,7 +12,7 @@
 #include <unistd.h>
 #include <vector>
 
-// Editing CSV and TSV files as tables in the column preview: Enable editing, cells, rows and columns, Save and the
+// Editing CSV and TSV files as tables in the column preview: Enable Editing, cells, rows and columns, Save and the
 // bytes on disk, the reasons a table cannot be edited, a refused change, and leaving unsaved changes.
 namespace {
   using namespace luciole::test::edit;
@@ -41,7 +41,7 @@ namespace {
     TEST_CHECK(rig.slot().nameLabel().text() == name);
   }
 
-  // Visits `name`, presses Enable editing and frames until the table is editable with the keyboard on its grid.
+  // Visits `name`, presses Enable Editing and frames until the table is editable with the keyboard on its grid.
   void editTable(Rig& rig, std::string_view name) {
     visitTable(rig, name);
     TEST_CHECK(rig.bar().enableAvailable);

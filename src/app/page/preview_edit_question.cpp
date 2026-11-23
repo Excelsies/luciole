@@ -22,7 +22,7 @@ namespace luciole {
     SaveQuestion question;
     question.root = ui::column(
         {.align = FlexAlign::Stretch},
-        dialogHeader(std::format("Save changes to {}?", name), "device-floppy", std::move(close)),
+        dialogHeader(std::format("Save Changes to {}?", name), "device-floppy", std::move(close)),
         ui::label(
             {.out = &question.sentence,
              .color = colorSpecFromRole(ColorRole::Error),

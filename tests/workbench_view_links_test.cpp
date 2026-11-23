@@ -43,7 +43,7 @@ namespace {
     rig.frame();
     // the press took the focus to the strip: it goes back to the list
     TEST_CHECK(rig.focuses.size() == 1 && rig.focuses.back() == rig.list);
-    // nothing else moved: no pin, no Jump ahead cursor
+    // nothing else moved: no pin, no Jump Ahead cursor
     TEST_CHECK(!rig.state.pinned(0) && !rig.state.locked() && !rig.view->jumpList().cursor());
   }
 

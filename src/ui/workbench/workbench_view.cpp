@@ -422,7 +422,7 @@ namespace luciole {
     const bool titledPreview = m_columns->previewHome() == wb::PreviewHome::JumpAhead;
     if (moved || titledPreview != m_titledPreview) {
       m_titledPreview = titledPreview;
-      m_shell->setTitle(wb::Pane::Jump, titledPreview ? "Preview" : "Jump ahead");
+      m_shell->setTitle(wb::Pane::Jump, titledPreview ? "Preview" : "Jump Ahead");
       m_shell->arrange(renderer, rect);
     }
   }

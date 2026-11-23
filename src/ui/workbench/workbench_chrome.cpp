@@ -24,7 +24,7 @@ namespace luciole {
     constexpr std::size_t kKinds = 3;
     constexpr std::array<std::string_view, kKinds> kInstrumentNames{"Nest", "Iris", "Atlas"};
     constexpr std::array<std::string_view, kKinds> kInstrumentGlyphs{"chart-treemap", "chart-donut", "chart-bubble"};
-    constexpr std::array<std::string_view, kKinds> kRibbonNames{"Flame graph", "Flow", "Ladder"};
+    constexpr std::array<std::string_view, kKinds> kRibbonNames{"Flame Graph", "Flow", "Ladder"};
     constexpr std::array<std::string_view, kKinds> kRibbonGlyphs{"flame", "chart-sankey", "stairs"};
     constexpr std::string_view kResetTip = "Reset layout: sizes, collapsed panes and column widths";
     // A switch as tall as the header's buttons, with glyphs of their size.

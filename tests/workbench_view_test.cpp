@@ -60,8 +60,8 @@ namespace {
     TEST_CHECK(rig.columnRow(0, "b.bin") != nullptr);
     TEST_CHECK(rig.view->center().strips().count() >= 1);
     TEST_CHECK(title(rig, wb::Pane::Instrument) == "Instrument: Nest");
-    TEST_CHECK(title(rig, wb::Pane::Ribbon) == "Ribbon: Flame graph");
-    TEST_CHECK(title(rig, wb::Pane::Jump) == "Jump ahead");
+    TEST_CHECK(title(rig, wb::Pane::Ribbon) == "Ribbon: Flame Graph");
+    TEST_CHECK(title(rig, wb::Pane::Jump) == "Jump Ahead");
     TEST_CHECK(rig.gone.empty() && rig.geometries.empty() && rig.instruments.empty());
   }
 
@@ -78,7 +78,7 @@ namespace {
     TEST_CHECK(ribbon.marks().linked == big && instrument.marks().linked == wb::kNoNode);
     TEST_CHECK(!rig.listMarks.empty() && rig.listMarks.back() == rig.fixture.at("big"));
 
-    // a row of column A lights the others, Jump ahead included, and the list row of its first-level folder
+    // a row of column A lights the others, Jump Ahead included, and the list row of its first-level folder
     const auto deep = rig.node("big/deep");
     rig.move(middle(*rig.columnRow(0, "deep")));
     rig.frame();
@@ -87,7 +87,7 @@ namespace {
     TEST_CHECK(rig.jumpRow("big/deep")->marks().linked && !rig.jumpRow("mid/sub")->marks().linked);
     TEST_CHECK(rig.listMarks.back() == rig.fixture.at("big"));
 
-    // a Jump ahead row lights the parts and the list
+    // a Jump Ahead row lights the parts and the list
     const auto sub = rig.node("mid/sub");
     rig.move(middle(*rig.jumpRow("mid/sub")));
     rig.frame();

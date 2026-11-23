@@ -90,7 +90,7 @@ namespace {
     rig.set({.shown = true, .enableAvailable = true});
     TEST_CHECK(shown(rig.view->enableEditingButton()));
     TEST_CHECK(rig.view->enableEditingButton().enabled());
-    TEST_CHECK(rig.view->enableEditingButton().label()->text() == "Enable editing");
+    TEST_CHECK(rig.view->enableEditingButton().label()->text() == "Enable Editing");
     TEST_CHECK(!shown(rig.view->saveButton()) && !shown(rig.view->stopEditingButton()));
     TEST_CHECK(rig.view->headerHeight() > before); // the bar lies under the header, above the content
     rig.click(rig.view->enableEditingButton());
@@ -116,7 +116,7 @@ namespace {
     TEST_CHECK(!shown(rig.view->enableEditingButton()));
     TEST_CHECK(shown(rig.view->saveButton()) && shown(rig.view->stopEditingButton()));
     TEST_CHECK(rig.view->saveButton().label()->text() == "Save");
-    TEST_CHECK(rig.view->stopEditingButton().label()->text() == "Stop editing");
+    TEST_CHECK(rig.view->stopEditingButton().label()->text() == "Stop Editing");
     TEST_CHECK(!rig.view->saveButton().enabled());
     TEST_CHECK(!marked(rig.view->unsavedLabel()));
     rig.click(rig.view->saveButton());
@@ -166,7 +166,7 @@ namespace {
     TEST_CHECK(rig.view->editBar().shown && shown(rig.view->saveButton()));
   }
 
-  // The words beside "Stop editing" are never cut, at any width a column can have: they wrap under the buttons when
+  // The words beside "Stop Editing" are never cut, at any width a column can have: they wrap under the buttons when
   // the row is too narrow.
   void unsavedNeverCut() {
     Rig rig;

@@ -82,7 +82,7 @@ namespace {
     TEST_CHECK(!rig.session->shows(rig.slot()));
     TEST_CHECK(rig.preview->load() == nullptr); // a hidden slot holds nothing
     TEST_CHECK(rig.shownJump());
-    TEST_CHECK(rig.jumpTitle() == "Jump ahead");
+    TEST_CHECK(rig.jumpTitle() == "Jump Ahead");
     TEST_CHECK(rig.slot().parent() == nullptr);
 
     rig.choice = WorkbenchPreviewPlace::JumpAheadWhenNarrow;
@@ -97,7 +97,7 @@ namespace {
     rig.settle();
     TEST_CHECK(!rig.session->lookahead().preview());
     TEST_CHECK(rig.view().previewHome() == PreviewHome::None);
-    TEST_CHECK(rig.shownJump() && rig.jumpTitle() == "Jump ahead");
+    TEST_CHECK(rig.shownJump() && rig.jumpTitle() == "Jump Ahead");
     TEST_CHECK(!rig.session->shows(rig.slot()));
     rig.select("notes.md");
     rig.settle();
@@ -125,7 +125,7 @@ namespace {
     TEST_CHECK(!rig.view().center().plan().columns.empty());
     TEST_CHECK(rig.view().previewHome() == PreviewHome::Column);
     TEST_CHECK(inside(rig.slot(), rig.view().center()));
-    TEST_CHECK(rig.shownJump() && rig.jumpTitle() == "Jump ahead");
+    TEST_CHECK(rig.shownJump() && rig.jumpTitle() == "Jump Ahead");
     for (const auto choice : {WorkbenchPreviewPlace::HiddenWhenNarrow, WorkbenchPreviewPlace::JumpAheadWhenNarrow}) {
       rig.choice = choice;
       rig.settle();
@@ -174,7 +174,7 @@ namespace {
     rig.select("folder");
     rig.settle();
     TEST_CHECK(rig.view().previewHome() == PreviewHome::None);
-    TEST_CHECK(rig.shownJump() && rig.jumpTitle() == "Jump ahead");
+    TEST_CHECK(rig.shownJump() && rig.jumpTitle() == "Jump Ahead");
     rig.select("notes.md");
     rig.settle();
     rig.showsFile("notes.md");
@@ -187,7 +187,7 @@ namespace {
     rig.showsFile("notes.md");
     TEST_CHECK(rig.view().previewHome() == PreviewHome::Column);
     TEST_CHECK(inside(rig.slot(), rig.view().center()));
-    TEST_CHECK(rig.shownJump() && rig.jumpTitle() == "Jump ahead");
+    TEST_CHECK(rig.shownJump() && rig.jumpTitle() == "Jump Ahead");
     rig.choice = WorkbenchPreviewPlace::JumpAheadAlways;
     rig.settle();
     rig.showsFile("notes.md");

@@ -3,7 +3,7 @@
 #include <string>
 #include <unistd.h>
 
-// Editing a text file in the column preview: Enable editing, typing, Save and the bytes on disk, the reasons a file
+// Editing a text file in the column preview: Enable Editing, typing, Save and the bytes on disk, the reasons a file
 // cannot be edited, and saves the save layer refuses.
 namespace {
   using namespace luciole::test::edit;

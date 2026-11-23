@@ -166,7 +166,7 @@ namespace {
     TEST_CHECK(rig.slot().nameLabel().text() == "c.txt" && rig.asks == 1);
   }
 
-  // Escape and Stop editing take the same path and end on the same file, read-only and freshly loaded, with the
+  // Escape and Stop Editing take the same path and end on the same file, read-only and freshly loaded, with the
   // keyboard back in the list. A save that replaced the file puts the list's cursor back on it.
   void testStopEditing(::test::SceneCapture& capture) {
     const Folder folder;

@@ -74,24 +74,24 @@ namespace {
     TEST_CHECK(rig.geometries.empty());
   }
 
-  // The ribbon closes first, then Jump ahead, then the left column turns into the rail.
+  // The ribbon closes first, then Jump Ahead, then the left column turns into the rail.
   void smallViewsClosePanesInOrder() {
     Rig rig;
     rig.settle();
     const auto& shell = rig.view->shell();
     rig.resize(1400, 340);
-    TEST_CHECK(title(rig, wb::Pane::Ribbon) == "Ribbon: Flame graph (closed: too short)");
-    TEST_CHECK(title(rig, wb::Pane::Jump) == "Jump ahead");
+    TEST_CHECK(title(rig, wb::Pane::Ribbon) == "Ribbon: Flame Graph (closed: too short)");
+    TEST_CHECK(title(rig, wb::Pane::Jump) == "Jump Ahead");
     TEST_CHECK(!shown(&rig.view->ribbon()) && shown(&rig.view->jumpList()));
     rig.resize(1400, 300);
-    TEST_CHECK(title(rig, wb::Pane::Jump) == "Jump ahead (closed: too short)");
+    TEST_CHECK(title(rig, wb::Pane::Jump) == "Jump Ahead (closed: too short)");
     TEST_CHECK(!shown(&rig.view->jumpList()) && shown(&rig.view->instrument()));
     rig.resize(540, 700);
     TEST_CHECK(shown(shell.railButton(wb::Pane::Instrument)) && !shown(&rig.view->instrument()));
     TEST_CHECK(shown(&rig.view->center()));
     rig.resize(1400, 900);
     TEST_CHECK(shown(&rig.view->instrument()) && shown(&rig.view->jumpList()) && shown(&rig.view->ribbon()));
-    TEST_CHECK(title(rig, wb::Pane::Ribbon) == "Ribbon: Flame graph" && rig.geometries.empty());
+    TEST_CHECK(title(rig, wb::Pane::Ribbon) == "Ribbon: Flame Graph" && rig.geometries.empty());
   }
 
   // Frames with nothing new lay no scene out and bind no row; a hover binds only the row it marks.

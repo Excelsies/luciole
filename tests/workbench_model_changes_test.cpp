@@ -315,7 +315,7 @@ namespace {
     TEST_CHECK(calls.empty());
   }
 
-  // An owner that destroys the model in its changed callback starts nothing more: no Jump ahead walks follow.
+  // An owner that destroys the model in its changed callback starts nothing more: no Jump Ahead walks follow.
   void destroyedInCallback(const fs::path& base) {
     const auto root = base / "callback";
     writeFile(root / "a" / "big" / "data", 1000);

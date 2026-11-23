@@ -117,7 +117,7 @@ namespace {
       contents[3]->setZIndex(50);
       contents[3]->setOnPress([this](const InputArea::PointerData& data) { centerPresses += data.pressed ? 1 : 0; });
       shell->setTitle(Pane::Instrument, "Instrument: Nest");
-      shell->setTitle(Pane::Ribbon, "Ribbon: Flame graph");
+      shell->setTitle(Pane::Ribbon, "Ribbon: Flame Graph");
       shell->setLimits(limits);
       shell->setOnCommit([this](const PaneState& state) { commits.push_back(state); });
       dispatcher.setSceneRoot(&root);
@@ -176,7 +176,7 @@ namespace {
     const auto ribbonDivider = sceneBox(&rig.shell->divider(DividerId::Ribbon));
     TEST_CHECK(ribbonDivider.x == 340 && ribbonDivider.y == 221 && ribbonDivider.width == 1060);
     TEST_CHECK(rig.shell->header(Pane::Instrument).titleLabel()->text() == "Instrument: Nest");
-    TEST_CHECK(rig.shell->header(Pane::Jump).titleLabel()->text() == "Jump ahead");
+    TEST_CHECK(rig.shell->header(Pane::Jump).titleLabel()->text() == "Jump Ahead");
     TEST_CHECK(rig.shell->content(PaneRegion::Center) == rig.contents[3]);
     TEST_CHECK(rig.commits.empty());
     rig.resize(1400.5F, 700.5F); // panes reach a fractional edge
@@ -370,17 +370,17 @@ namespace {
     auto& ribbon = rig.shell->header(Pane::Ribbon);
     rig.resize(1400, 322);
     TEST_CHECK(!rig.visible(PaneRegion::Ribbon) && rig.visible(PaneRegion::Jump));
-    TEST_CHECK(ribbon.titleLabel()->text() == "Ribbon: Flame graph (closed: too short)");
+    TEST_CHECK(ribbon.titleLabel()->text() == "Ribbon: Flame Graph (closed: too short)");
     TEST_CHECK(!ribbon.collapseButton()->enabled());
     rig.resize(1400, 300);
     TEST_CHECK(!rig.visible(PaneRegion::Jump));
-    TEST_CHECK(jump.titleLabel()->text() == "Jump ahead (closed: too short)");
+    TEST_CHECK(jump.titleLabel()->text() == "Jump Ahead (closed: too short)");
     TEST_CHECK(sceneBox(&jump).height == 24 && shown(&jump));
     TEST_CHECK(rig.content(PaneRegion::Center).y == 24);
     rig.resize(1400, 700);
     TEST_CHECK(rig.visible(PaneRegion::Jump) && rig.visible(PaneRegion::Ribbon));
-    TEST_CHECK(jump.titleLabel()->text() == "Jump ahead");
-    TEST_CHECK(ribbon.titleLabel()->text() == "Ribbon: Flame graph");
+    TEST_CHECK(jump.titleLabel()->text() == "Jump Ahead");
+    TEST_CHECK(ribbon.titleLabel()->text() == "Ribbon: Flame Graph");
     TEST_CHECK(ribbon.collapseButton()->enabled());
     TEST_CHECK(rig.commits.empty() && rig.shell->state() == PaneState{});
   }
@@ -391,7 +391,7 @@ namespace {
     TEST_CHECK(rig.visible(PaneRegion::Ribbon) && rig.visible(PaneRegion::Instrument));
     rig.resize(700, 700);
     TEST_CHECK(!rig.visible(PaneRegion::Ribbon) && rig.visible(PaneRegion::Instrument));
-    TEST_CHECK(rig.shell->header(Pane::Ribbon).titleLabel()->text() == "Ribbon: Flame graph (closed: too narrow)");
+    TEST_CHECK(rig.shell->header(Pane::Ribbon).titleLabel()->text() == "Ribbon: Flame Graph (closed: too narrow)");
     rig.resize(500, 700);
     TEST_CHECK(!rig.visible(PaneRegion::Instrument) && !rig.visible(PaneRegion::Jump));
     const auto* button = rig.shell->railButton(Pane::Instrument);

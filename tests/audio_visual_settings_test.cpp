@@ -138,7 +138,7 @@ namespace {
     luciole::BrowserSettings settings;
     rig.dialog->sync(settings, settings, false, "");
     (void)rig.frame();
-    auto* toggle = rowControl<Toggle>(*rig.dialog, "Audio visualizer");
+    auto* toggle = rowControl<Toggle>(*rig.dialog, "Audio Visualizer");
     auto* select = rowControl<Select>(*rig.dialog, "Visual");
     TEST_CHECK(toggle != nullptr && select != nullptr);
     TEST_CHECK(toggle->checked());

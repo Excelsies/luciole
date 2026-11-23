@@ -287,7 +287,7 @@ namespace {
       TEST_CHECK(entry.share == luciole::workbench::share(shown->tree, entry.id, settings));
     }
 
-    // Jump ahead folders are measured next, then the ancestor.
+    // Jump Ahead folders are measured next, then the ancestor.
     pump.until([&] { return tablesAtAncestor.has_value(); });
     TEST_CHECK(*tablesAtAncestor == 5);
     cache.removeListener(watch);

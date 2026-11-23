@@ -38,7 +38,7 @@ namespace {
         rig.frame();
         drawnInAValidPlace(rig);
         TEST_CHECK(rig.view().previewHome() == (narrow ? PreviewHome::JumpAhead : PreviewHome::Column));
-        TEST_CHECK(rig.jumpTitle() == (narrow ? "Preview" : "Jump ahead")); // the header follows in the same frame
+        TEST_CHECK(rig.jumpTitle() == (narrow ? "Preview" : "Jump Ahead")); // the header follows in the same frame
       }
       rig.showsFile("notes.md");
       drawnInAValidPlace(rig);

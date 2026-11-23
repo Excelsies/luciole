@@ -148,18 +148,18 @@ Name accepts `0` for automatic sizing or an integer from `160` through `16384`. 
 
 | Key | Default | Accepted values / meaning |
 | --- | --- | --- |
-| `workbench_instrument` | `"nest"` | `"nest"`, `"iris"`, `"atlas"`: the part above Jump ahead in the left column |
+| `workbench_instrument` | `"nest"` | `"nest"`, `"iris"`, `"atlas"`: the part above Jump Ahead in the left column |
 | `workbench_ribbon` | `"flame"` | `"flame"`, `"flow"`, `"ladder"`: the part above the list |
-| `workbench_strips` | `true` | Ancestor strips beside the list |
+| `workbench_strips` | `true` | Ancestor Strips beside the list |
 | `workbench_size_by` | `"size"` | What sizes shapes and orders entries: `"size"` (bytes), `"files"` (files below), `"items"` (direct entries), `"modified"` (recent changes weigh more), `"visits"`, `"equal"` |
 | `workbench_color_by` | `"type"` | `"type"`, `"size"`, `"visits"`, `"modified"` (the newest change is at the top of the ramp) |
 | `workbench_emphasis` | `0.5` | Number from `0` to `1`; every weight is raised to this power, so `0` makes all entries equal and `1` keeps true proportion |
 | `workbench_audio_visualizer` | `true` | A sound file in the preview shows a visual while it plays |
-| `workbench_preview_place` | `"jump_ahead_when_narrow"` | Where a file's preview is shown. `"jump_ahead_when_narrow"`: in its column, and in the place of Jump ahead when no column has room for it, as in a small window or at a high output scale. `"jump_ahead_always"`: in the place of Jump ahead at every window size, with no preview column. `"hidden_when_narrow"`: in its column, and not shown when no column has room |
+| `workbench_preview_place` | `"jump_ahead_when_narrow"` | Where a file's preview is shown. `"jump_ahead_when_narrow"`: in its column, and in the place of Jump Ahead when no column has room for it, as in a small window or at a high output scale. `"jump_ahead_always"`: in the place of Jump Ahead at every window size, with no preview column. `"hidden_when_narrow"`: in its column, and not shown when no column has room |
 | `workbench_media_loop` | `false` | A video or sound file in the preview plays again from the start when it ends |
 | `workbench_audio_visual` | `"cosmic-peanut"` | `"cosmic-peanut"`, `"pulsar"`, `"bars"`, `"orbit"`, `"halo"`, `"radar"`, `"eclipse"`, `"dark-sun"`, `"stargate"`: the visual it shows |
 
-Settings → Views → Workbench sets these keys as Instrument, Ribbon, Ancestor strips, Size by, Color by, Emphasis, Preview placement (Replace Jump ahead when it does not fit, Always replace Jump ahead, or Hide when it does not fit), Audio visualizer and Visual, and `record_visits` as Record visits. Its Clear visit history button forgets every saved and unsaved visit count; a visit file that cannot be rewritten keeps its counts. When clearing ends, a problem the clear met, if there is one, is shown at the top of Settings; a clear that succeeds shows none.
+Settings → Views → Workbench sets these keys as Instrument, Ribbon, Ancestor Strips, Size by, Color by, Emphasis, Preview Placement (Replace Jump Ahead when it does not fit, Always replace Jump Ahead, or Hide when it does not fit), Audio Visualizer and Visual, and `record_visits` as Record Visits. Its Clear Visit History button forgets every saved and unsaved visit count; a visit file that cannot be rewritten keeps its counts. When clearing ends, a problem the clear met, if there is one, is shown at the top of Settings; a clear that succeeds shows none.
 
 Pane sizes are logical pixels including the pane header. A size of `0` follows the window; a saved size that does not fit the window is reduced when the panes are laid out, and the saved value is kept.
 
@@ -173,7 +173,7 @@ Workbench writes these keys itself: a size when you let go of its divider, a col
 | `workbench_flow_height` | `0` | Same as `workbench_flame_height`; each ribbon keeps its own height |
 | `workbench_ladder_height` | `0` | Same as `workbench_flame_height` |
 | `workbench_instrument_collapsed` | `false` | Collapse the instrument |
-| `workbench_jump_collapsed` | `false` | Collapse Jump ahead |
+| `workbench_jump_collapsed` | `false` | Collapse Jump Ahead |
 | `workbench_ribbon_collapsed` | `false` | Collapse the ribbon |
 | `workbench_first_column_width` | `260` | Integer `140` through `640` |
 | `workbench_second_column_width` | `190` | Integer `140` through `640` |

@@ -84,7 +84,7 @@ namespace {
 
   void testAsksWithSaveAndNo(::test::SceneCapture& capture) {
     Rig rig(capture);
-    TEST_CHECK(hasText(*rig.question.root, "Save changes to notes.txt?"));
+    TEST_CHECK(hasText(*rig.question.root, "Save Changes to notes.txt?"));
     TEST_CHECK(rig.question.save->label()->text() == "Save" && rig.question.no->label()->text() == "No");
     TEST_CHECK(!rig.question.sentence->visible());
     keepForViewing(rig.draw(), "preview-edit-question.png");

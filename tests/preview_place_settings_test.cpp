@@ -134,18 +134,18 @@ namespace {
     luciole::BrowserSettings settings;
     rig.dialog->sync(settings, settings, false, "");
     (void)rig.frame();
-    auto* select = rowSelect(*rig.dialog, "Preview placement");
+    auto* select = rowSelect(*rig.dialog, "Preview Placement");
     TEST_CHECK(select != nullptr);
     TEST_CHECK(select->selectedIndex() == 0);
     rig.reveal(*select);
     test::audio::keepIfAsked(rig.frame(), "settings-preview-place-row.png");
 
-    rig.popup.pick = "Hide when it does not fit";
+    rig.popup.pick = "Hide When It Does Not Fit";
     rig.click(*select);
     TEST_CHECK(
         (rig.popup.shown
          == std::vector<std::string>{
-             "Replace Jump ahead when it does not fit", "Always replace Jump ahead", "Hide when it does not fit"
+             "Replace Jump Ahead When It Does Not Fit", "Always Replace Jump Ahead", "Hide When It Does Not Fit"
          })
     );
     TEST_CHECK(rig.edits.size() == 1);
@@ -153,14 +153,14 @@ namespace {
         rig.edits.back().value(P::WorkbenchPreviewPlace) == std::optional(WorkbenchPreviewPlace::HiddenWhenNarrow)
     );
     TEST_CHECK(select->selectedIndex() == 2);
-    rig.popup.pick = "Always replace Jump ahead";
+    rig.popup.pick = "Always Replace Jump Ahead";
     rig.click(*select);
     TEST_CHECK(
         rig.edits.back().value(P::WorkbenchPreviewPlace) == std::optional(WorkbenchPreviewPlace::JumpAheadAlways)
     );
     TEST_CHECK(select->selectedIndex() == 1);
     // Choosing the inherited value again removes the override.
-    rig.popup.pick = "Replace Jump ahead when it does not fit";
+    rig.popup.pick = "Replace Jump Ahead When It Does Not Fit";
     rig.click(*select);
     TEST_CHECK(
         rig.edits.size() == 3

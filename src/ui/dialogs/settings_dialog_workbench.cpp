@@ -17,17 +17,17 @@ void SettingsDialog::addWorkbenchCard(std::function<void()> clearVisits) {
   );
   addChoice(
       P::WorkbenchRibbon, "Ribbon",
-      {{"Flame graph", luciole::WorkbenchRibbon::Flame},
+      {{"Flame Graph", luciole::WorkbenchRibbon::Flame},
        {"Flow", luciole::WorkbenchRibbon::Flow},
        {"Ladder", luciole::WorkbenchRibbon::Ladder}}
   );
-  addBool(P::WorkbenchStrips, "Ancestor strips");
+  addBool(P::WorkbenchStrips, "Ancestor Strips");
   addChoice(
       P::WorkbenchSizeBy, "Size by",
       {{"Size", luciole::WorkbenchMeasure::Bytes},
        {"Files", luciole::WorkbenchMeasure::Files},
        {"Items", luciole::WorkbenchMeasure::Items},
-       {"Recent changes", luciole::WorkbenchMeasure::Modified},
+       {"Recent Changes", luciole::WorkbenchMeasure::Modified},
        {"Visits", luciole::WorkbenchMeasure::Visits},
        {"Equal", luciole::WorkbenchMeasure::Equal}}
   );
@@ -40,26 +40,26 @@ void SettingsDialog::addWorkbenchCard(std::function<void()> clearVisits) {
   );
   addFraction(P::WorkbenchEmphasis, "Emphasis", 1.0, 0.01);
   addChoice(
-      P::WorkbenchPreviewPlace, "Preview placement",
-      {{"Replace Jump ahead when it does not fit", luciole::WorkbenchPreviewPlace::JumpAheadWhenNarrow},
-       {"Always replace Jump ahead", luciole::WorkbenchPreviewPlace::JumpAheadAlways},
-       {"Hide when it does not fit", luciole::WorkbenchPreviewPlace::HiddenWhenNarrow}},
+      P::WorkbenchPreviewPlace, "Preview Placement",
+      {{"Replace Jump Ahead When It Does Not Fit", luciole::WorkbenchPreviewPlace::JumpAheadWhenNarrow},
+       {"Always Replace Jump Ahead", luciole::WorkbenchPreviewPlace::JumpAheadAlways},
+       {"Hide When It Does Not Fit", luciole::WorkbenchPreviewPlace::HiddenWhenNarrow}},
       "Where a file's preview is shown"
   );
-  addBool(P::WorkbenchAudioVisualizer, "Audio visualizer");
+  addBool(P::WorkbenchAudioVisualizer, "Audio Visualizer");
   Choices<luciole::AudioVisualKind> visuals;
   for (const auto kind : luciole::kAudioVisualKinds) {
     visuals.emplace_back(std::string(luciole::audioVisualLabel(kind)), kind);
   }
   addChoice(P::WorkbenchAudioVisual, "Visual", visuals, "What a sound file shows while it plays");
-  addBool(P::RecordVisits, "Record visits");
+  addBool(P::RecordVisits, "Record Visits");
   m_section->addChild(
       ui::row(
           {.align = FlexAlign::Center, .gap = 8.0F, .paddingV = 6.0F, .minHeight = Style::controlHeight},
-          ui::label({.text = "Recorded visits", .fontWeight = FontWeight::SemiBold, .flexGrow = 1.0F}),
+          ui::label({.text = "Recorded Visits", .fontWeight = FontWeight::SemiBold, .flexGrow = 1.0F}),
           ui::button(
               {.out = &m_clearVisits,
-               .text = "Clear visit history",
+               .text = "Clear Visit History",
                .variant = ButtonVariant::Default,
                .minWidth = 180.0F, // no maximum: the text grows with the system font
                .onClick = std::move(clearVisits)}

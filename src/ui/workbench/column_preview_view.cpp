@@ -93,7 +93,7 @@ namespace luciole {
                 {.out = &m_editRow, .align = FlexAlign::Center, .gap = Style::spaceSm},
                 ui::button(
                     {.out = &m_enable,
-                     .text = "Enable editing",
+                     .text = "Enable Editing",
                      .variant = ButtonVariant::Default,
                      .paddingH = Style::spaceSm,
                      .onClick =
@@ -117,7 +117,7 @@ namespace luciole {
                 ),
                 ui::button(
                     {.out = &m_stop,
-                     .text = "Stop editing",
+                     .text = "Stop Editing",
                      .variant = ButtonVariant::Default,
                      .paddingH = Style::spaceSm,
                      .onClick =

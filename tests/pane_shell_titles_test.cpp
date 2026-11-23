@@ -58,7 +58,7 @@ namespace {
     rig.layout(1400, 700);
     TEST_CHECK(rig.title(Pane::Instrument).text() == "Instrument: Nest");
     TEST_CHECK(rig.title(Pane::Ribbon).text() == "Ribbon: Flame graph");
-    TEST_CHECK(rig.title(Pane::Jump).text() == "Jump ahead");
+    TEST_CHECK(rig.title(Pane::Jump).text() == "Jump Ahead");
     TEST_CHECK(!rig.title(Pane::Ribbon).hasTooltip());
     rig.layout(700, 700); // the ribbon closes; its header has room for the reason
     TEST_CHECK(rig.title(Pane::Ribbon).text() == "Ribbon: Flame graph (closed: too narrow)");

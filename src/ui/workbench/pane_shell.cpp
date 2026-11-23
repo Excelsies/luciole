@@ -19,7 +19,7 @@ namespace luciole {
     namespace wb = workbench;
 
     constexpr std::int32_t kDividerZ = 60; // above the input area of a list's grid (50)
-    constexpr std::array<std::string_view, 3> kPaneNames{"Instrument", "Jump ahead", "Ribbon"};
+    constexpr std::array<std::string_view, 3> kPaneNames{"Instrument", "Jump Ahead", "Ribbon"};
     constexpr std::array<std::string_view, 2> kRailTips{"Show the instrument", "Show Jump ahead"};
     constexpr std::array<std::string_view, 3> kDividerTips{
         "Resize the left column; Left/Right adjusts, Home or a double-click resets",
