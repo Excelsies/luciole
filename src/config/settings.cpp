@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <array>
 #include <cerrno>
+#include <concepts>
 #include <cstdio>
 #include <fcntl.h>
 #include <format>
@@ -99,7 +100,7 @@ namespace {
 
   std::expected<Patch, luciole::ConfigIssues> parse(
       const std::filesystem::path& file, std::string_view text, UnknownSettings unknown = UnknownSettings::Reject,
-      toml::table* document = nullptr
+      toml::table* document = nullptr, const luciole::KeybindConfig* keybindBase = nullptr
   ) {
     auto table = luciole::parseToml(text, file);
     if (!table) {
@@ -136,7 +137,16 @@ namespace {
               return;
             }
             known = true;
-            if (const auto decoded = decode(descriptor.rule, value); decoded && accepts(descriptor.rule, *decoded)) {
+            const auto decoded = [&] {
+              if constexpr (
+                  std::same_as<typename std::remove_cvref_t<decltype(descriptor)>::Value, luciole::KeybindConfig>
+              ) {
+                return decode(descriptor.rule, value, keybindBase != nullptr ? *keybindBase : luciole::KeybindConfig{});
+              } else {
+                return decode(descriptor.rule, value);
+              }
+            }();
+            if (decoded && accepts(descriptor.rule, *decoded)) {
               std::get<index>(patch) = decoded;
             } else {
               decoder.issue(value, preferenceKey(descriptor), expected(descriptor.rule));
@@ -176,7 +186,7 @@ namespace {
     });
   }
 
-  std::string formatPatch(const Patch& patch, toml::table document) {
+  std::string formatPatch(const Patch& patch, toml::table document, const luciole::BrowserSettings& inherited) {
     toml::table browser;
     if (const auto* existing = document["browser"].as_table()) {
       browser = *existing;
@@ -185,7 +195,11 @@ namespace {
       const auto& descriptor = std::get<index>(kPreferences);
       browser.erase(descriptor.key);
       if (const auto& value = std::get<index>(patch)) {
-        encode(browser, descriptor.key, descriptor.rule, *value);
+        if constexpr (std::same_as<typename std::remove_cvref_t<decltype(descriptor)>::Value, luciole::KeybindConfig>) {
+          encode(browser, descriptor.key, *value, inherited.keybinds);
+        } else {
+          encode(browser, descriptor.key, descriptor.rule, *value);
+        }
       }
     });
     document.insert_or_assign("schema_version", luciole::kSchemaVersion);
@@ -225,18 +239,22 @@ template <class T> const T& luciole::preferenceValue(const BrowserSettings& sett
 }
 
 template std::string& luciole::preferenceValue(BrowserSettings&, PreferenceKey<std::string>);
+template luciole::KeybindConfig& luciole::preferenceValue(BrowserSettings&, PreferenceKey<KeybindConfig>);
+template const luciole::KeybindConfig& luciole::preferenceValue(const BrowserSettings&, PreferenceKey<KeybindConfig>);
 template const std::string& luciole::preferenceValue(const BrowserSettings&, PreferenceKey<std::string>);
 template bool& luciole::preferenceValue(BrowserSettings&, PreferenceKey<bool>);
 template int& luciole::preferenceValue(BrowserSettings&, PreferenceKey<int>);
 template double& luciole::preferenceValue(BrowserSettings&, PreferenceKey<double>);
 template luciole::ActivationMode& luciole::preferenceValue(BrowserSettings&, PreferenceKey<ActivationMode>);
 template luciole::TypingMode& luciole::preferenceValue(BrowserSettings&, PreferenceKey<TypingMode>);
+template luciole::DropAction& luciole::preferenceValue(BrowserSettings&, PreferenceKey<DropAction>);
 template luciole::SortField& luciole::preferenceValue(BrowserSettings&, PreferenceKey<SortField>);
 template luciole::ViewMode& luciole::preferenceValue(BrowserSettings&, PreferenceKey<ViewMode>);
 template luciole::ViewDensity& luciole::preferenceValue(BrowserSettings&, PreferenceKey<ViewDensity>);
 template luciole::FilenameTruncation& luciole::preferenceValue(BrowserSettings&, PreferenceKey<FilenameTruncation>);
 template luciole::DetailsColumnOrder& luciole::preferenceValue(BrowserSettings&, PreferenceKey<DetailsColumnOrder>);
 template luciole::ThumbnailPolicy& luciole::preferenceValue(BrowserSettings&, PreferenceKey<ThumbnailPolicy>);
+template luciole::ChooserStartFolder& luciole::preferenceValue(BrowserSettings&, PreferenceKey<ChooserStartFolder>);
 template luciole::WorkbenchInstrument& luciole::preferenceValue(BrowserSettings&, PreferenceKey<WorkbenchInstrument>);
 template luciole::WorkbenchRibbon& luciole::preferenceValue(BrowserSettings&, PreferenceKey<WorkbenchRibbon>);
 template luciole::WorkbenchMeasure& luciole::preferenceValue(BrowserSettings&, PreferenceKey<WorkbenchMeasure>);
@@ -249,6 +267,9 @@ template const int& luciole::preferenceValue(const BrowserSettings&, PreferenceK
 template const double& luciole::preferenceValue(const BrowserSettings&, PreferenceKey<double>);
 template const luciole::ActivationMode& luciole::preferenceValue(const BrowserSettings&, PreferenceKey<ActivationMode>);
 template const luciole::TypingMode& luciole::preferenceValue(const BrowserSettings&, PreferenceKey<TypingMode>);
+template const luciole::DropAction& luciole::preferenceValue(const BrowserSettings&, PreferenceKey<DropAction>);
+template const luciole::ChooserStartFolder&
+luciole::preferenceValue(const BrowserSettings&, PreferenceKey<ChooserStartFolder>);
 template const luciole::SortField& luciole::preferenceValue(const BrowserSettings&, PreferenceKey<SortField>);
 template const luciole::ViewMode& luciole::preferenceValue(const BrowserSettings&, PreferenceKey<ViewMode>);
 template const luciole::ViewDensity& luciole::preferenceValue(const BrowserSettings&, PreferenceKey<ViewDensity>);
@@ -269,6 +290,23 @@ template const luciole::AudioVisualKind&
 luciole::preferenceValue(const BrowserSettings&, PreferenceKey<AudioVisualKind>);
 template const luciole::WorkbenchPreviewPlace&
 luciole::preferenceValue(const BrowserSettings&, PreferenceKey<WorkbenchPreviewPlace>);
+
+std::string_view luciole::sortFieldName(SortField field) {
+  const auto* found = std::ranges::find(kSortFields, field, &Named<SortField>::value);
+  return found != kSortFields.end() ? found->name : std::string_view{};
+}
+std::optional<luciole::SortField> luciole::sortFieldFromName(std::string_view name) {
+  const auto* found = std::ranges::find(kSortFields, name, &Named<SortField>::name);
+  return found != kSortFields.end() ? std::optional(found->value) : std::nullopt;
+}
+std::string_view luciole::viewModeName(ViewMode mode) {
+  const auto* found = std::ranges::find(kViewModes, mode, &Named<ViewMode>::value);
+  return found != kViewModes.end() ? found->name : std::string_view{};
+}
+std::optional<luciole::ViewMode> luciole::viewModeFromName(std::string_view name) {
+  const auto* found = std::ranges::find(kViewModes, name, &Named<ViewMode>::name);
+  return found != kViewModes.end() ? std::optional(found->value) : std::nullopt;
+}
 
 std::vector<luciole::OverrideEdit> luciole::inheritAllPreferences() {
   std::vector<OverrideEdit> edits;
@@ -306,7 +344,9 @@ static luciole::SettingsResult loadLayers(const luciole::ConfigPaths& paths, boo
     if (!*text) {
       continue;
     }
-    auto parsed = parse(*file, **text, UnknownSettings::Warn);
+    auto parsed = parse(
+        *file, **text, UnknownSettings::Warn, nullptr, file == &paths.overrides ? &settings.browser.keybinds : nullptr
+    );
     if (!parsed) {
       auto& errors = parsed.error();
       issues.insert(issues.end(), std::make_move_iterator(errors.begin()), std::make_move_iterator(errors.end()));
@@ -365,6 +405,7 @@ luciole::AtomicWriteState luciole::ConfigService::saveOverrides(std::span<const 
     return AtomicWriteState::NotCommitted;
   }
   Settings candidate;
+  Settings inherited;
   const auto result = updateTextFileAtomic(
       m_paths.overrides,
       [&](const std::optional<std::string>& current) -> std::expected<std::optional<std::string>, std::string> {
@@ -387,9 +428,12 @@ luciole::AtomicWriteState luciole::ConfigService::saveOverrides(std::span<const 
             return std::unexpected("invalid base configuration");
           }
           applyPatch(candidate, *parsed);
+          applyPatch(inherited, *parsed);
         }
         toml::table document;
-        auto patch = parse(m_paths.overrides, current.value_or(""), UnknownSettings::Warn, &document);
+        auto patch = parse(
+            m_paths.overrides, current.value_or(""), UnknownSettings::Warn, &document, &inherited.browser.keybinds
+        );
         if (!patch) {
           m_issues = std::move(patch.error());
           return std::unexpected("invalid existing settings");
@@ -402,7 +446,7 @@ luciole::AtomicWriteState luciole::ConfigService::saveOverrides(std::span<const 
         if (*patch == previous) {
           return std::nullopt;
         }
-        return formatPatch(*patch, std::move(document));
+        return formatPatch(*patch, std::move(document), inherited.browser);
       }
   );
   if (result.state != AtomicWriteState::NotCommitted) {

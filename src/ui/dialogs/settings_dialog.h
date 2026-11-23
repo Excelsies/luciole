@@ -7,6 +7,7 @@
 #include <map>
 
 class Button;
+class KeybindRecorder;
 class Label;
 class ScrollView;
 
@@ -14,7 +15,7 @@ class SettingsDialog final : public Flex {
 public:
   SettingsDialog(
       std::function<void(luciole::OverrideEdit)> change, std::function<void()> reset, std::function<void()> close,
-      std::function<void()> clearThumbnails, std::function<void()> clearVisits
+      std::function<void()> clearThumbnails, std::function<void()> clearVisits, bool compositorSupportsSSD
   );
   void sync(
       const luciole::BrowserSettings& settings, const luciole::BrowserSettings& inherited, bool busy,
@@ -38,7 +39,10 @@ private:
   void addTerminal();
   // The Workbench card on the Views page: its choices, the sound visualizer, Record visits and Clear visit history.
   void addWorkbenchCard(std::function<void()> clearVisits);
-  void addBool(luciole::PreferenceKey<bool> key, const std::string& title);
+  void addKeybinds();
+  void syncKeybinds();
+  void selectKeybindScope(std::size_t selected);
+  void addBool(luciole::PreferenceKey<bool> key, const std::string& title, std::string subtitle = {});
   void addNumber(
       luciole::PreferenceKey<int> key, const std::string& title, const std::vector<int>& values,
       std::string suffix = "px"
@@ -68,6 +72,8 @@ private:
   bool m_resetArmed = false;
   ScrollView* m_body = nullptr;
   Label* m_status = nullptr;
+  std::string m_pendingStatus;
+  bool m_pendingStatusError = false;
   Button* m_clearThumbnails = nullptr;
   Button* m_clearVisits = nullptr;
   Flex* m_navigation = nullptr;
@@ -76,6 +82,17 @@ private:
   std::vector<Flex*> m_pages;
   std::vector<std::string> m_pageTitles;
   std::vector<Button*> m_navButtons;
+  struct KeybindSlotRow {
+    KeybindRecorder* recorder = nullptr;
+    Button* remove = nullptr;
+    Flex* row = nullptr;
+  };
+  struct KeybindBlock {
+    luciole::KeybindCommand command;
+    std::vector<KeybindSlotRow> slots;
+  };
+  std::vector<KeybindBlock> m_keybindBlocks;
+  std::vector<Flex*> m_keybindScopePages;
   // Shows m_current's value in a row's control.
   std::map<luciole::BrowserPreferenceId, std::function<void()>> m_rows;
 };

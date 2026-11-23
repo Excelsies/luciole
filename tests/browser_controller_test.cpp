@@ -1,6 +1,8 @@
 #include "browser/browser_controller.h"
+#include "browser/entry_details.h"
 #include "browser/location_presentation.h"
 #include "event_loop/glib_poll_source.h"
+#include "fs/folder_totals.h"
 #include "fs/gio_interop.h"
 #include "temp_folder.h"
 #include "test_check.h"
@@ -157,6 +159,39 @@ namespace {
     pump.ready(*retiring);
     retiring->activate(id(*retiring, "file-link"));
     retiring.reset();
+  }
+
+  void testBrokenAndChainedLinks() {
+    Fixture fixture;
+    fs::create_symlink("file", fixture.path / "file-link");
+    fs::create_symlink("file-link", fixture.path / "chain");
+    fs::create_symlink("missing", fixture.path / "broken");
+    fs::create_symlink("loop-b", fixture.path / "loop-a");
+    fs::create_symlink("loop-a", fixture.path / "loop-b");
+    Pump pump;
+    BrowserController browser({}, false);
+    const auto root = Location::fromPath(fixture.path.native());
+    browser.open(root);
+    pump.ready(browser);
+    std::optional<Location> launched;
+    browser.setFileActivatedCallback([&](const Location& file) { launched = file; });
+    browser.activate(id(browser, "chain"));
+    pump.until([&] { return launched.has_value(); });
+    TEST_CHECK(launched == root.child("chain"));
+    for (const auto& name : {"broken", "loop-a"}) {
+      launched.reset();
+      browser.activate(id(browser, name));
+      pump.until([&] { return launched.has_value() || !browser.message().empty(); });
+      TEST_CHECK(!launched && !browser.message().empty());
+      TEST_CHECK(browser.model().snapshot().location == root);
+      browser.refresh();
+      pump.ready(browser);
+    }
+    browser.activate(id(browser, "folder-link"));
+    pump.until([&] { return browser.model().snapshot().location != root; });
+    pump.ready(browser);
+    TEST_CHECK(browser.model().snapshot().location == root.child("folder-link"));
+    TEST_CHECK(browser.model().snapshot().entries.size() == 1);
   }
 
   void testProviderShortcutNavigation() {
@@ -939,11 +974,93 @@ namespace {
     );
   }
 
+  void testFolderSizes() {
+    Fixture fixture;
+    fs::create_directory(fixture.path / "empty");
+    fs::create_directory(fixture.path / "sized");
+    std::ofstream(fixture.path / "sized" / "one") << "abc";
+    std::ofstream(fixture.path / "sized" / "two") << "abcde";
+    Pump pump;
+    BrowserController browser({}, false);
+    browser.open(Location::fromPath(fixture.path.native()));
+    pump.ready(browser);
+    const auto emptyId = id(browser, "empty");
+    const auto sizedId = id(browser, "sized");
+    const auto fileId = id(browser, "file");
+    const auto linkId = id(browser, "folder-link");
+    const auto childId = id(browser, "child");
+    int changes = 0;
+    browser.setChangedCallback([&] { ++changes; });
+    // Two walks at once; the third waits for a slot.
+    browser.requestFolderSize(emptyId);
+    browser.requestFolderSize(sizedId);
+    browser.requestFolderSize(childId);
+    pump.until([&] {
+      return browser.folderSize(emptyId) != nullptr
+          && browser.folderSize(sizedId) != nullptr
+          && browser.folderSize(childId) != nullptr;
+    });
+    pump.drainFor(150ms);
+    TEST_CHECK(
+        browser.folderSize(emptyId)->bytes == 0
+        && browser.folderSize(sizedId)->bytes == 8
+        && browser.folderSize(sizedId)->files == 2
+        && browser.folderSize(childId)->bytes == 13
+    );
+    TEST_CHECK(changes > 0);
+    TEST_CHECK(luciole::entryFolderSizeText(*browser.folderSize(emptyId)) == "0 bytes");
+    // Ineligible: a file and a folder symlink.
+    browser.requestFolderSize(fileId);
+    browser.requestFolderSize(linkId);
+    pump.drainFor(150ms);
+    TEST_CHECK(!browser.folderSize(fileId) && !browser.folderSize(linkId));
+    // Cached ids never re-walk.
+    browser.requestFolderSize(childId);
+    pump.drainFor(150ms);
+    TEST_CHECK(browser.folderSize(sizedId) != nullptr);
+    // Changed facts drop the cache; the next bind walks again.
+    std::ofstream(fixture.path / "sized" / "three") << "xy";
+    browser.refresh();
+    pump.ready(browser);
+    TEST_CHECK(!browser.folderSize(sizedId));
+    browser.requestFolderSize(sizedId);
+    pump.until([&] { return browser.folderSize(sizedId) != nullptr; });
+    TEST_CHECK(browser.folderSize(sizedId)->bytes == 10);
+    // Navigation retires ids and drops their sizes.
+    browser.open(Location::fromPath((fixture.path / "child").native()));
+    pump.ready(browser);
+    TEST_CHECK(!browser.folderSize(sizedId));
+  }
+
+  void testFolderSizeNetworkRefusal() {
+    Fixture fixture;
+    fs::create_directory(fixture.path / "remote-ish");
+    Pump pump;
+    int probeCalls = 0;
+    BrowserController browser({}, false, true, [&](const std::string&) {
+      ++probeCalls;
+      return true;
+    });
+    browser.open(Location::fromPath(fixture.path.native()));
+    pump.ready(browser);
+    const auto refusalId = id(browser, "remote-ish");
+    browser.requestFolderSize(refusalId);
+    pump.until([&] { return browser.folderSize(refusalId) != nullptr; });
+    TEST_CHECK(browser.folderSize(refusalId)->phase == luciole::FolderTotalsPhase::Unsupported);
+    TEST_CHECK(luciole::entryFolderSizeText(*browser.folderSize(refusalId)).empty());
+    TEST_CHECK(probeCalls == 1);
+    const int settle = probeCalls;
+    browser.requestFolderSize(refusalId);
+    pump.drainFor(150ms);
+    TEST_CHECK(probeCalls == settle && browser.folderSize(refusalId) != nullptr);
+  }
+
 } // namespace
 
 int main() {
   try {
     testActionContextsAndFileLinks();
+    testBrokenAndChainedLinks();
     testProviderShortcutNavigation();
     testDuplicatedTabs();
     testNavigation();
@@ -951,6 +1068,8 @@ int main() {
     testRecursiveSearch();
     testBackupPolicyAndSearch();
     testSearchLifetimeAndPartialFailure();
+    testFolderSizes();
+    testFolderSizeNetworkRefusal();
     testLocationPresentation();
     testHistoryState();
     testDemandMetadataAndBulkFallback();

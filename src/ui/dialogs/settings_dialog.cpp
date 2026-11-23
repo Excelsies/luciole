@@ -28,11 +28,64 @@ namespace {
     }
     return result;
   }
+  std::string_view keybindRejectionMessage(KeybindRejection reason) {
+    switch (reason) {
+    case KeybindRejection::Super:
+      return "Super shortcuts are reserved by the compositor.";
+    case KeybindRejection::Modifier:
+      return "This shortcut does not accept modifiers.";
+    case KeybindRejection::Printable:
+      return "Printable keys need Ctrl, Alt or another modifier.";
+    }
+    return "This shortcut cannot be used.";
+  }
+  std::string_view keybindScopeTitle(luciole::KeybindScope scope) {
+    switch (scope) {
+    case luciole::KeybindScope::Controls:
+      return "Controls";
+    case luciole::KeybindScope::FileBrowser:
+      return "File Browser";
+    case luciole::KeybindScope::TabsAndWindows:
+      return "Tabs and Windows";
+    }
+    return {};
+  }
+  // Commands whose defaults include a bare printable key must stay recordable without a modifier.
+  ModifierPolicy keybindModifierPolicy(luciole::KeybindCommand command) {
+    return command == luciole::KeybindCommand::Validate || command == luciole::KeybindCommand::QuickPreview
+        ? ModifierPolicy::Optional
+        : ModifierPolicy::Required;
+  }
+  luciole::KeybindChord toKeybindChord(const KeyChord& chord) { return {chord.sym, chord.modifiers}; }
+  std::optional<luciole::KeybindCommand> crossScopeConflict(
+      const luciole::KeybindConfig& config, luciole::KeybindCommand command, const luciole::KeybindChord& chord
+  ) {
+    const auto target = luciole::normalizeKeybindChord(chord);
+    for (const auto scope : luciole::kKeybindScopes) {
+      if (scope == luciole::keybindCommandScope(command)) {
+        continue;
+      }
+      for (const auto candidate : luciole::keybindCommands(scope)) {
+        for (const auto& used : config.chords(candidate)) {
+          if (used && luciole::normalizeKeybindChord(*used) == target) {
+            return candidate;
+          }
+        }
+      }
+    }
+    return std::nullopt;
+  }
+  std::optional<KeyChord> fromKeybindChord(std::optional<luciole::KeybindChord> chord) {
+    if (!chord) {
+      return std::nullopt;
+    }
+    return KeyChord{chord->sym, chord->modifiers};
+  }
 } // namespace
 
 SettingsDialog::SettingsDialog(
     std::function<void(luciole::OverrideEdit)> change, std::function<void()> reset, std::function<void()> close,
-    std::function<void()> clearThumbnails, std::function<void()> clearVisits
+    std::function<void()> clearThumbnails, std::function<void()> clearVisits, bool compositorSupportsSSD
 )
     : m_change(std::move(change)), m_resetAll(std::move(reset)) {
   setDirection(FlexDirection::Vertical);
@@ -53,7 +106,7 @@ SettingsDialog::SettingsDialog(
       ),
       ui::button(
           {.out = &m_reset,
-           .text = "Reset all settings",
+           .text = "Reset All Settings",
            .glyph = "restore",
            .controlHeight = Style::controlHeightSm,
            .variant = ButtonVariant::Ghost,
@@ -91,40 +144,56 @@ SettingsDialog::SettingsDialog(
   section("General", "adjustments-horizontal");
   card("Behavior");
   addChoice(
-      P::ActivationMode, "Open items",
-      {{"Single click", luciole::ActivationMode::SingleClick}, {"Double click", luciole::ActivationMode::DoubleClick}}
+      P::ActivationMode, "Open Items",
+      {{"Single Click", luciole::ActivationMode::SingleClick}, {"Double Click", luciole::ActivationMode::DoubleClick}}
   );
   addChoice(
-      P::TypingMode, "When typing",
-      {{"Search subfolders", luciole::TypingMode::Search},
-       {"Filter current folder", luciole::TypingMode::Filter},
-       {"Select names", luciole::TypingMode::Typeahead}}
+      P::TypingMode, "When Typing",
+      {{"Search Subfolders", luciole::TypingMode::Search},
+       {"Filter Current Folder", luciole::TypingMode::Filter},
+       {"Select Names", luciole::TypingMode::Typeahead}}
   );
-  addBool(P::ConfirmPermanentDeletion, "Confirm permanent deletion");
-  addBool(P::ShowPermanentDeletion, "Show Delete Permanently in context menus");
-  addBool(P::SwitchToNewTab, "Switch to new folder tabs");
-  addBool(P::RestoreLastWindow, "Restore tabs from last closed window");
+  addChoice(
+      P::DropAction, "When Dropping Files",
+      {{"Ask What to Do", luciole::DropAction::Menu},
+       {"Copy Here", luciole::DropAction::Copy},
+       {"Move Here", luciole::DropAction::Move}},
+      "Without a modifier key"
+  );
+  addBool(P::SingleClickLocationEdit, "Single-Click Location Bar to Edit");
+  addBool(P::ConfirmPermanentDeletion, "Confirm Permanent Deletion");
+  addBool(P::ShowPermanentDeletion, "Show Delete Permanently in Context Menus");
+  addBool(P::SwitchToNewTab, "Switch to New Folder Tabs");
+  addBool(P::RestoreLastWindow, "Restore Tabs from Last Closed Window");
+  addBool(
+      P::SingleWindow, "Single Window",
+      "Launches and Show Items requests open tabs in the existing window; New Window becomes a new tab"
+  );
   card("Terminal");
   addTerminal();
   section("Appearance", "paint");
   card("Window");
-  addFraction(P::BackgroundOpacity, "Background opacity", 1.0, 0.01);
-  addFraction(P::CornerRadiusScale, "Corner roundness", 2.0, 0.05, {}, [](double value) {
+  if (compositorSupportsSSD) {
+    addBool(P::UseSSD, "Use System Title Bar And Borders");
+  }
+  addFraction(P::BackgroundOpacity, "Background Opacity", 1.0, 0.01);
+  addFraction(P::CornerRadiusScale, "Corner Roundness", 2.0, 0.05, {}, [](double value) {
     Style::setCornerRadiusScale(static_cast<float>(value));
   });
-  addBool(P::AlwaysShowTabBar, "Always show tab bar");
-  addBool(P::AlwaysShowStatusBar, "Always show status bar");
-  addBool(P::CompactMenus, "Compact context menus");
+  addBool(P::AlwaysShowTabBar, "Always Show Tab Bar");
+  addBool(P::AlwaysShowStatusBar, "Always Show Status Bar");
+  addBool(P::CompactMenus, "Compact Context Menus");
+  addBool(P::ShowCloseButtons, "Show Close Buttons");
+  addBool(P::ReduceAnimations, "Reduce Animations");
   card("Sidebar");
-  addBool(P::ShowSidebar, "Show sidebar");
-  addBool(P::SidebarTree, "Show folder tree");
-  addBool(P::ShowDrives, "Show drives");
+  addBool(P::ShowSidebar, "Show Sidebar");
+  addBool(P::SidebarTree, "Show Folder Tree");
+  addBool(P::ShowDrives, "Show Drives");
   addBool(P::ShowNetwork, "Show Network");
-  addNumber(P::SidebarWidth, "Sidebar width", widths(luciole::kMinSidebarWidth, luciole::kMaxSidebarWidth));
+  addNumber(P::SidebarWidth, "Sidebar Width", widths(luciole::kMinSidebarWidth, luciole::kMaxSidebarWidth));
   card("Preview");
-  addBool(P::ShowPreview, "Show preview");
-  addBool(P::ChooserShowPreview, "Show preview in file picker");
-  addNumber(P::PreviewWidth, "Preview width", widths(208, 800));
+  addBool(P::ShowPreview, "Show Preview");
+  addNumber(P::PreviewWidth, "Preview Width", widths(208, 800));
   section("Views", "layout-grid");
   card("View");
   addChoice(
@@ -134,59 +203,59 @@ SettingsDialog::SettingsDialog(
        {"Columns", luciole::ViewMode::Miller},
        {"Workbench", luciole::ViewMode::Workbench}}
   );
+  addBool(P::RememberFolderViews, "Remember View and Sort per Folder");
   addChoice(
       P::Density, "Density",
       {{"Compact", luciole::ViewDensity::Compact}, {"Comfortable", luciole::ViewDensity::Comfortable}}
   );
-  addBool(P::ShowEmblems, "Link and read-only emblems");
+  addBool(P::ShowEmblems, "Link and Read-Only Emblems");
   addChoice(
-      P::FilenameTruncation, "Long filenames",
-      {{"Shorten in the middle", luciole::FilenameTruncation::Middle},
-       {"Shorten at the end", luciole::FilenameTruncation::End}},
-      "List and column views"
+      P::FilenameTruncation, "Long Filenames",
+      {{"Shorten in the Middle", luciole::FilenameTruncation::Middle},
+       {"Shorten at the End", luciole::FilenameTruncation::End}}
   );
   card("Files");
-  addBool(P::ShowHidden, "Show hidden files");
-  addBool(P::ShowBackups, "Show backup files (*~)");
+  addBool(P::ShowHidden, "Show Hidden Files");
+  addBool(P::ShowBackups, "Show Backup Files (*~)");
   card("Sorting");
-  addChoice(
-      P::SortBy, "Sort by",
-      {{"Name", luciole::SortField::Name},
-       {"Type", luciole::SortField::Type},
-       {"Size", luciole::SortField::Size},
-       {"Modified", luciole::SortField::Modified},
-       {"Accessed", luciole::SortField::Accessed},
-       {"Created", luciole::SortField::Created},
-       {"Owner", luciole::SortField::Owner},
-       {"Group", luciole::SortField::Group},
-       {"Permissions", luciole::SortField::Permissions},
-       {"Location", luciole::SortField::Location}}
-  );
-  addBool(P::SortDescending, "Reverse order");
-  addBool(P::DirectoriesFirst, "Folders first");
-  addBool(P::HiddenLast, "Hidden last");
+  const Choices<luciole::SortField> sortFields{
+      {"Name", luciole::SortField::Name},
+      {"Type", luciole::SortField::Type},
+      {"Size", luciole::SortField::Size},
+      {"Modified", luciole::SortField::Modified},
+      {"Accessed", luciole::SortField::Accessed},
+      {"Created", luciole::SortField::Created},
+      {"Owner", luciole::SortField::Owner},
+      {"Group", luciole::SortField::Group},
+      {"Permissions", luciole::SortField::Permissions},
+      {"Location", luciole::SortField::Location}
+  };
+  addChoice(P::SortBy, "Sort By", sortFields);
+  addBool(P::SortDescending, "Reverse Order");
+  addBool(P::DirectoriesFirst, "Folders First");
+  addBool(P::HiddenLast, "Hidden Last");
   card("Grid");
-  addNumber(P::GridIconSize, "Icon size", {luciole::kGridIconSizes.begin(), luciole::kGridIconSizes.end()});
-  addBool(P::ShowSizeCaption, "File size caption");
-  addBool(P::ShowTypeCaption, "File type caption");
-  addBool(P::ShowModifiedCaption, "Modified date caption");
-  card("Column view");
-  addNumber(P::MillerColumnWidth, "Column width", {180, 208, 240, 260, 300, 360, 480, 640, 800});
-  addBool(P::MillerShowParents, "Show parent folders");
+  addNumber(P::GridIconSize, "Icon Size", {luciole::kGridIconSizes.begin(), luciole::kGridIconSizes.end()});
+  addBool(P::ShowSizeCaption, "File Size Caption");
+  addBool(P::ShowTypeCaption, "File Type Caption");
+  addBool(P::ShowModifiedCaption, "Modified Date Caption");
+  card("Column View");
+  addNumber(P::MillerColumnWidth, "Column Width", {180, 208, 240, 260, 300, 360, 480, 640, 800});
+  addBool(P::MillerShowParents, "Show Parent Folders");
   addWorkbenchCard(std::move(clearVisits));
-  section("List columns", "list-details");
+  section("List Columns", "list-details");
   card("List");
-  addBool(P::ExpandableFolders, "Expandable folders");
+  addBool(P::ExpandableFolders, "Expandable Folders");
   auto orderLabel = ui::label({.fontSize = Style::fontSizeCaption, .maxWidth = 180.0F});
   auto* orderText = orderLabel.get();
   addRow<luciole::DetailsColumnOrder>(
-      P::ColumnOrder, "Column order",
+      P::ColumnOrder, "Column Order",
       [orderText](const auto& order) {
         orderText->setText(order == luciole::kDefaultDetailsColumnOrder ? "Default" : "Custom");
       },
       std::move(orderLabel)
   );
-  card("Visible columns");
+  card("Visible Columns");
   addBool(P::ShowTypeColumn, "Type");
   addBool(P::ShowSizeColumn, "Size");
   addBool(P::ShowModifiedColumn, "Modified");
@@ -196,7 +265,7 @@ SettingsDialog::SettingsDialog(
   addBool(P::ShowGroupColumn, "Group");
   addBool(P::ShowPermissionsColumn, "Permissions");
   addBool(P::ShowLocationColumn, "Location");
-  card("Column widths");
+  card("Column Widths");
   addNumber(P::NameColumnWidth, "Name (0 = auto)", widths(160, 16384, true));
   addNumber(P::TypeColumnWidth, "Type", widths(64, 2048));
   addNumber(P::SizeColumnWidth, "Size", widths(64, 2048));
@@ -207,25 +276,42 @@ SettingsDialog::SettingsDialog(
   addNumber(P::GroupColumnWidth, "Group", widths(64, 2048));
   addNumber(P::PermissionsColumnWidth, "Permissions", widths(64, 2048));
   addNumber(P::LocationColumnWidth, "Location", widths(64, 2048));
+  section("File Picker", "folder-search");
+  card("Opening");
+  addChoice(
+      P::ChooserStartFolder, "Start Folder",
+      {{"Home", luciole::ChooserStartFolder::Home}, {"Last Used Folder", luciole::ChooserStartFolder::Last}},
+      "When the application suggests no folder"
+  );
+  addBool(P::ChooserShowPreview, "Show Preview");
+  card("View");
+  addChoice(P::ChooserViewMode, "View", {{"Grid", luciole::ViewMode::Grid}, {"List", luciole::ViewMode::List}});
+  addNumber(P::ChooserGridIconSize, "Grid Icon Size", {luciole::kGridIconSizes.begin(), luciole::kGridIconSizes.end()});
+  addBool(P::ChooserShowHidden, "Show Hidden Files");
+  card("Sorting");
+  addChoice(P::ChooserSortBy, "Sort By", sortFields);
+  addBool(P::ChooserSortDescending, "Reverse Order");
+  addBool(P::ChooserDirectoriesFirst, "Folders First");
+  addBool(P::ChooserHiddenLast, "Hidden Last");
   section("Thumbnails", "photo");
   card("Generation");
   addChoice(
-      P::ThumbnailPolicy, "Show thumbnails",
+      P::ThumbnailPolicy, "Show Thumbnails",
       {{"Never", luciole::ThumbnailPolicy::Never},
-       {"Local files", luciole::ThumbnailPolicy::Local},
-       {"All locations", luciole::ThumbnailPolicy::All}},
+       {"Local Files", luciole::ThumbnailPolicy::Local},
+       {"All Locations", luciole::ThumbnailPolicy::All}},
       "All locations can generate thumbnails on mounted shares. Unmounted locations use cached thumbnails."
   );
-  addNumber(P::ThumbnailMaxFileMib, "Image/PDF size limit", {1, 1024}, "MiB");
+  addNumber(P::ThumbnailMaxFileMib, "Image/PDF Size Limit", {1, 1024}, "MiB");
   card("Cache");
-  addNumber(P::ThumbnailCacheMib, "Disk cache limit", {16, 8192}, "MiB");
+  addNumber(P::ThumbnailCacheMib, "Disk Cache Limit", {16, 8192}, "MiB");
   m_section->addChild(
       ui::row(
           {.align = FlexAlign::Center, .gap = 8.0F, .paddingV = kRowPaddingV, .minHeight = Style::controlHeight},
-          ui::label({.text = "Cached thumbnails", .fontWeight = FontWeight::SemiBold, .flexGrow = 1.0F}),
+          ui::label({.text = "Cached Thumbnails", .fontWeight = FontWeight::SemiBold, .flexGrow = 1.0F}),
           ui::button(
               {.out = &m_clearThumbnails,
-               .text = "Clear cache",
+               .text = "Clear Cache",
                .variant = ButtonVariant::Default,
                .minWidth = 180.0F,
                .maxWidth = 180.0F,
@@ -233,6 +319,8 @@ SettingsDialog::SettingsDialog(
           )
       )
   );
+  section("Keybinds", "keyboard");
+  addKeybinds();
   selectPage(0);
 }
 
@@ -292,7 +380,7 @@ void SettingsDialog::addTerminal() {
   input->setOnSubmit([commit](const std::string&) { commit(); });
   input->setOnFocusLoss(commit);
   addRow<std::string>(
-      P::TerminalCommand, "Terminal command",
+      P::TerminalCommand, "Terminal Command",
       [input](const std::string& value) {
         if (!input->inputArea()->focused()) {
           input->setValue(value);
@@ -302,13 +390,184 @@ void SettingsDialog::addTerminal() {
   );
 }
 
-void SettingsDialog::addBool(luciole::PreferenceKey<bool> key, const std::string& title) {
+void SettingsDialog::addKeybinds() {
+  Flex* page = m_pages.back();
+  std::vector<ui::SegmentedOption> scopes;
+  scopes.reserve(luciole::kKeybindScopes.size());
+  for (const auto scope : luciole::kKeybindScopes) {
+    scopes.push_back({.label = std::string(keybindScopeTitle(scope)), .glyph = {}, .tooltip = {}});
+  }
+  page->addChild(
+      ui::row(
+          {.justify = FlexJustify::Center},
+          ui::segmented({.options = std::move(scopes), .selectedIndex = 0, .onChange = [this](std::size_t index) {
+                           selectKeybindScope(index);
+                         }})
+      )
+  );
+
+  m_keybindBlocks.reserve(luciole::kKeybindCommandCount);
+  for (const auto scope : luciole::kKeybindScopes) {
+    auto scopePage = ui::column({.align = FlexAlign::Stretch, .gap = Style::spaceMd});
+    Flex* scopePointer = scopePage.get();
+    page->addChild(std::move(scopePage));
+    m_keybindScopePages.push_back(scopePointer);
+    m_section = nullptr;
+    scopePointer->addChild(luciole::card(std::string(keybindScopeTitle(scope)), &m_section));
+    m_section->setGap(Style::spaceMd);
+
+    for (const auto command : luciole::keybindCommands(scope)) {
+      const std::size_t blockIndex = m_keybindBlocks.size();
+      auto slots = ui::column(
+          {.align = FlexAlign::Start, .gap = 2.0F, .minWidth = 220.0F + Style::spaceXs + Style::controlHeightSm}
+      );
+      KeybindBlock entry{.command = command, .slots = {}};
+      entry.slots.reserve(luciole::kMaxKeybindChords);
+      for (std::size_t slot = 0; slot < luciole::kMaxKeybindChords; ++slot) {
+        KeybindRecorder* recorder = nullptr;
+        Button* remove = nullptr;
+        auto row = ui::row(
+            {.align = FlexAlign::Center, .gap = Style::spaceXs},
+            ui::keybindRecorder(
+                {.out = &recorder,
+                 .scale = 1.0F,
+                 .unsetPlaceholder = "Add shortcut",
+                 .recordingPlaceholder = "Press keys…",
+                 .modifierPolicy = keybindModifierPolicy(command),
+                 .onCommit =
+                     [this, blockIndex, slot, command](KeyChord chord) {
+                       auto& target = m_keybindBlocks[blockIndex].slots[slot];
+                       const auto keybindChord = toKeybindChord(chord);
+                       std::optional<luciole::KeybindChord> original;
+                       if (slot < m_current.keybinds.chords(command).size()) {
+                         original = m_current.keybinds.chords(command)[slot];
+                       }
+                       if (const auto conflict =
+                               luciole::keybindConflict(m_current.keybinds, command, slot, keybindChord)) {
+                         target.recorder->setChord(fromKeybindChord(original));
+                         m_pendingStatus = std::format(
+                             "{} is already used by {}.", luciole::keybindChordLabel(keybindChord),
+                             luciole::keybindCommandLabel(*conflict)
+                         );
+                         m_pendingStatusError = true;
+                         setStatus(m_pendingStatus, true);
+                         return;
+                       }
+                       m_pendingStatus.clear();
+                       m_pendingStatusError = false;
+                       auto next = m_current.keybinds;
+                       luciole::setKeybindChord(next, command, slot, keybindChord);
+                       if (!luciole::keybindConfigValid(next)) {
+                         target.recorder->setChord(fromKeybindChord(original));
+                         m_pendingStatus = keybindRejectionMessage(KeybindRejection::Printable);
+                         m_pendingStatusError = true;
+                         setStatus(m_pendingStatus, true);
+                         return;
+                       }
+                       if (const auto other = crossScopeConflict(m_current.keybinds, command, keybindChord)) {
+                         m_pendingStatus = std::format(
+                             "{} is also used by {} in another scope.", luciole::keybindChordLabel(keybindChord),
+                             luciole::keybindCommandLabel(*other)
+                         );
+                         setStatus(m_pendingStatus, false);
+                       }
+                       send(P::Keybinds, std::optional(next));
+                     },
+                 .onReject =
+                     [this](KeybindRejection reason) {
+                       m_pendingStatus = keybindRejectionMessage(reason);
+                       m_pendingStatusError = true;
+                       setStatus(m_pendingStatus, true);
+                     }}
+            ),
+            ui::button(
+                {.out = &remove,
+                 .glyph = "close",
+                 .glyphSize = Style::fontSizeCaption,
+                 .controlHeight = Style::controlHeightSm,
+                 .variant = ButtonVariant::Ghost,
+                 .tooltip = "Clear shortcut",
+                 .minWidth = Style::controlHeightSm,
+                 .onClick = [this, command, slot] {
+                   m_pendingStatus.clear();
+                   m_pendingStatusError = false;
+                   auto next = m_current.keybinds;
+                   luciole::setKeybindChord(next, command, slot, std::nullopt);
+                   send(P::Keybinds, std::optional(next));
+                 }}
+            )
+        );
+        auto* rowPointer = row.get();
+        slots->addChild(std::move(row));
+        entry.slots.push_back({.recorder = recorder, .remove = remove, .row = rowPointer});
+      }
+      auto block = ui::row(
+          {.align = FlexAlign::Start,
+           .justify = FlexJustify::SpaceBetween,
+           .gap = Style::spaceMd,
+           .paddingV = kRowPaddingV},
+          ui::label(
+              {.text = std::string(luciole::keybindCommandLabel(command)),
+               .fontSize = Style::fontSizeBody,
+               .fontWeight = FontWeight::SemiBold,
+               .color = colorSpecFromRole(ColorRole::OnSurfaceVariant),
+               .minWidth = 200.0F,
+               .maxLines = 1,
+               .ellipsize = TextEllipsize::End}
+          ),
+          std::move(slots)
+      );
+      m_section->addChild(std::move(block));
+      m_keybindBlocks.push_back(std::move(entry));
+    }
+  }
+  m_rows[P::Keybinds.id()] = [this] { syncKeybinds(); };
+  selectKeybindScope(0);
+  syncKeybinds();
+}
+
+void SettingsDialog::syncKeybinds() {
+  for (auto& block : m_keybindBlocks) {
+    const auto& chords = m_current.keybinds.chords(block.command);
+    std::size_t count = 0;
+    while (count < chords.size() && chords[count]) {
+      ++count;
+    }
+    for (std::size_t slot = 0; slot < block.slots.size(); ++slot) {
+      auto& widgets = block.slots[slot];
+      const bool used = slot < count;
+      const bool shown = used || slot == count;
+      widgets.row->setVisible(shown);
+      widgets.row->setParticipatesInLayout(shown);
+      widgets.remove->setVisible(used);
+      std::optional<KeyChord> chord;
+      if (used) {
+        chord = fromKeybindChord(chords[slot]);
+      }
+      widgets.recorder->setChord(chord);
+      widgets.recorder->setEnabled(shown);
+    }
+  }
+}
+
+void SettingsDialog::selectKeybindScope(std::size_t selected) {
+  for (std::size_t index = 0; index < m_keybindScopePages.size(); ++index) {
+    const bool active = index == selected;
+    m_keybindScopePages[index]->setVisible(active);
+    m_keybindScopePages[index]->setParticipatesInLayout(active);
+  }
+  m_body->requestScrollToOffset(0);
+}
+
+void SettingsDialog::addBool(luciole::PreferenceKey<bool> key, const std::string& title, std::string subtitle) {
   Toggle* control = nullptr;
   auto row = ui::row(
       {.justify = FlexJustify::End, .width = 180.0F},
       ui::toggle({.out = &control, .onChange = [this, key](bool value) { send(key, std::optional(value)); }})
   );
-  addRow<bool>(key, title, [control](bool value) { control->setCheckedImmediate(value); }, std::move(row));
+  addRow<bool>(
+      key, title, [control](bool value) { control->setCheckedImmediate(value); }, std::move(row), std::move(subtitle)
+  );
 }
 
 void SettingsDialog::addNumber(
@@ -384,22 +643,21 @@ void SettingsDialog::sync(
     const std::string& error, bool clearingThumbnails, bool clearingVisits
 ) {
   m_clearThumbnails->setEnabled(!clearingThumbnails);
-  m_clearThumbnails->setText(clearingThumbnails ? "Clearing…" : "Clear cache");
+  m_clearThumbnails->setText(clearingThumbnails ? "Clearing…" : "Clear Cache");
   m_clearVisits->setEnabled(!clearingVisits);
-  m_clearVisits->setText(clearingVisits ? "Clearing…" : "Clear visit history");
+  m_clearVisits->setText(clearingVisits ? "Clearing…" : "Clear Visit History");
   m_current = settings;
   m_inherited = inherited;
   for (const auto& [id, show] : m_rows) {
     show();
   }
-  setStatus(
-      !error.empty()           ? error
-          : clearingThumbnails ? "Clearing cache…"
-          : clearingVisits     ? "Clearing visit history…"
-          : busy               ? "Saving…"
-                               : "",
-      !error.empty()
-  );
+  const bool transient = !error.empty() || clearingThumbnails || clearingVisits || busy;
+  const std::string text = !error.empty() ? error
+      : clearingThumbnails                ? "Clearing cache…"
+      : clearingVisits                    ? "Clearing visit history…"
+      : busy                              ? "Saving…"
+                                          : m_pendingStatus;
+  setStatus(text, !error.empty() || (!transient && m_pendingStatusError));
 }
 void SettingsDialog::setStatus(const std::string& text, bool error) {
   // One line in the header: the tooltip shows an ellipsized error in full.
@@ -410,7 +668,7 @@ void SettingsDialog::setStatus(const std::string& text, bool error) {
 void SettingsDialog::onResetClicked() {
   if (!m_resetArmed) {
     m_resetArmed = true;
-    m_reset->setText("Confirm reset");
+    m_reset->setText("Confirm Reset");
     m_reset->setVariant(ButtonVariant::Destructive);
     return;
   }
@@ -421,7 +679,7 @@ void SettingsDialog::disarmReset() {
   if (!std::exchange(m_resetArmed, false)) {
     return;
   }
-  m_reset->setText("Reset all settings");
+  m_reset->setText("Reset All Settings");
   m_reset->setVariant(ButtonVariant::Ghost);
 }
 void SettingsDialog::reveal(const Node* node) {

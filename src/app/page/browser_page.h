@@ -11,6 +11,8 @@
 #include "app/page/dialog_dropdown.h"
 #include "app/page/drag_drop_controller.h"
 #include "app/page/file_keyboard_controller.h"
+#include "app/page/folder_icon_controller.h"
+#include "app/page/folder_view_controller.h"
 #include "app/page/held_view_change.h"
 #include "app/page/location_bar_controller.h"
 #include "app/page/menu_controller.h"
@@ -34,6 +36,7 @@
 #include "app/workspace_layout.h"
 #include "browser/action_registry.h"
 #include "browser/browser_controller.h"
+#include "browser/folder_views.h"
 #include "browser/path_completion.h"
 #include "browser/selection_tools.h"
 #include "browser/tab_workspace.h"
@@ -72,6 +75,7 @@
 #include <array>
 #include <chrono>
 #include <cstdlib>
+#include <functional>
 #include <initializer_list>
 #include <memory>
 #include <optional>
@@ -90,7 +94,7 @@ public:
       luciole::WindowSurface& surface, InputDispatcher& dispatcher, AnimationManager& animations,
       luciole::PinService& pins, luciole::DriveMonitor& drives, luciole::FileIconCache& icons,
       luciole::ThumbnailService& thumbnails, luciole::ViewPreferenceWriter& preferences, luciole::VisitService& visits,
-      OperationHub& hub, luciole::TabId id
+      luciole::FolderViewService* folderViews, OperationHub& hub, luciole::TabId id
   );
 
   luciole::BrowserController& browser() override;
@@ -138,6 +142,8 @@ public:
   std::string title() const;
   std::optional<luciole::FileTooltipTarget> fileTooltipAt(float x, float y) const;
   void preferencesChanged(const std::string& error);
+  // Per-folder views were loaded, switched on or off, or changed in any page: apply the current folder's again.
+  void folderViewsChanged() { m_folderView.apply(); }
   void placesChanged();
   void driveUsageChanged();
   void clipboardChanged();
@@ -167,6 +173,7 @@ public:
   void setPopupAvailable(std::function<bool()> callback);
   void setForeignDrop(std::function<std::optional<std::pair<luciole::Location, LayoutRect>>(float, float)> callback);
   bool popupOwns(wl_surface* surface) const;
+  bool popupCapturesAllKeys() const;
   bool popup() const;
   bool dimsWindow() const;
   bool overlay() const override;
@@ -278,6 +285,8 @@ private:
 
   void operationProgressTick();
   void showContaining(const luciole::Location& location);
+  // Opens the folder holding `link`'s target and selects it, once a worker has read the link.
+  void showLinkTarget(const luciole::Location& link);
 
   void applySettings(const luciole::BrowserSettings& settings, bool force) override;
   void
@@ -286,14 +295,18 @@ private:
 
   void cancelDrag() override;
 
-  void takeViewMode(luciole::ViewMode mode);
+  void setViewMode(luciole::ViewMode mode);
+  void showViewMode(luciole::ViewMode mode) override;
   void applyViewMode();
   float gridHeight() const;
+  // Sets the default sort of every controller; folders with their own keep it.
   void applySort(luciole::SortOptions options);
+  void sortChanged() override;
   void changeSort(luciole::SortOptions options);
   void changeGridZoom(int requested);
-  void changeListIconSize(int size);
-  // The current view's step in its icon sizes; Grid, List and Workbench zoom.
+  // List and Columns rows; 0 keeps the view's default size.
+  void changeRowIconSize(int size);
+  // The current view's step in its icon sizes; Grid, List, Columns and Workbench zoom.
   int zoomStep() const;
   void changeZoomStep(int requested);
   void resetZoom();
@@ -336,6 +349,9 @@ private:
   void showPopup(
       std::unique_ptr<Flex> root, ContextMenuControl* menu, LayoutRect anchor, float width, float height,
       bool alignLeft = false
+  ) override;
+  void showContextMenu(
+      std::vector<ContextMenuControlEntry> entries, std::function<void(int)> action, LayoutRect anchor
   ) override;
   PopupSurface* popupSurface() override;
   InputDispatcher& popupDispatcher() override;
@@ -388,6 +404,7 @@ private:
   bool m_dialogResizePending = false;
   luciole::PinService& m_pins;
   luciole::VisitService& m_visits;
+  luciole::FolderViewService* m_folderViews; // nullptr in file pickers, which keep their own sort and view mode.
   luciole::DriveMonitor& m_drives;
   luciole::FileLauncher m_launcher;
   std::vector<luciole::Location> m_revealTargets;
@@ -400,8 +417,14 @@ private:
   PageJobs m_jobs;
   DialogDropdown m_dialogDropdown{*this, m_connection, m_renderer};
   TrashController m_trashController{*this};
+  FolderViewController m_folderView{*this, m_folderViews, m_browser, m_miller};
   RenameController m_renameController{*this, m_pins};
-  PropertiesController m_propertiesController{*this, m_icons};
+  FolderIconController m_folderIconController{*this, m_icons};
+  PropertiesController m_propertiesController{
+      *this, m_icons, [this](const luciole::Location& folder, std::function<void()> onCancel) {
+        m_folderIconController.open(folder, std::move(onCancel));
+      }
+  };
   BatchRenameController m_batchRename{*this};
   luciole::TemplateCatalog m_templates;
   SubmenuController m_submenus{*this, m_connection, m_renderer, m_animations};
@@ -409,7 +432,7 @@ private:
   CreateController m_createController{*this, m_templates, m_submenus};
   MountController m_mountController{*this};
   ArchiveController m_archiveController{*this, m_launcher, m_icons, m_connection};
-  TransferController m_transferController{*this, [this] { operationProgressTick(); }};
+  TransferController m_transferController{*this, [this] { operationProgressTick(); }, m_createController};
   OperationsController m_operations{*this, m_hub, [this](luciole::JobId id, bool retry) {
                                       if (m_operationRequest) {
                                         m_operationRequest(id, retry);
@@ -438,14 +461,17 @@ private:
   DetailsHeaderController m_detailsHeader{*this, m_preferences, m_listAdapter, m_gridAdapter, m_menuController};
   LocationBarController m_locationBar{*this, m_connection, m_fileKeys, m_menuController};
   SidebarController m_sidebar{*this,        m_pins,           m_drives,           m_preferences,
-                              m_animations, m_menuController, m_renameController, m_dragDrop};
+                              m_animations, m_menuController, m_renameController, m_propertiesController,
+                              m_dragDrop};
   DragDropController m_dragDrop{*this,   m_connection, m_pins,    m_transferController, m_thumbnails,
                                 m_icons, m_miller,     m_sidebar, m_locationBar};
   FileKeyboardController m_fileKeys{*this, m_textInput, m_miller, m_menuController, m_locationBar, m_statusBar};
-  StatusBarController m_statusBar{*this, m_pins, m_settingsController, m_fileKeys};
+  Segmented* m_viewSwitch = nullptr;
+  StatusBarController m_statusBar{*this, m_animations, m_pins, m_settingsController, m_fileKeys};
   WorkbenchController m_workbench;
   std::size_t m_gridZoom = 1;
   int m_listIconSize = 0;
+  int m_millerIconSize = 0;
   double m_zoomScroll = 0;
   luciole::ViewMode m_viewMode;
   luciole::WaylandTextClipboard& m_clipboard;
@@ -488,6 +514,7 @@ private:
   Button* m_newFolderButton = nullptr;
   Button* m_sortButton = nullptr;
   Button* m_emptyTrashButton = nullptr;
+  Button* m_closePaneButton = nullptr;
   bool m_browserDirty = true;
   std::unique_ptr<PopupSurface> m_popupSurface;
   PopupDismiss m_popupDismiss = PopupDismiss::OutsideClick;

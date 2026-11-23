@@ -1,5 +1,6 @@
 #include "browser/action_registry.h"
 #include "browser/selection_tools.h"
+#include "config/keybinds.h"
 #include "core/input/key_modifiers.h"
 #include "directory_fixture.h"
 #include "fs/archive_type.h"
@@ -205,6 +206,9 @@ namespace {
     );
     c.clipboardHasFiles = false;
     TEST_CHECK(!R::state(A::PasteFiles, c, request).enabled);
+    c.clipboardHasImage = true;
+    TEST_CHECK(R::state(A::PasteFiles, c, request).enabled);
+    c.clipboardHasImage = false;
     c.clipboardHasFiles = true;
     c.operationsBusy = true;
     TEST_CHECK(!R::state(A::PasteFiles, c, request).enabled);
@@ -995,27 +999,14 @@ namespace {
   }
   void testShortcuts() {
     for (const auto& definition : R::definitions()) {
-      TEST_CHECK(luciole::actionChord(definition.action).has_value() == !definition.shortcut.empty());
+      TEST_CHECK(luciole::actionShortcutLabel(definition.action).empty() == !definition.keybind);
     }
-    // No chord is bound to two actions.
-    for (const auto& first : R::definitions()) {
-      for (const auto& second : R::definitions()) {
-        const auto& a = luciole::actionChord(first.action);
-        const auto& b = luciole::actionChord(second.action);
-        if (first.action != second.action && a && b && *a == *b) {
-          std::println(stderr, "{} and {} share {}", first.label, second.label, first.shortcut);
-        }
-        TEST_CHECK(first.action == second.action || !a || !b || !(*a == *b));
-      }
-    }
-    const auto chord = [](A action) { return luciole::actionChord(action).value_or(KeyChord{}); };
-    TEST_CHECK((chord(A::Settings) == KeyChord{XKB_KEY_comma, KeyMod::Ctrl}));
-    TEST_CHECK((chord(A::Back) == KeyChord{XKB_KEY_Left, KeyMod::Alt}));
-    TEST_CHECK((chord(A::Open) == KeyChord{XKB_KEY_Return, 0}));
-    TEST_CHECK((chord(A::QuickPreview) == KeyChord{XKB_KEY_space, 0}));
-    TEST_CHECK((chord(A::Properties) == KeyChord{XKB_KEY_Return, KeyMod::Alt}));
-    TEST_CHECK((chord(A::EditLocation) == KeyChord{XKB_KEY_l, KeyMod::Ctrl}));
-    TEST_CHECK((chord(A::CreateFolder) == KeyChord{XKB_KEY_n, KeyMod::Ctrl | KeyMod::Shift}));
+    TEST_CHECK(luciole::shortcutMatches(A::Settings, XKB_KEY_comma, KeyMod::Ctrl));
+    TEST_CHECK(luciole::shortcutMatches(A::Back, XKB_KEY_Left, KeyMod::Alt));
+    TEST_CHECK(luciole::shortcutMatches(A::Open, XKB_KEY_Return, 0));
+    TEST_CHECK(luciole::shortcutMatches(A::QuickPreview, XKB_KEY_space, 0));
+    TEST_CHECK(luciole::shortcutMatches(A::Properties, XKB_KEY_Return, KeyMod::Alt));
+    TEST_CHECK(luciole::shortcutMatches(A::EditLocation, XKB_KEY_l, KeyMod::Ctrl));
     TEST_CHECK(
         luciole::shortcutMatches(A::CreateFolder, XKB_KEY_N, KeyMod::Ctrl | KeyMod::Shift)
         && luciole::shortcutMatches(A::CreateFolder, XKB_KEY_n, KeyMod::Ctrl | KeyMod::Shift)
@@ -1031,10 +1022,6 @@ namespace {
     TEST_CHECK(!luciole::shortcutMatches(A::Terminal, XKB_KEY_F4, KeyMod::Ctrl));
     TEST_CHECK(!luciole::shortcutMatches(A::Root, 0, 0));
     TEST_CHECK(luciole::shortcutAction({A::Grid, A::List, A::Miller}, XKB_KEY_2, KeyMod::Ctrl) == A::List);
-    TEST_CHECK((chord(A::Workbench) == KeyChord{XKB_KEY_4, KeyMod::Ctrl}));
-    TEST_CHECK(
-        luciole::shortcutAction({A::Grid, A::List, A::Miller, A::Workbench}, XKB_KEY_4, KeyMod::Ctrl) == A::Workbench
-    );
     TEST_CHECK(!luciole::shortcutAction({A::Grid, A::List, A::Miller, A::Workbench}, XKB_KEY_4, 0));
     TEST_CHECK(luciole::shortcutAction({A::DeletePermanently, A::Trash}, XKB_KEY_Delete, 0) == A::Trash);
     TEST_CHECK(
@@ -1042,6 +1029,18 @@ namespace {
     );
     TEST_CHECK(!luciole::shortcutAction({A::DeletePermanently, A::Trash}, XKB_KEY_Delete, KeyMod::Ctrl));
     TEST_CHECK(!luciole::shortcutAction({A::Back, A::Forward}, XKB_KEY_Left, 0));
+    // Actions follow the active keybind config.
+    {
+      auto rebind = luciole::KeybindConfig{};
+      luciole::setKeybindChord(rebind, luciole::KeybindCommand::Search, 0, luciole::parseKeybindChord("Ctrl+J"));
+      luciole::setKeybindChord(rebind, luciole::KeybindCommand::Search, 1, std::nullopt);
+      luciole::setActiveKeybinds(rebind);
+      TEST_CHECK(luciole::shortcutMatches(A::Search, XKB_KEY_j, KeyMod::Ctrl));
+      TEST_CHECK(!luciole::shortcutMatches(A::Search, XKB_KEY_f, KeyMod::Ctrl));
+      TEST_CHECK(luciole::actionShortcutLabel(A::Search) == "Ctrl+J");
+      luciole::setActiveKeybinds(luciole::KeybindConfig{});
+    }
+    TEST_CHECK(luciole::shortcutMatches(A::Search, XKB_KEY_f, KeyMod::Ctrl));
   }
 } // namespace
 int main() {

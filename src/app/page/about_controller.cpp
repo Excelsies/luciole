@@ -6,6 +6,7 @@
 #include "imaging/svg_rasterizer.h"
 #include "luciole_app_icon.h"
 #include "luciole_build_info.h"
+#include "luciole_build_revision.h"
 #include "platform/file_launcher.h"
 #include "render/core/renderer.h"
 #include "render/core/texture_manager.h"
@@ -83,8 +84,8 @@ void AboutController::open() {
       ui::row(
           {.justify = FlexJustify::Center, .gap = Style::spaceSm, .paddingV = Style::spaceSm},
           linkButton("Website", "world", "https://noctalia.dev"),
-          linkButton("Source code", "brand-github", "https://github.com/noctalia-dev/luciole"),
-          linkButton("Report an issue", "bug", "https://github.com/noctalia-dev/luciole/issues"),
+          linkButton("Source Code", "brand-github", "https://github.com/noctalia-dev/luciole"),
+          linkButton("Report an Issue", "bug", "https://github.com/noctalia-dev/luciole/issues"),
           linkButton("Discord", "brand-discord", "https://discord.noctalia.dev")
       )
   );

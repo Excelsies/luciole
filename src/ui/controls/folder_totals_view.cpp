@@ -49,6 +49,7 @@ FolderTotalsView::FolderTotalsView(
       )
   );
   addChild(ui::label({.out = &m_counts, .fontSize = Style::fontSizeCaption, .maxLines = 3, .configure = literal}));
+  addChild(ui::label({.out = &m_freeSpace, .fontSize = Style::fontSizeCaption, .maxLines = 2, .configure = literal}));
   addChild(
       ui::label(
           {.out = &m_note,
@@ -60,21 +61,22 @@ FolderTotalsView::FolderTotalsView(
   );
   m_service.setChangedCallback(std::move(requestSync));
   (void)m_service.start(targets);
+  m_freeSpace->setVisible(false);
+  m_freeSpace->setParticipatesInLayout(false);
 }
 
-void FolderTotalsView::sync(float width) {
-  const auto& value = m_service.snapshot();
-  const bool running = m_service.busy();
+std::string folderTotalsSizeText(const luciole::FolderTotalsSnapshot& value) {
+  if (value.overflow) {
+    return "Size overflow";
+  }
+  if (value.bytes == 0 && value.partial()) {
+    return "Size unknown";
+  }
   const luciole::GString size(g_format_size_full(value.bytes, G_FORMAT_SIZE_IEC_UNITS));
-  const std::string bytes = value.overflow  ? "Size overflow"
-      : value.bytes == 0 && value.partial() ? "Size unknown"
-      : value.bytes < 1024                  ? std::string(size.get())
-                                            : std::format("{} ({} bytes)", size.get(), value.bytes);
-  const char* phase = running                                ? (value.cancelRequested ? "Stopping…" : "Calculating…")
-      : value.phase == luciole::FolderTotalsPhase::Cancelled ? "Stopped · partial result"
-      : value.partial()                                      ? "Partial result"
-                                                             : "Calculated";
-  m_status->setText(std::format("{} · {}", phase, bytes));
+  return value.bytes < 1024 ? std::string(size.get()) : std::format("{} ({} bytes)", size.get(), value.bytes);
+}
+
+std::string folderTotalsCountsText(const luciole::FolderTotalsSnapshot& value) {
   std::string counts = std::format(
       "{} {} · {} {}", value.files, value.files == 1 ? "file" : "files", value.folders,
       value.folders == 1 ? "folder" : "folders"
@@ -85,7 +87,18 @@ void FolderTotalsView::sync(float width) {
   if (value.other) {
     counts += std::format(" · {} other", value.other);
   }
-  m_counts->setText(counts);
+  return counts;
+}
+
+void FolderTotalsView::sync(float width) {
+  const auto& value = m_service.snapshot();
+  const bool running = m_service.busy();
+  const char* phase = running                                ? (value.cancelRequested ? "Stopping…" : "Calculating…")
+      : value.phase == luciole::FolderTotalsPhase::Cancelled ? "Stopped · partial result"
+      : value.partial()                                      ? "Partial result"
+                                                             : "Calculated";
+  m_status->setText(std::format("{} · {}", phase, folderTotalsSizeText(value)));
+  m_counts->setText(folderTotalsCountsText(value));
   std::string note = "Includes hidden items and subfolders. Links are not followed.";
   if (value.unavailable) {
     note += std::format("\n{} unreadable, missing or repeated folders/items.", value.unavailable);
@@ -103,10 +116,15 @@ void FolderTotalsView::sync(float width) {
     note += "\n" + value.error;
   }
   m_note->setText(note);
-  for (auto* label : {m_status, m_counts, m_note}) {
+  const bool hasFreeSpace = !m_freeSpace->text().empty();
+  m_freeSpace->setVisible(hasFreeSpace);
+  m_freeSpace->setParticipatesInLayout(hasFreeSpace);
+  for (auto* label : {m_status, m_counts, m_freeSpace, m_note}) {
     label->setMaxWidth(std::max(1.0F, width));
   }
   m_stop->setVisible(running);
   m_stop->setParticipatesInLayout(running);
   m_stop->setEnabled(!value.cancelRequested);
 }
+
+void FolderTotalsView::setFreeSpace(const std::string& text) { m_freeSpace->setText(text); }

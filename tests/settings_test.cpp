@@ -20,6 +20,7 @@
 #include <toml++/toml.hpp>
 #include <unistd.h>
 #include <utility>
+#include <xkbcommon/xkbcommon-keysyms.h>
 
 namespace {
   struct Fixture {
@@ -120,6 +121,24 @@ namespace {
     fixture.write("config.toml", "[browser]\nswitch_to_new_tab = true\n");
     TEST_CHECK(restored.reload() && restored.settings().browser.switchToNewTab);
   }
+  void testSingleClickLocationEditPreference() {
+    Fixture fixture;
+    luciole::ConfigService service(fixture.paths());
+    TEST_CHECK(service.reload() && !service.settings().browser.singleClickLocationEdit);
+    fixture.write("config.toml", "[browser]\nsingle_click_location_edit = true\n");
+    TEST_CHECK(service.reload() && service.settings().browser.singleClickLocationEdit);
+    const std::array off{luciole::OverrideEdit{luciole::BrowserPreference::SingleClickLocationEdit, false}};
+    TEST_CHECK(service.saveOverrides(off) == luciole::AtomicWriteState::Durable);
+    luciole::ConfigService restored(fixture.paths());
+    TEST_CHECK(restored.reload() && !restored.settings().browser.singleClickLocationEdit);
+    const std::array reset{luciole::OverrideEdit{luciole::BrowserPreference::SingleClickLocationEdit, std::nullopt}};
+    TEST_CHECK(restored.saveOverrides(reset) == luciole::AtomicWriteState::Durable);
+    TEST_CHECK(restored.reload() && restored.settings().browser.singleClickLocationEdit);
+    fixture.write("config.toml", "[browser]\nsingle_click_location_edit = 'true'\n");
+    TEST_CHECK(!restored.reload() && restored.settings().browser.singleClickLocationEdit);
+    fixture.write("config.toml", "[browser]\nsingle_click_location_edit = false\n");
+    TEST_CHECK(restored.reload() && !restored.settings().browser.singleClickLocationEdit);
+  }
   void testDeletionConfirmationPreference() {
     Fixture fixture;
     luciole::ConfigService service(fixture.paths());
@@ -166,6 +185,24 @@ namespace {
     TEST_CHECK(service.saveOverrides(off) == luciole::AtomicWriteState::Durable);
     luciole::ConfigService restored(fixture.paths());
     TEST_CHECK(restored.reload() && !restored.settings().browser.restoreLastWindow);
+  }
+  void testSingleWindowPreference() {
+    Fixture fixture;
+    luciole::ConfigService service(fixture.paths());
+    TEST_CHECK(service.reload() && !service.settings().browser.singleWindow);
+    fixture.write("config.toml", "[browser]\nsingle_window = true\n");
+    TEST_CHECK(service.reload() && service.settings().browser.singleWindow);
+    const std::array off{luciole::OverrideEdit{luciole::BrowserPreference::SingleWindow, false}};
+    TEST_CHECK(service.saveOverrides(off) == luciole::AtomicWriteState::Durable);
+    luciole::ConfigService restored(fixture.paths());
+    TEST_CHECK(restored.reload() && !restored.settings().browser.singleWindow);
+    const std::array reset{luciole::OverrideEdit{luciole::BrowserPreference::SingleWindow, std::nullopt}};
+    TEST_CHECK(restored.saveOverrides(reset) == luciole::AtomicWriteState::Durable);
+    TEST_CHECK(restored.reload() && restored.settings().browser.singleWindow);
+    fixture.write("config.toml", "[browser]\nsingle_window = 'true'\n");
+    TEST_CHECK(!restored.reload() && restored.settings().browser.singleWindow);
+    fixture.write("config.toml", "[browser]\nsingle_window = false\n");
+    TEST_CHECK(restored.reload() && !restored.settings().browser.singleWindow);
   }
   void testBackupPreference() {
     Fixture fixture;
@@ -220,6 +257,36 @@ namespace {
     }
     fixture.write("config.toml", "[browser]\nfilename_truncation = 'middle'\n");
     TEST_CHECK(restarted.reload() && restarted.settings().browser.presentation.filenameTruncation == Mode::Middle);
+  }
+
+  void testDropAction() {
+    using Action = luciole::DropAction;
+    using State = luciole::AtomicWriteState;
+    const auto key = luciole::BrowserPreference::DropAction;
+    Fixture fixture;
+    luciole::ConfigService settings(fixture.paths());
+    TEST_CHECK(settings.reload() && settings.settings().browser.dropAction == Action::Menu);
+    fixture.write("config.toml", "[browser]\ndrop_action = 'copy'\n");
+    TEST_CHECK(settings.reload() && settings.settings().browser.dropAction == Action::Copy);
+    const std::array menu{luciole::OverrideEdit{key, Action::Menu}};
+    TEST_CHECK(settings.saveOverrides(menu) == State::Durable);
+    luciole::ConfigService restarted(fixture.paths());
+    TEST_CHECK(restarted.reload() && restarted.settings().browser.dropAction == Action::Menu);
+    const auto saved = read(fixture.paths().overrides);
+    TEST_CHECK(saved.contains("drop_action = \"menu\""));
+    const std::array invalid{luciole::OverrideEdit{key, static_cast<Action>(255)}};
+    TEST_CHECK(restarted.saveOverrides(invalid) == State::NotCommitted && read(fixture.paths().overrides) == saved);
+    const std::array reset{luciole::OverrideEdit{key, std::nullopt}};
+    TEST_CHECK(restarted.saveOverrides(reset) == State::Durable);
+    TEST_CHECK(restarted.settings().browser.dropAction == Action::Copy);
+    TEST_CHECK(!read(fixture.paths().overrides).contains("drop_action"));
+    for (const auto* value : {"'ask'", "'copy_here'", "true", "1", "[]"}) {
+      fixture.write("config.toml", std::format("[browser]\ndrop_action = {}\n", value));
+      TEST_CHECK(!luciole::validateConfigFile(fixture.paths().base).empty());
+      TEST_CHECK(!restarted.reload() && restarted.settings().browser.dropAction == Action::Copy);
+    }
+    fixture.write("config.toml", "[browser]\ndrop_action = 'move'\n");
+    TEST_CHECK(restarted.reload() && restarted.settings().browser.dropAction == Action::Move);
   }
 
   void testPresentationSettings() {
@@ -569,28 +636,38 @@ namespace {
     );
   }
 
-  void testListIconSize() {
-    Fixture fixture;
+  void testRowIconSizes() {
     using Preference = luciole::BrowserPreference;
-    fixture.write("config.toml", "");
-    const auto defaults = luciole::loadSettings(fixture.paths());
-    TEST_CHECK(defaults && defaults->browser.listIconSize == 0);
-    for (const int size : luciole::kListIconSizes) {
-      fixture.write("config.toml", "[browser]\nlist_icon_size = " + std::to_string(size) + "\n");
-      const auto loaded = luciole::loadSettings(fixture.paths());
-      TEST_CHECK(loaded && loaded->browser.listIconSize == size);
+    struct Case {
+      std::string key;
+      luciole::PreferenceKey<int> preference;
+      int luciole::BrowserSettings::* field;
+    };
+    for (const auto& [key, preference, field] : {
+             Case{"list_icon_size", Preference::ListIconSize, &luciole::BrowserSettings::listIconSize},
+             Case{"miller_icon_size", Preference::MillerIconSize, &luciole::BrowserSettings::millerIconSize},
+         }) {
+      Fixture fixture;
+      fixture.write("config.toml", "");
+      const auto defaults = luciole::loadSettings(fixture.paths());
+      TEST_CHECK(defaults && (defaults->browser.*field) == 0);
+      for (const int size : luciole::kRowIconSizes) {
+        fixture.write("config.toml", "[browser]\n" + key + " = " + std::to_string(size) + "\n");
+        const auto loaded = luciole::loadSettings(fixture.paths());
+        TEST_CHECK(loaded && (loaded->browser.*field) == size);
+      }
+      for (const auto* value : {"15", "21", "65", "-16", "24.0", "true", "'24'"}) {
+        fixture.write("config.toml", "[browser]\n" + key + " = " + value + "\n");
+        TEST_CHECK(!luciole::validateConfigFile(fixture.paths().base).empty());
+      }
+      fixture.write("config.toml", "");
+      luciole::ConfigService config(fixture.paths());
+      TEST_CHECK(config.reload());
+      const std::array zoom{luciole::OverrideEdit{preference, 48}};
+      TEST_CHECK(config.saveOverrides(zoom) == luciole::AtomicWriteState::Durable);
+      const auto saved = luciole::loadSettings(fixture.paths());
+      TEST_CHECK(saved && (saved->browser.*field) == 48);
     }
-    for (const auto* value : {"15", "21", "65", "-16", "24.0", "true", "'24'"}) {
-      fixture.write("config.toml", std::string("[browser]\nlist_icon_size = ") + value + "\n");
-      TEST_CHECK(!luciole::validateConfigFile(fixture.paths().base).empty());
-    }
-    fixture.write("config.toml", "");
-    luciole::ConfigService config(fixture.paths());
-    TEST_CHECK(config.reload());
-    const std::array zoom{luciole::OverrideEdit{Preference::ListIconSize, 48}};
-    TEST_CHECK(config.saveOverrides(zoom) == luciole::AtomicWriteState::Durable);
-    const auto saved = luciole::loadSettings(fixture.paths());
-    TEST_CHECK(saved && saved->browser.listIconSize == 48);
   }
 
   void testSidebarWidth() {
@@ -657,6 +734,17 @@ namespace {
         == luciole::AtomicWriteState::Durable
     );
     TEST_CHECK(config.settings().browser.chooserShowPreview && config.settings().browser.showPreview);
+    // The picker's layout is separate too, and it has no Columns view.
+    TEST_CHECK(
+        config.saveOverrides(std::array{luciole::OverrideEdit{P::ChooserViewMode, luciole::ViewMode::Grid}})
+        == luciole::AtomicWriteState::Durable
+    );
+    TEST_CHECK(
+        config.settings().browser.chooserViewMode == luciole::ViewMode::Grid
+        && config.settings().browser.viewMode == luciole::ViewMode::List
+    );
+    fixture.write("config.toml", "[browser]\nchooser_view_mode = 'miller'\n");
+    TEST_CHECK(!luciole::validateConfigFile(fixture.paths().base).empty());
     fixture.write("config.toml", "[browser]\nshow_preview = 'true'\n");
     TEST_CHECK(!luciole::validateConfigFile(fixture.paths().base).empty());
     fixture.write("config.toml", "[browser]\npreview_width = 444\nshow_preview = true\n");
@@ -763,6 +851,31 @@ namespace {
     );
     for (const auto* value : {"0", "'false'", "1.0"}) {
       fixture.write("config.toml", std::string("[browser]\nalways_show_tab_bar = ") + value + "\n");
+      TEST_CHECK(!luciole::validateConfigFile(fixture.paths().base).empty());
+    }
+  }
+
+  void testShowCloseButtons() {
+    using Preference = luciole::BrowserPreference;
+    using State = luciole::AtomicWriteState;
+    Fixture fixture;
+    luciole::ConfigService config(fixture.paths());
+    TEST_CHECK(config.reload() && config.settings().browser.showCloseButtons);
+    fixture.write("config.toml", "[browser]\nshow_close_buttons = false\nshow_hidden = true\n");
+    TEST_CHECK(config.reload() && !config.settings().browser.showCloseButtons && config.settings().browser.showHidden);
+    TEST_CHECK(
+        config.saveOverrides(std::array{luciole::OverrideEdit{Preference::ShowCloseButtons, true}}) == State::Durable
+    );
+    const auto loaded = luciole::loadSettings(fixture.paths());
+    TEST_CHECK(loaded && loaded->browser.showCloseButtons && loaded->browser.showHidden);
+    TEST_CHECK(
+        config.saveOverrides(std::array{luciole::OverrideEdit{Preference::ShowCloseButtons, std::nullopt}})
+            == State::Durable
+        && !config.settings().browser.showCloseButtons
+        && !read(fixture.paths().overrides).contains("show_close_buttons")
+    );
+    for (const auto* value : {"0", "'false'", "1.0"}) {
+      fixture.write("config.toml", std::string("[browser]\nshow_close_buttons = ") + value + "\n");
       TEST_CHECK(!luciole::validateConfigFile(fixture.paths().base).empty());
     }
   }
@@ -1590,6 +1703,205 @@ namespace {
     // 0 is the absence of a remembered list width, which the layout reads as none.
     TEST_CHECK(accepted({P::WorkbenchListWidth, 0}));
   }
+  void testKeybinds() {
+    using K = luciole::KeybindCommand;
+    const auto chord = [](std::uint32_t sym, std::uint32_t modifiers) { return luciole::KeybindChord{sym, modifiers}; };
+    Fixture fixture;
+    luciole::ConfigService service(fixture.paths());
+    TEST_CHECK(service.reload());
+    const auto& defaults = service.settings().browser.keybinds;
+    TEST_CHECK(luciole::keybindConfigValid(defaults));
+    TEST_CHECK(defaults.chords(K::Search)[0] == chord(XKB_KEY_f, luciole::KeybindMod::Ctrl));
+    TEST_CHECK(defaults.chords(K::Search)[1] == chord(XKB_KEY_k, luciole::KeybindMod::Ctrl));
+    TEST_CHECK(!defaults.chords(K::Search)[2]);
+    TEST_CHECK(defaults.chords(K::FocusPrevious)[0] == chord(XKB_KEY_Tab, luciole::KeybindMod::Shift));
+    TEST_CHECK(defaults.chords(K::MoveFirst)[0] == chord(XKB_KEY_Home, 0));
+    TEST_CHECK(defaults.chords(K::MoveLast)[0] == chord(XKB_KEY_End, 0));
+    TEST_CHECK(defaults.chords(K::MovePageUp)[0] == chord(XKB_KEY_Page_Up, 0));
+    TEST_CHECK(defaults.chords(K::MovePageDown)[0] == chord(XKB_KEY_Page_Down, 0));
+    TEST_CHECK(defaults.chords(K::NextTab)[1] == chord(XKB_KEY_Page_Down, luciole::KeybindMod::Ctrl));
+    TEST_CHECK(defaults.chords(K::PreviousTab)[1] == chord(XKB_KEY_Page_Up, luciole::KeybindMod::Ctrl));
+    TEST_CHECK(!luciole::keybindMatches(defaults, K::MoveDown, XKB_KEY_Down, luciole::KeybindMod::Shift));
+    TEST_CHECK(defaults.chords(K::Settings)[0] == chord(XKB_KEY_comma, luciole::KeybindMod::Ctrl));
+    TEST_CHECK(defaults.chords(K::ZoomIn)[1] == chord(XKB_KEY_plus, luciole::KeybindMod::Ctrl));
+    TEST_CHECK(defaults.chords(K::Terminal)[0] == chord(XKB_KEY_F4, 0));
+    TEST_CHECK(defaults.chords(K::SelectTab1)[0] == chord(XKB_KEY_1, luciole::KeybindMod::Alt));
+    TEST_CHECK(defaults.chords(K::SelectTab9)[0] == chord(XKB_KEY_9, luciole::KeybindMod::Alt));
+    TEST_CHECK(defaults.chords(K::Validate)[1] == chord(XKB_KEY_space, 0));
+    TEST_CHECK(luciole::keybindCommands(luciole::KeybindScope::Controls).size() == 12);
+    TEST_CHECK(
+        luciole::keybindCommands(luciole::KeybindScope::Controls).size()
+            + luciole::keybindCommands(luciole::KeybindScope::FileBrowser).size()
+            + luciole::keybindCommands(luciole::KeybindScope::TabsAndWindows).size()
+        == luciole::kKeybindCommandCount
+    );
+
+    TEST_CHECK(luciole::parseKeybindChord("Ctrl+,") == chord(XKB_KEY_comma, luciole::KeybindMod::Ctrl));
+    TEST_CHECK(luciole::parseKeybindChord("Ctrl++") == chord(XKB_KEY_plus, luciole::KeybindMod::Ctrl));
+    TEST_CHECK(luciole::parseKeybindChord("Shift+Tab") == chord(XKB_KEY_Tab, luciole::KeybindMod::Shift));
+    TEST_CHECK(!luciole::parseKeybindChord("Super+G"));
+    TEST_CHECK(!luciole::parseKeybindChord("Super_L"));
+    TEST_CHECK(!luciole::parseKeybindChord("Ctrl+"));
+    TEST_CHECK(luciole::keybindChordLabel(chord(XKB_KEY_comma, luciole::KeybindMod::Ctrl)) == "Ctrl+,");
+    TEST_CHECK(luciole::keybindChordLabel(chord(XKB_KEY_plus, luciole::KeybindMod::Ctrl)) == "Ctrl++");
+    TEST_CHECK(luciole::keybindChordLabel(chord(XKB_KEY_space, 0)) == "Space");
+    TEST_CHECK(luciole::keybindChordLabel(chord(XKB_KEY_Return, 0)) == "Enter");
+    TEST_CHECK(luciole::keybindChordLabel(chord(XKB_KEY_Page_Up, 0)) == "Page Up");
+    TEST_CHECK(luciole::keybindChordLabel(chord(XKB_KEY_Page_Down, 0)) == "Page Down");
+    TEST_CHECK(luciole::keybindChordLabel(chord(XKB_KEY_BackSpace, 0)) == "Backspace");
+    TEST_CHECK(luciole::keybindChordLabel(chord(XKB_KEY_ISO_Left_Tab, luciole::KeybindMod::Shift)) == "Shift+Tab");
+
+    TEST_CHECK(luciole::keybindMatches(defaults, K::Copy, XKB_KEY_c, luciole::KeybindMod::Ctrl));
+    TEST_CHECK(!luciole::keybindMatches(defaults, K::Copy, XKB_KEY_C, luciole::KeybindMod::Ctrl));
+    TEST_CHECK(
+        luciole::keybindMatches(
+            defaults, K::CreateFolder, XKB_KEY_N, luciole::KeybindMod::Ctrl | luciole::KeybindMod::Shift
+        )
+    );
+    TEST_CHECK(luciole::keybindMatches(defaults, K::FocusPrevious, XKB_KEY_ISO_Left_Tab, luciole::KeybindMod::Shift));
+    TEST_CHECK(luciole::keybindMatches(defaults, K::Validate, XKB_KEY_space, 0));
+    TEST_CHECK(!luciole::keybindMatches(defaults, K::Validate, XKB_KEY_space, luciole::KeybindMod::Ctrl));
+
+    auto compact = luciole::KeybindConfig{};
+    luciole::setKeybindChord(compact, K::Search, 0, std::nullopt);
+    TEST_CHECK(compact.chords(K::Search)[0] == chord(XKB_KEY_k, luciole::KeybindMod::Ctrl));
+    TEST_CHECK(!compact.chords(K::Search)[1]);
+    luciole::setKeybindChord(compact, K::Search, 1, chord(XKB_KEY_g, luciole::KeybindMod::Ctrl));
+    TEST_CHECK(compact.chords(K::Search)[1] == chord(XKB_KEY_g, luciole::KeybindMod::Ctrl));
+
+    TEST_CHECK(
+        luciole::keybindConflict(defaults, K::Search, 0, chord(XKB_KEY_l, luciole::KeybindMod::Ctrl)) == K::EditLocation
+    );
+    TEST_CHECK(!luciole::keybindConflict(defaults, K::Search, 0, chord(XKB_KEY_Tab, 0)));
+    luciole::setActiveKeybinds(defaults);
+    TEST_CHECK(luciole::activeKeybinds() == defaults);
+    const auto extended =
+        luciole::keybindBestMatch(luciole::keybindMovementCommands(), XKB_KEY_Down, luciole::KeybindMod::Shift);
+    TEST_CHECK(extended && extended->command == K::MoveDown && extended->extraModifiers == luciole::KeybindMod::Shift);
+
+    auto barePrintable = defaults;
+    luciole::setKeybindChord(barePrintable, K::MoveDown, 0, chord(XKB_KEY_j, 0));
+    TEST_CHECK(!luciole::keybindConfigValid(barePrintable));
+    auto shiftedPrintable = defaults;
+    luciole::setKeybindChord(shiftedPrintable, K::MoveDown, 0, chord(XKB_KEY_j, luciole::KeybindMod::Shift));
+    TEST_CHECK(!luciole::keybindConfigValid(shiftedPrintable));
+    auto modifiedPrintable = defaults;
+    luciole::setKeybindChord(modifiedPrintable, K::MoveDown, 0, chord(XKB_KEY_j, luciole::KeybindMod::Ctrl));
+    TEST_CHECK(luciole::keybindConfigValid(modifiedPrintable));
+    auto unicodePrintable = defaults;
+    luciole::setKeybindChord(unicodePrintable, K::MoveDown, 0, chord(XKB_KEY_eacute, 0));
+    TEST_CHECK(!luciole::keybindConfigValid(unicodePrintable));
+
+    auto specific = defaults;
+    luciole::setKeybindChord(specific, K::MovePageDown, 0, chord(XKB_KEY_Down, luciole::KeybindMod::Shift));
+    luciole::setActiveKeybinds(specific);
+    const auto best =
+        luciole::keybindBestMatch(luciole::keybindMovementCommands(), XKB_KEY_Down, luciole::KeybindMod::Shift);
+    TEST_CHECK(best && best->command == K::MovePageDown && best->extraModifiers == 0);
+    luciole::setActiveKeybinds(defaults);
+
+    fixture.write("config.toml", "[browser.keybinds]\nsearch = [\"Ctrl+G\"]\n");
+    TEST_CHECK(service.reload());
+    const auto& partial = service.settings().browser.keybinds;
+    TEST_CHECK(partial.chords(K::Search)[0] == chord(XKB_KEY_g, luciole::KeybindMod::Ctrl));
+    TEST_CHECK(!partial.chords(K::Search)[1]);
+    TEST_CHECK(partial.chords(K::EditLocation)[0] == chord(XKB_KEY_l, luciole::KeybindMod::Ctrl));
+
+    fixture.write("config.toml", "[browser.keybinds]\nsearch = []\n");
+    TEST_CHECK(service.reload());
+    const auto& cleared = service.settings().browser.keybinds;
+    TEST_CHECK(!cleared.chords(K::Search)[0]);
+    TEST_CHECK(cleared.chords(K::EditLocation)[0] == chord(XKB_KEY_l, luciole::KeybindMod::Ctrl));
+
+    // Controls and the file browser can share a chord; the same scope cannot.
+    fixture.write("config.toml", "[browser.keybinds]\nsearch = [\"Tab\"]\n");
+    TEST_CHECK(service.reload());
+    TEST_CHECK(service.settings().browser.keybinds.chords(K::Search)[0] == chord(XKB_KEY_Tab, 0));
+    fixture.write("config.toml", "[browser.keybinds]\nedit_location = [\"Ctrl+F\"]\n");
+    TEST_CHECK(!service.reload());
+    TEST_CHECK(service.settings().browser.keybinds.chords(K::Search)[0] == chord(XKB_KEY_Tab, 0));
+
+    fixture.write("config.toml", "[browser.keybinds]\nsearch = [\"Super+G\"]\n");
+    TEST_CHECK(!service.reload());
+    fixture.write("config.toml", "[browser.keybinds]\nmove_down = [\"j\"]\n");
+    TEST_CHECK(!service.reload());
+    fixture.write("config.toml", "[browser.keybinds]\nunknown_command = [\"Ctrl+G\"]\n");
+    TEST_CHECK(!service.reload());
+    fixture.write(
+        "config.toml", "[browser.keybinds]\nsearch = [\"Ctrl+G\", \"Ctrl+H\", \"Ctrl+J\", \"Ctrl+N\", \"Ctrl+M\"]\n"
+    );
+    TEST_CHECK(!service.reload());
+
+    fixture.write("config.toml", "[browser]\n");
+    TEST_CHECK(service.reload());
+    auto edited = service.settings().browser.keybinds;
+    luciole::setKeybindChord(edited, K::Search, 0, chord(XKB_KEY_g, luciole::KeybindMod::Ctrl));
+    const std::array edit{luciole::OverrideEdit{luciole::BrowserPreference::Keybinds, edited}};
+    TEST_CHECK(service.saveOverrides(edit) == luciole::AtomicWriteState::Durable);
+    luciole::ConfigService reloaded(fixture.paths());
+    TEST_CHECK(reloaded.reload());
+    TEST_CHECK(
+        reloaded.settings().browser.keybinds.chords(K::Search)[0] == chord(XKB_KEY_g, luciole::KeybindMod::Ctrl)
+    );
+    TEST_CHECK(
+        reloaded.settings().browser.keybinds.chords(K::Search)[1] == chord(XKB_KEY_k, luciole::KeybindMod::Ctrl)
+    );
+    const auto saved = read(fixture.paths().overrides);
+    TEST_CHECK(saved.contains("[browser.keybinds]"));
+    TEST_CHECK(saved.contains("search"));
+    TEST_CHECK(!saved.contains("cancel"));
+
+    const auto inherit = luciole::inheritAllPreferences();
+    TEST_CHECK(reloaded.saveOverrides(inherit) == luciole::AtomicWriteState::Durable);
+    TEST_CHECK(reloaded.reload());
+    TEST_CHECK(
+        reloaded.settings().browser.keybinds.chords(K::Search)[0] == chord(XKB_KEY_f, luciole::KeybindMod::Ctrl)
+    );
+
+    Fixture inheritedFixture;
+    inheritedFixture.write("config.toml", "[browser.keybinds]\nsearch = [\"Ctrl+G\"]\n");
+    luciole::ConfigService inheritedService(inheritedFixture.paths());
+    TEST_CHECK(inheritedService.reload());
+    const auto builtin = luciole::KeybindConfig{};
+    const std::array inheritedEdit{luciole::OverrideEdit{luciole::BrowserPreference::Keybinds, builtin}};
+    TEST_CHECK(inheritedService.saveOverrides(inheritedEdit) == luciole::AtomicWriteState::Durable);
+    const auto inheritedSaved = read(inheritedFixture.paths().overrides);
+    TEST_CHECK(inheritedSaved.contains("search"));
+    luciole::ConfigService inheritedReloaded(inheritedFixture.paths());
+    TEST_CHECK(inheritedReloaded.reload());
+    TEST_CHECK(
+        inheritedReloaded.settings().browser.keybinds.chords(K::Search)[0]
+        == chord(XKB_KEY_f, luciole::KeybindMod::Ctrl)
+    );
+    TEST_CHECK(
+        inheritedReloaded.settings().browser.keybinds.chords(K::Search)[1]
+        == chord(XKB_KEY_k, luciole::KeybindMod::Ctrl)
+    );
+
+    Fixture layeredFixture;
+    layeredFixture.write("config.toml", "[browser.keybinds]\nsearch = [\"Ctrl+G\"]\n");
+    layeredFixture.write("settings.toml", "[browser.keybinds]\ncut = [\"Alt+X\"]\n");
+    luciole::ConfigService layeredService(layeredFixture.paths());
+    TEST_CHECK(layeredService.reload());
+    TEST_CHECK(
+        layeredService.settings().browser.keybinds.chords(K::Search)[0] == chord(XKB_KEY_g, luciole::KeybindMod::Ctrl)
+    );
+    TEST_CHECK(
+        layeredService.settings().browser.keybinds.chords(K::Cut)[0] == chord(XKB_KEY_x, luciole::KeybindMod::Alt)
+    );
+    const std::array unrelatedEdit{luciole::OverrideEdit{luciole::BrowserPreference::ShowHidden, true}};
+    TEST_CHECK(layeredService.saveOverrides(unrelatedEdit) == luciole::AtomicWriteState::Durable);
+    const auto layeredSaved = read(layeredFixture.paths().overrides);
+    TEST_CHECK(layeredSaved.contains("cut"));
+    TEST_CHECK(!layeredSaved.contains("search"));
+    TEST_CHECK(layeredService.reload());
+    TEST_CHECK(
+        layeredService.settings().browser.keybinds.chords(K::Search)[0] == chord(XKB_KEY_g, luciole::KeybindMod::Ctrl)
+    );
+    TEST_CHECK(
+        layeredService.settings().browser.keybinds.chords(K::Cut)[0] == chord(XKB_KEY_x, luciole::KeybindMod::Alt)
+    );
+  }
 } // namespace
 
 int main() {
@@ -1600,11 +1912,14 @@ int main() {
     testSchemaAndDiagnostics();
     testPresentationSettings();
     testFilenameTruncation();
+    testDropAction();
     testBackupPreference();
     testNewTabPreference();
+    testSingleClickLocationEditPreference();
     testDeletionConfirmationPreference();
     testPermanentDeletionMenuPreference();
     testRestoreLastWindowPreference();
+    testSingleWindowPreference();
     testMillerSettings();
     testMillerParents();
     testUnknownSettings();
@@ -1613,11 +1928,12 @@ int main() {
     testEnvironmentPaths();
     testBrowserDefaults();
     testGridIconSize();
-    testListIconSize();
+    testRowIconSizes();
     testSidebarWidth();
     testSidebarVisibility();
     testNetworkVisibility();
     testAlwaysShowTabBar();
+    testShowCloseButtons();
     testAlwaysShowStatusBar();
     testPreviewVisibility();
     testDetailsColumnVisibility();
@@ -1626,6 +1942,7 @@ int main() {
     testDetailsColumnWidths();
     testInteractionModes();
     testThumbnailSettings();
+    testKeybinds();
     testOverrideSaving();
     testWorkbenchViewMode();
     testWorkbenchChoices();

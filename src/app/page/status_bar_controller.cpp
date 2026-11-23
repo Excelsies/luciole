@@ -6,22 +6,88 @@
 #include "app/workspace_layout.h"
 #include "browser/browser_controller.h"
 #include "browser/places.h"
-#include "browser/selection_size_note.h"
 #include "fs/gio_ptr.h"
+#include "platform/desktop_integration.h"
+#include "render/animation/animation_manager.h"
 #include "ui/builders.h"
 #include "ui/palette.h"
-#include "workbench/format.h"
 
 #include <algorithm>
+#include <cmath>
 #include <format>
 #include <utility>
 
-StatusBarController::StatusBarController(
-    PageContext& page, luciole::PinService& pins, SettingsController& settings, FileKeyboardController& keys
-)
-    : m_page(page), m_pins(pins), m_settings(settings), m_keys(keys) {}
+namespace {
+  constexpr float kRevealMs = 160.0F;
+  // The hidden tab sits this far below its docked position; the page body clips it.
+  constexpr float kRevealSlide = 6.0F;
+  constexpr auto kMessageTimeout = std::chrono::seconds(5);
+} // namespace
 
-std::unique_ptr<Flex> StatusBarController::build() { return buildStatusPill(m_pill); }
+StatusBarController::StatusBarController(
+    PageContext& page, AnimationManager& animations, luciole::PinService& pins, SettingsController& settings,
+    FileKeyboardController& keys
+)
+    : m_page(page), m_animations(animations), m_pins(pins), m_settings(settings), m_keys(keys) {}
+
+StatusBarController::~StatusBarController() { m_animations.cancelForOwner(this); }
+
+void StatusBarController::setMessage(std::string message) {
+  m_actionError = std::move(message);
+  if (m_actionError.empty()) {
+    m_messageTimer.stop();
+    return;
+  }
+  m_messageTimer.start(kMessageTimeout, [this] {
+    m_actionError.clear();
+    m_page.requestSync();
+  });
+}
+
+void StatusBarController::clearMessage() { setMessage({}); }
+
+std::unique_ptr<Flex> StatusBarController::build() {
+  auto pill = ui::row(
+      {.out = &m_pill,
+       .align = FlexAlign::Center,
+       .gap = Style::spaceMd,
+       .paddingV = Style::spaceXs,
+       .paddingH = Style::spaceMd,
+       .fill = colorSpecFromRole(ColorRole::SurfaceContainer),
+       .opacity = 0.0F,
+       .visible = false,
+       .participatesInLayout = false,
+       .configure = [](Flex& tab) { tab.setStyleRadii(Radii(Style::radiusMd, Style::radiusMd, 0.0F, 0.0F)); }},
+      ui::row(
+          {.align = FlexAlign::Center},
+          ui::label(
+              {.out = &m_message,
+               .fontSize = Style::fontSizeCaption,
+               .maxLines = 1,
+               .visible = false,
+               .participatesInLayout = false,
+               .configure = [](Label& label) { label.setUseMarkup(false); }}
+          ),
+          ui::label(
+              {.out = &m_status,
+               .fontSize = Style::fontSizeCaption,
+               .color = colorSpecFromRole(ColorRole::OnSurfaceVariant),
+               .maxLines = 1,
+               .configure = [](Label& label) { label.setUseMarkup(false); }}
+          )
+      ),
+      ui::label(
+          {.out = &m_freeSpace,
+           .fontSize = Style::fontSizeCaption,
+           .color = colorSpecFromRole(ColorRole::OnSurfaceVariant),
+           .maxWidth = 160.0F,
+           .maxLines = 1,
+           .textAlign = TextAlign::End}
+      )
+  );
+  pill->setZIndex(5);
+  return pill;
+}
 
 std::unique_ptr<Flex> StatusBarController::buildNotice() {
   return ui::column(
@@ -71,92 +137,98 @@ void StatusBarController::sync(bool miller) {
   const bool refreshing = snapshot.status == luciole::DirectoryStatus::Loading;
   const bool loading = refreshing && (!m_contextLoaded || snapshot.incrementalResults);
   const bool alwaysShow = m_page.settings().alwaysShowStatusBar;
+  // An action message or failure stands out in its own label; definite failures use the error color.
+  std::string message;
+  auto role = ColorRole::OnSurface;
   std::string status;
+  const auto append = [&status](std::string_view part) {
+    status += status.empty() ? "" : " · ";
+    status += part;
+  };
   // The idle folder count stays hidden unless the setting keeps the pill visible.
   bool needed = true;
-  if (status.empty()) {
-    if (!m_actionError.empty()) {
-      status = m_actionError;
-    } else if (!m_pins.sessionError().empty()) {
-      status = std::format("Could not save session: {}", m_pins.sessionError());
-    } else if (!m_pins.error().empty()) {
-      status = std::format("Could not update pins: {}", m_pins.error());
-    } else if (!m_settings.error().empty()) {
-      status = m_settings.error();
-    } else if (!m_page.browser().message().empty()) {
-      status = m_page.browser().message();
-    } else if (snapshot.error) {
-      status = snapshot.error->message;
-    } else if (!m_page.browser().searchQuery().empty()) {
-      status = std::format(
-          "{}{}",
-          loading                                                      ? "Searching… · "
-              : snapshot.status == luciole::DirectoryStatus::Cancelled ? "Search stopped · "
-                                                                       : "",
-          luciole::workbench::countedText(static_cast<double>(model.rows().size()), "result")
-      );
-      if (m_page.browser().skippedSearchFolders() != 0) {
-        const auto skipped = m_page.browser().skippedSearchFolders();
-        status += std::format(
-            " · {} could not be searched", luciole::workbench::countedText(static_cast<double>(skipped), "folder")
-        );
+  if (!m_actionError.empty()) {
+    message = m_actionError;
+  } else if (!m_pins.sessionError().empty()) {
+    message = std::format("Could not save session: {}", m_pins.sessionError());
+    role = ColorRole::Error;
+  } else if (!m_pins.error().empty()) {
+    message = std::format("Could not update pins: {}", m_pins.error());
+    role = ColorRole::Error;
+  } else if (!m_settings.error().empty()) {
+    message = m_settings.error();
+    role = ColorRole::Error;
+  } else if (!m_page.browser().message().empty()) {
+    message = m_page.browser().message();
+  } else if (snapshot.error) {
+    message = snapshot.error->message;
+    role = ColorRole::Error;
+  } else if (!m_page.browser().searchQuery().empty()) {
+    status = std::format(
+        "{}{} results",
+        loading                                                      ? "Searching… · "
+            : snapshot.status == luciole::DirectoryStatus::Cancelled ? "Search stopped · "
+                                                                     : "",
+        model.rows().size()
+    );
+    if (m_page.browser().skippedSearchFolders() != 0) {
+      status += std::format(" · {} folders could not be searched", m_page.browser().skippedSearchFolders());
+    }
+  } else if (loading) {
+    status =
+        snapshot.location && snapshot.location->isNetworkDiscovery() ? "Finding network locations…" : "Loading folder…";
+  } else if (snapshot.status == luciole::DirectoryStatus::Cancelled) {
+    status = "Loading stopped.";
+  } else {
+    needed = alwaysShow;
+    std::size_t hidden = 0;
+    if (!model.filter().showHidden) {
+      for (std::size_t i = 0; i < snapshot.entries.size(); ++i) {
+        hidden += snapshot.entries.brief(i).hidden;
       }
-    } else if (loading) {
-      status = snapshot.location && snapshot.location->isNetworkDiscovery() ? "Finding network locations…"
-                                                                            : "Loading folder…";
-    } else if (snapshot.status == luciole::DirectoryStatus::Cancelled) {
-      status = "Loading stopped.";
-    } else {
-      needed = alwaysShow;
-      std::size_t hidden = 0;
-      if (!model.filter().showHidden) {
-        for (std::size_t i = 0; i < snapshot.entries.size(); ++i) {
-          hidden += snapshot.entries.brief(i).hidden;
-        }
-      }
-      status = luciole::workbench::itemsText(static_cast<double>(model.rows().size()));
-      if (hidden > 0) {
-        status += std::format(" · {} hidden", luciole::workbench::countText(static_cast<double>(hidden)));
-      }
+    }
+    status = std::format("{} items", model.rows().size());
+    if (hidden > 0) {
+      status += std::format(" · {} hidden", hidden);
     }
   }
   if (snapshot.location && snapshot.location->isTrash() && !snapshot.error && !refreshing) {
-    status += " · Refresh to update";
+    append("Refresh to update");
   }
-  std::string sizeNote; // why the selection's size is not the whole of it, when the status says so
   if (!model.selection().selected.empty()) {
     needed = true;
-    status += std::format(
-        " · {} selected", luciole::workbench::countText(static_cast<double>(model.selection().selected.size()))
-    );
+    append(std::format("{} selected", model.selection().selected.size()));
     const auto summary = model.selectionSummary();
     if (summary.pendingSizes != 0) {
-      status += " · reading file sizes…";
+      append("reading file sizes…");
     } else if (summary.overflow) {
-      status += " · file size exceeds limit";
+      append("file size exceeds limit");
     } else if (summary.files != 0 && summary.unknownSizes == summary.files) {
-      status += " · file size unknown";
-      sizeNote = luciole::selectionSizeNote(summary);
+      append("file size unknown");
     } else if (summary.files != 0) {
-      sizeNote = luciole::selectionSizeNote(summary);
       const luciole::GString size(g_format_size_full(summary.bytes, G_FORMAT_SIZE_IEC_UNITS));
-      status += std::format(
-          " · {}{}{}", summary.unknownSizes == 0 ? "" : "at least ", size.get(),
-          summary.folders != 0 || summary.others != 0 ? " in files" : ""
+      append(
+          std::format(
+              "{}{}{}", summary.unknownSizes == 0 ? "" : "at least ", size.get(),
+              summary.folders != 0 || summary.others != 0 ? " in files" : ""
+          )
       );
     }
   }
-  if (sizeNote.empty()) {
-    m_pill.status->clearTooltip();
-  } else {
-    m_pill.status->setTooltip(sizeNote);
-  }
   if (const auto typed = m_keys.typeaheadText(); !typed.empty()) {
     needed = true;
-    status = "Select: " + typed + " · " + status;
+    status = "Select: " + typed + (status.empty() ? "" : " · " + status);
   }
-  m_pill.status->setText(status);
-  m_needed = needed;
+  // A hiding tab keeps its last message while it fades out.
+  if (needed) {
+    m_message->setText(message);
+    m_message->setColor(colorSpecFromRole(role));
+    m_message->setVisible(!message.empty());
+    m_message->setParticipatesInLayout(!message.empty());
+    m_status->setText(!message.empty() && !status.empty() ? " · " + status : status);
+  }
+  // The notice repeats the message, or the status when there is none.
+  status = message.empty() ? status : message;
   auto freeBytes = snapshot.metadata.filesystem.freeBytes;
   if (freeBytes) {
     m_freeBytes = freeBytes;
@@ -169,9 +241,11 @@ void StatusBarController::sync(bool miller) {
       freeBytes && !snapshot.filesystemError && !snapshot.error && snapshot.location && !snapshot.location->isTrash();
   if (m_freeSpaceAvailable) {
     const luciole::GString size(g_format_size_full(*freeBytes, G_FORMAT_SIZE_IEC_UNITS));
-    m_pill.freeSpace->setText(std::format("{} free", size.get()));
+    m_freeSpace->setText(std::format("{} free", size.get()));
   }
-  m_pill.pill->setVisible(m_needed);
+  if (std::exchange(m_needed, needed) != needed) {
+    reveal();
+  }
   // Empty list: a glyph, a short title and, when useful, one explanatory sentence.
   struct Notice {
     const char* glyph;
@@ -204,6 +278,12 @@ void StatusBarController::sync(bool miller) {
             "You can still connect by entering a server address in the location bar."
         };
       }
+      if (snapshot.location && snapshot.location->isDeviceRoot()) {
+        return {
+            "device-mobile", "Device locked or transfer disabled",
+            "Unlock your phone and select “File transfer” (MTP) in the USB settings."
+        };
+      }
       return snapshot.location == luciole::Location::trash() ? Notice{"trash", "Trash is empty", {}}
                                                              : Notice{"folder-open", "This folder is empty", {}};
     }
@@ -219,14 +299,63 @@ void StatusBarController::sync(bool miller) {
   m_noticeArea->setParticipatesInLayout(empty && !miller);
 }
 
-void StatusBarController::arrange(Renderer& renderer, const LayoutRect& area) {
-  const bool freeSpace =
-      m_freeSpaceAvailable && (area.width >= kMinimumFreeSpacePaneWidth || m_page.settings().alwaysShowStatusBar);
-  arrangeStatusPill(renderer, m_pill, area, freeSpace);
+void StatusBarController::layout(float paneWidth) {
+  const bool showFreeSpace =
+      m_freeSpaceAvailable && (paneWidth >= kMinimumFreeSpacePaneWidth || m_page.settings().alwaysShowStatusBar);
+  m_freeSpace->setVisible(showFreeSpace);
+  m_freeSpace->setParticipatesInLayout(showFreeSpace);
+}
+
+void StatusBarController::arrange(Renderer& renderer, float width, float height) {
+  if (!m_pill->visible()) {
+    return;
+  }
+  // Docked to the bottom edge of the page body at its trailing corner, clear of the vertical scrollbar.
+  const float inset = Style::spaceSm;
+  const float trailing = inset + Style::scrollbarWidth + Style::scrollbarGap;
+  const float maximum = std::max(1.0F, width - inset - trailing);
+  // Text budget inside the tab; the message gives way first so the status after it stays readable.
+  float budget = maximum - 2.0F * Style::spaceMd;
+  if (m_freeSpace->visible()) {
+    budget -= Style::spaceMd + m_freeSpace->Node::measure(renderer, {}).width;
+  }
+  budget = std::max(1.0F, budget);
+  m_status->setMaxWidth(budget);
+  m_message->setMaxWidth(
+      m_message->visible() ? std::max(1.0F, budget - m_status->Node::measure(renderer, {}).width) : 0.0F
+  );
+  LayoutConstraints constraints;
+  constraints.setMaxWidth(maximum);
+  const auto size = m_pill->measure(renderer, constraints);
+  const float pillWidth = std::min(size.width, maximum);
+  m_pill->arrange(
+      renderer, {Style::rtl() ? trailing : width - trailing - pillWidth, height - size.height, pillWidth, size.height}
+  );
+}
+
+void StatusBarController::reveal() {
+  m_animations.cancelForOwner(this);
+  if (m_needed) {
+    m_pill->setVisible(true);
+  }
+  const float from = m_reveal;
+  const float target = m_needed ? 1.0F : 0.0F;
+  m_animations.animate(
+      0.0F, 1.0F, kRevealMs, Easing::EaseOutCubic,
+      [this, from, target](float progress) {
+        m_reveal = std::lerp(from, target, progress);
+        m_pill->setOpacity(m_reveal);
+        m_pill->setTranslate(0.0F, (1.0F - m_reveal) * kRevealSlide);
+        m_page.surface().requestRedraw();
+      },
+      [this] {
+        m_pill->setVisible(m_needed);
+        m_page.surface().requestLayout();
+      },
+      this
+  );
 }
 
 bool StatusBarController::noticeShown() const { return m_notice != nullptr && m_noticeArea->visible(); }
 
-LayoutRect StatusBarController::statusRect() const {
-  return m_pill.status != nullptr ? sceneRect(*m_pill.status) : LayoutRect{};
-}
+LayoutRect StatusBarController::statusRect() const { return m_status ? sceneRect(*m_status) : LayoutRect{}; }

@@ -135,6 +135,7 @@ namespace {
       found = entries(folder, pump);
       // The thumbnails are in the disk cache already, as after an earlier visit: no decoder runs, only the reads.
       luciole::ThumbnailStore store;
+      fs::create_directories(store.root());
       for (std::size_t index = 0; index < found.size(); ++index) {
         store.write(
             {.image = noise(kWidth, kHeight, static_cast<unsigned>(index)),

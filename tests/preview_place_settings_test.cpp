@@ -98,7 +98,8 @@ namespace {
     explicit Rig(::test::SceneCapture& rig) : capture(rig) {
       dialog = static_cast<SettingsDialog*>(root.addChild(
           std::make_unique<SettingsDialog>(
-              [this](luciole::OverrideEdit edit) { edits.push_back(std::move(edit)); }, [] {}, [] {}, [] {}, [] {}
+              [this](luciole::OverrideEdit edit) { edits.push_back(std::move(edit)); }, [] {}, [] {}, [] {}, [] {},
+              false
           )
       ));
       dialog->setPopupContext(&popup);

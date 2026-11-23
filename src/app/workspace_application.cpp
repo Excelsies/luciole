@@ -14,10 +14,12 @@
 #include "cursor-shape-v1-client-protocol.h"
 #include "fs/gio_ptr.h"
 #include "platform/desktop_integration.h"
+#include "render/animation/motion_service.h"
 #include "render/render_context.h"
 #include "render/scene/input_area.h"
 #include "render/scene/input_dispatcher.h"
 #include "system/icon_resolver.h"
+#include "ui/browser/action_shortcuts.h"
 #include "ui/builders.h"
 #include "ui/controls/acl_editor.h"
 #include "ui/controls/bulk_acl_editor.h"
@@ -46,9 +48,26 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <utility>
 
 volatile std::sig_atomic_t g_stopRequested = 0;
+
+namespace {
+  constexpr std::array<luciole::KeybindCommand, 9> kSelectTabCommands{
+      luciole::KeybindCommand::SelectTab1, luciole::KeybindCommand::SelectTab2, luciole::KeybindCommand::SelectTab3,
+      luciole::KeybindCommand::SelectTab4, luciole::KeybindCommand::SelectTab5, luciole::KeybindCommand::SelectTab6,
+      luciole::KeybindCommand::SelectTab7, luciole::KeybindCommand::SelectTab8, luciole::KeybindCommand::SelectTab9,
+  };
+  // A tab being dragged fades in the strip while its copy follows the pointer.
+  constexpr float kDraggedTabOpacity = 0.4F;
+  constexpr float kTabGhostOpacity = 0.92F;
+  // Below this a dropped tab opens in a new window rather than moving within the strip.
+  constexpr float kTabDetachY = kTabStripHeight + kNavigationToolbarHeight - Style::spaceXs;
+  // Width of the zone at each end of the tab bar that scrolls it while a tab is dragged, and the fastest step.
+  constexpr float kTabEdgeZone = 48.0F;
+  constexpr float kTabEdgeStep = 14.0F;
+} // namespace
 
 WorkspaceApplication::WorkspaceApplication(
     WaylandConnection& connection, RenderContext& renderer, TextInputService& input,
@@ -56,7 +75,8 @@ WorkspaceApplication::WorkspaceApplication(
 )
     : m_connection(connection), m_renderer(renderer), m_input(input), m_clipboard(clipboard),
       m_defaults(std::move(settings)), m_preferences(luciole::ConfigPaths::fromEnvironment()),
-      m_pins(luciole::StateStore::pathFromEnvironment()), m_visits(luciole::VisitStore::pathFromEnvironment()) {
+      m_pins(luciole::StateStore::pathFromEnvironment()), m_visits(luciole::VisitStore::pathFromEnvironment()),
+      m_folderViews(luciole::FolderViewStore::pathFromEnvironment(), m_defaults.rememberFolderViews) {
   m_visits.setEnabled(m_defaults.recordVisits);
   m_hub.setDriveLeaveGate([this](const luciole::Location& root, auto action, auto abandoned) {
     askBeforeDriveLeave(root, std::move(action), std::move(abandoned));
@@ -64,13 +84,27 @@ WorkspaceApplication::WorkspaceApplication(
   m_preferences.setChangedCallback([this](const std::string& error) {
     if (m_preferences.settings()) {
       m_defaults = m_preferences.settings()->browser;
-      // Live-radius bindings update open widgets; controls built afterwards pick it up directly.
+      luciole::setActiveKeybinds(m_defaults.keybinds);
+      // Strip tooltips embed shortcut labels; clear the cache so rebuildStrip regenerates them.
+      for (auto& [id, host] : m_hosts) {
+        (void)id;
+        host->labels.clear();
+      }
+      // Live Style bindings update open widgets; controls built afterwards pick the values up directly.
       Style::setCornerRadiusScale(static_cast<float>(m_defaults.cornerRadiusScale));
+      Style::setCloseButtonsEnabled(m_defaults.showCloseButtons);
+      MotionService::instance().setEnabled(!m_defaults.reduceAnimations);
+      m_folderViews.setEnabled(m_defaults.rememberFolderViews);
     }
     m_visits.setEnabled(m_defaults.recordVisits);
     for (auto& [id, page] : m_pages) {
       (void)id;
       page->preferencesChanged(error);
+    }
+    // Unchanged windows ignore the request; changed ones rebuild their strips when the compositor answers.
+    for (auto& [id, host] : m_hosts) {
+      (void)id;
+      host->surface.setUseSSD(m_defaults.useSSD);
     }
   });
   m_clipboard.setChangedCallback([this] {
@@ -132,6 +166,12 @@ WorkspaceApplication::WorkspaceApplication(
       [this] { clearExternalDrops(); }
   );
   m_preferences.startWatching();
+  m_folderViews.setChangedCallback([this] {
+    for (auto& [id, page] : m_pages) {
+      (void)id;
+      page->folderViewsChanged();
+    }
+  });
   m_pins.setChangedCallback([this] {
     if (m_pendingWindows && m_pins.editable()) {
       auto windows = std::exchange(m_pendingWindows, std::nullopt);
@@ -227,7 +267,15 @@ void WorkspaceApplication::start(std::optional<luciole::Location> initial) {
 }
 
 void WorkspaceApplication::open(const luciole::InstanceRequest& request) {
-  const auto window = newWindow();
+  const auto existing = m_defaults.singleWindow ? browsingWindow() : luciole::WindowId{0};
+  if (existing && request.locations.empty()) {
+    // A bare launch only raises the window.
+    auto& host = *m_hosts.at(existing);
+    select(existing, m_model.windows().at(existing).selected);
+    m_connection.extension<luciole::DesktopIntegration>().activate(request.activationToken, host.surface.wlSurface());
+    return;
+  }
+  const auto window = existing ? existing : newWindow();
   if (!window) {
     throw std::runtime_error("Cannot create a Luciole window.");
   }
@@ -248,8 +296,12 @@ void WorkspaceApplication::open(const luciole::InstanceRequest& request) {
     first = first ? first : tab;
   }
   if (!first) {
-    host.surface.close();
-    throw std::runtime_error("Close a tab before opening another window.");
+    if (!existing) {
+      host.surface.close();
+    }
+    throw std::runtime_error(
+        existing ? "Close a tab before opening another." : "Close a tab before opening another window."
+    );
   }
   select(window, first);
   m_connection.extension<luciole::DesktopIntegration>().activate(request.activationToken, host.surface.wlSurface());
@@ -271,7 +323,8 @@ void WorkspaceApplication::show(const luciole::FileManagerRequest& request) {
       groups.emplace_back(std::move(folder), std::vector{location});
     }
   }
-  const auto window = newWindow();
+  const auto existing = m_defaults.singleWindow ? browsingWindow() : luciole::WindowId{0};
+  const auto window = existing ? existing : newWindow();
   if (!window) {
     throw std::runtime_error("Cannot create a Luciole window.");
   }
@@ -288,6 +341,9 @@ void WorkspaceApplication::show(const luciole::FileManagerRequest& request) {
   }
   if (first) {
     select(window, first);
+    if (existing) {
+      m_connection.activateSurface(m_hosts.at(window)->surface.wlSurface());
+    }
   }
 }
 
@@ -295,6 +351,13 @@ void WorkspaceApplication::choose(
     luciole::FileChooserRequest request, const std::shared_ptr<luciole::FileChooserCall>& call
 ) {
   auto folder = request.currentFolder;
+  // The application's suggestion wins; the small private state file is read here like at startup.
+  if (!folder && m_defaults.chooserStartFolder == luciole::ChooserStartFolder::Last) {
+    luciole::StateStore state(luciole::StateStore::pathFromEnvironment());
+    if (state.load()) {
+      folder = state.state().chooserFolder;
+    }
+  }
   const auto window =
       newWindow(std::make_unique<FileChooserSession>(std::move(request), call, m_connection, m_renderer));
   if (!window) {
@@ -508,6 +571,28 @@ void WorkspaceApplication::keyboard(const KeyboardEvent& event) {
       host->surface.requestUpdate();
     }
   }
+  const BrowserPage* focusedPage = nullptr;
+  if (const auto focusedHost = m_hosts.find(m_focused); focusedHost != m_hosts.end() && !focusedHost->second->closed) {
+    const auto record = m_model.windows().find(focusedHost->second->id);
+    if (record != m_model.windows().end()) {
+      const auto pageIt = m_pages.find(record->second.active);
+      if (pageIt != m_pages.end()) {
+        focusedPage = pageIt->second.get();
+      }
+    }
+  }
+  const bool capturingPopup = focusedPage != nullptr && focusedPage->popupCapturesAllKeys();
+  // Quit is handled before popup routing, unless a popup captures every key.
+  if (event.pressed && !event.preedit && !capturingPopup) {
+    if (const auto focused = m_hosts.find(m_focused); focused != m_hosts.end()
+        && !focused->second->closed
+        && !focused->second->chooser
+        && luciole::keybindMatches(luciole::KeybindCommand::Quit, event.sym, event.modifiers)) {
+      g_stopRequested = 1;
+      focused->second->surface.requestUpdate();
+      return;
+    }
+  }
   if (const auto focused = m_hosts.find(m_focused);
       focused != m_hosts.end() && focused->second->chooser && focused->second->chooser->keyboard(event)) {
     return;
@@ -534,41 +619,33 @@ void WorkspaceApplication::keyboard(const KeyboardEvent& event) {
     return;
   }
   if (event.pressed && !event.preedit) {
-    if (!host.chooser && event.modifiers == KeyMod::Ctrl && event.sym == XKB_KEY_q) {
-      quit();
-      host.surface.requestUpdate();
-      return;
-    }
-    if (!host.chooser
-        && event.modifiers == (KeyMod::Ctrl | KeyMod::Shift)
-        && (event.sym == XKB_KEY_w || event.sym == XKB_KEY_W)) {
+    if (!host.chooser && luciole::keybindMatches(luciole::KeybindCommand::CloseWindow, event.sym, event.modifiers)) {
       host.surface.close();
       return;
     }
-    const bool ctrl = event.modifiers == KeyMod::Ctrl, ctrlShift = event.modifiers == (KeyMod::Ctrl | KeyMod::Shift);
     std::optional<WorkspaceCommand> command;
-    if (event.modifiers == (KeyMod::Ctrl | KeyMod::Alt) && (event.sym == XKB_KEY_w || event.sym == XKB_KEY_W)) {
+    if (luciole::keybindMatches(luciole::KeybindCommand::ClosePane, event.sym, event.modifiers)) {
       command = WorkspaceCommand::ClosePane;
     }
-    if (ctrl && event.sym == XKB_KEY_t) {
+    if (luciole::keybindMatches(luciole::KeybindCommand::NewTab, event.sym, event.modifiers)) {
       command = WorkspaceCommand::NewTab;
     }
-    if (ctrlShift && (event.sym == XKB_KEY_t || event.sym == XKB_KEY_T)) {
+    if (luciole::keybindMatches(luciole::KeybindCommand::ReopenTab, event.sym, event.modifiers)) {
       command = WorkspaceCommand::Reopen;
     }
-    if (ctrl && event.sym == XKB_KEY_w) {
+    if (luciole::keybindMatches(luciole::KeybindCommand::CloseTab, event.sym, event.modifiers)) {
       command = WorkspaceCommand::Close;
     }
-    if (ctrl && event.sym == XKB_KEY_n) {
+    if (luciole::keybindMatches(luciole::KeybindCommand::NewWindow, event.sym, event.modifiers)) {
       command = WorkspaceCommand::NewWindow;
     }
-    if (event.modifiers == 0 && event.sym == XKB_KEY_F3) {
+    if (luciole::keybindMatches(luciole::KeybindCommand::SplitView, event.sym, event.modifiers)) {
       command = WorkspaceCommand::Split;
     }
-    if (event.modifiers == 0 && event.sym == XKB_KEY_F6) {
+    if (luciole::keybindMatches(luciole::KeybindCommand::SwitchArea, event.sym, event.modifiers)) {
       command = WorkspaceCommand::SwitchArea;
     }
-    if (ctrlShift && (event.sym == XKB_KEY_d || event.sym == XKB_KEY_D)) {
+    if (luciole::keybindMatches(luciole::KeybindCommand::DuplicateTab, event.sym, event.modifiers)) {
       command = WorkspaceCommand::Duplicate;
     }
     if (command) {
@@ -578,53 +655,63 @@ void WorkspaceApplication::keyboard(const KeyboardEvent& event) {
     if (!page.overlay() && page.sidebarKey(event)) {
       return;
     }
-    // An editor with the keyboard gets Tab from the page.
-    if (!page.overlay()
-        && !page.editorFocused()
-        && KeySymbol::isTab(event.sym)
-        && (event.modifiers == 0 || event.modifiers == KeyMod::Shift)) {
-      if (page.completeLocationOnTab(event.modifiers)) {
+    const bool nextTab = luciole::keybindMatches(luciole::KeybindCommand::NextTab, event.sym, event.modifiers);
+    const bool previousTab = luciole::keybindMatches(luciole::KeybindCommand::PreviousTab, event.sym, event.modifiers);
+    if (nextTab || previousTab) {
+      const auto& tabs = record->second.tabs;
+      if (tabs.empty()) {
         return;
       }
-      (void)host.dispatcher.cycleTabFocus(event.modifiers == KeyMod::Shift);
-      host.surface.requestRedraw();
+      const auto found = std::ranges::find(tabs, record->second.selected);
+      const auto index = found == tabs.end() ? std::size_t{0} : static_cast<std::size_t>(found - tabs.begin());
+      select(host.id, tabs[(index + tabs.size() + (previousTab ? -1 : 1)) % tabs.size()]);
+      return;
+    }
+    for (std::size_t index = 0; index < kSelectTabCommands.size(); ++index) {
+      if (!luciole::keybindMatches(kSelectTabCommands[index], event.sym, event.modifiers)) {
+        continue;
+      }
+      const auto& tabs = record->second.tabs;
+      const auto tab = index + 1 == kSelectTabCommands.size() ? tabs.size() - 1 : index;
+      if (!tabs.empty() && tab < tabs.size()) {
+        select(host.id, tabs[tab]);
+      }
       return;
     }
 
-    if ((ctrl || ctrlShift)
-        && (KeySymbol::isTab(event.sym) || event.sym == XKB_KEY_Page_Down || event.sym == XKB_KEY_Page_Up)) {
-      const auto& tabs = record->second.tabs;
-      const auto found = std::ranges::find(tabs, record->second.selected);
-      const auto index = static_cast<std::size_t>(found - tabs.begin());
-      const bool backwards = ctrlShift || event.sym == XKB_KEY_Page_Up;
-      select(host.id, tabs[(index + tabs.size() + (backwards ? -1 : 1)) % tabs.size()]);
+    if (!page.overlay()
+        && !page.editorFocused()
+        && KeySymbol::isTab(event.sym)
+        && (event.modifiers == 0 || event.modifiers == KeyMod::Shift)
+        && page.completeLocationOnTab(event.modifiers)) {
       return;
     }
-    if (event.modifiers == KeyMod::Alt && event.sym >= XKB_KEY_1 && event.sym <= XKB_KEY_9) {
-      const auto index =
-          event.sym == XKB_KEY_9 ? record->second.tabs.size() - 1 : static_cast<std::size_t>(event.sym - XKB_KEY_1);
-      if (index < record->second.tabs.size()) {
-        select(host.id, record->second.tabs[index]);
-      }
+    const bool focusNext = luciole::keybindMatches(luciole::KeybindCommand::FocusNext, event.sym, event.modifiers);
+    const bool focusPrevious =
+        luciole::keybindMatches(luciole::KeybindCommand::FocusPrevious, event.sym, event.modifiers);
+    if (!page.overlay() && (focusNext || focusPrevious)) {
+      (void)host.dispatcher.cycleTabFocus(focusPrevious);
+      host.surface.requestRedraw();
       return;
     }
-    if (event.sym == XKB_KEY_Escape && host.stripMove.pending()) {
+    const bool cancel = luciole::keybindMatches(luciole::KeybindCommand::Cancel, event.sym, event.modifiers);
+    if (cancel && host.stripMove.pending()) {
       host.stripMove.cancel();
       return;
     }
-    if (event.sym == XKB_KEY_Escape && host.pressedTab) {
+    if (cancel && host.pressedTab) {
       host.pressedTab.reset();
       host.tabDrag = false;
       host.surface.requestLayout();
       return;
     }
-    if (event.sym == XKB_KEY_Escape && host.resizing) {
+    if (cancel && host.resizing) {
       m_model.resize(host.id, host.resizeStart);
       host.resizing = false;
       host.surface.requestLayout();
       return;
     }
-    if (event.sym == XKB_KEY_Escape && host.previewDragWidth) {
+    if (cancel && host.previewDragWidth) {
       host.previewDragWidth.reset();
       host.surface.requestLayout();
       return;
@@ -733,36 +820,8 @@ void WorkspaceApplication::pointer(const PointerEvent& event) {
   if (stripMovePointer(*host, event)) {
     return;
   }
-  if (host->pressedTab) {
-    if (event.type == PointerEvent::Type::Motion) {
-      host->tabDrag |= std::abs(x - host->pressX) > 8 || std::abs(y - host->pressY) > 8;
-      return;
-    }
-    if (event.type == PointerEvent::Type::Button && !event.pressed && event.button == BTN_LEFT) {
-      const auto tab = *std::exchange(host->pressedTab, std::nullopt);
-      if (host->tabDrag) {
-        if (y > kTabStripHeight + kNavigationToolbarHeight - Style::spaceXs) {
-          defer(host->id, tab, WorkspaceCommand::Detach);
-        } else {
-          std::size_t index = 0;
-          for (const auto& [id, button] : host->buttons) {
-            (void)id;
-            float bx = 0, by = 0;
-            Node::absolutePosition(button, bx, by);
-            if (x > bx + button->width() * 0.5F) {
-              ++index;
-            }
-          }
-          m_model.move(tab, host->id, index);
-          host->labels.clear();
-          host->surface.requestLayout();
-        }
-      } else {
-        select(host->id, tab);
-      }
-      host->tabDrag = false;
-      return;
-    }
+  if (tabDragPointer(*host, event, x, y)) {
+    return;
   }
   if (event.type == PointerEvent::Type::Button) {
     // Wayland uses evdev codes, not GTK/X11's numbered mouse buttons.
@@ -799,7 +858,9 @@ void WorkspaceApplication::pointer(const PointerEvent& event) {
     for (const auto& [tab, button] : host->buttons) {
       if (host->tabScroll->containsScenePoint(x, y)
           && button->containsScenePoint(x, y)
-          && (event.button == BTN_MIDDLE || !host->closeButtons.at(tab).first->containsScenePoint(x, y))
+          && (event.button == BTN_MIDDLE
+              || !host->closeButtons.at(tab).first->visible()
+              || !host->closeButtons.at(tab).first->containsScenePoint(x, y))
           && event.type == PointerEvent::Type::Button
           && event.pressed) {
         if (event.button == BTN_MIDDLE) {
@@ -814,6 +875,10 @@ void WorkspaceApplication::pointer(const PointerEvent& event) {
           host->pressedTab = tab;
           host->pressX = x;
           host->pressY = y;
+          float bx = 0, by = 0;
+          Node::absolutePosition(button, bx, by);
+          host->grabX = x - bx;
+          host->grabY = y - by;
           return;
         }
       }
@@ -966,6 +1031,7 @@ luciole::WindowId WorkspaceApplication::newWindow(std::unique_ptr<FileChooserSes
   });
   host->surface.setCloseGuard([this, id] { return mayClose(id); });
   const bool choosing = host->chooser != nullptr;
+  host->surface.setUseSSD(m_defaults.useSSD);
   if (!host->surface.initialize(
           nullptr,
           {.width = choosing ? 900U : 1080U,
@@ -981,6 +1047,22 @@ luciole::WindowId WorkspaceApplication::newWindow(std::unique_ptr<FileChooserSes
   m_hosts.emplace(id, std::move(host));
   m_focused = id;
   return id;
+}
+
+luciole::WindowId WorkspaceApplication::browsingWindow() const {
+  luciole::WindowId first = 0;
+  for (const auto& [id, host] : m_hosts) {
+    if (host->closed || host->chooser || !host->surface.isRunning() || !m_model.windows().contains(id)) {
+      continue;
+    }
+    if (id == m_focused) {
+      return id;
+    }
+    if (!first) {
+      first = id;
+    }
+  }
+  return first;
 }
 
 luciole::TabId WorkspaceApplication::newTab(
@@ -1020,14 +1102,17 @@ luciole::TabId WorkspaceApplication::createPage(
   auto settings = duplicate                    ? m_pages.at(duplicate)->options()
       : previous && m_pages.contains(previous) ? m_pages.at(previous)->options()
                                                : m_defaults;
-  // Miller columns enter folders on selection, which a chooser needs for choosing them. Workbench is not offered.
-  if (host.chooser
-      && (settings.viewMode == luciole::ViewMode::Miller || settings.viewMode == luciole::ViewMode::Workbench)) {
-    settings.viewMode = luciole::ViewMode::List;
+  // File pickers keep their own layout, apart from the browser's; Columns and Workbench are not offered there.
+  if (host.chooser) {
+    settings.sort = settings.chooserSort;
+    settings.viewMode = settings.chooserViewMode;
+    settings.showHidden = settings.chooserShowHidden;
+    settings.gridIconSize = settings.chooserGridIconSize;
+    settings.listIconSize = settings.chooserListIconSize;
   }
   auto page = std::make_unique<BrowserPage>(
       m_connection, m_renderer, m_input, settings, m_clipboard, host.surface, host.dispatcher, m_animations, m_pins,
-      m_drives, m_icons, m_thumbnails, m_preferences, m_visits, m_hub, id
+      m_drives, m_icons, m_thumbnails, m_preferences, m_visits, host.chooser ? nullptr : &m_folderViews, m_hub, id
   );
   page->setHasOther([this, id] {
     const auto owner = m_model.owner(id);
@@ -1202,6 +1287,13 @@ void WorkspaceApplication::execute(
     }
     break;
   case WorkspaceCommand::NewWindow: {
+    // Single-window mode turns an explicit new window into a tab of the current one.
+    if (m_defaults.singleWindow) {
+      if (!newTab(window, destination ? destination : page.location())) {
+        page.workspaceError("Close a tab before opening another.");
+      }
+      break;
+    }
     if (auto id = newWindow()) {
       const bool restored = !destination && restoreLastWindow(id);
       if (!restored && !newTab(id, destination ? destination : page.location(), 0, true, opening)) {
@@ -1217,7 +1309,7 @@ void WorkspaceApplication::execute(
   case WorkspaceCommand::MoveWindow: {
     luciole::WindowId destinationWindow = 0;
     if (command == WorkspaceCommand::Detach) {
-      destinationWindow = newWindow();
+      destinationWindow = m_defaults.singleWindow ? luciole::WindowId{0} : newWindow();
     } else {
       for (const auto& [id, target] : m_hosts) {
         if (id > window && !target->closed) {
@@ -1419,19 +1511,207 @@ bool WorkspaceApplication::stripMovePointer(Host& host, const PointerEvent& even
   return false;
 }
 
+void WorkspaceApplication::buildTabDrag(Host& host) {
+  auto ghost = ui::row(
+      {.out = &host.tabGhost,
+       .align = FlexAlign::Center,
+       .paddingH = Style::spaceSm,
+       .fill = colorSpecFromRole(ColorRole::SurfaceContainerHighest),
+       .radius = Style::radiusMd,
+       .border = colorSpecFromRole(ColorRole::OutlineVariant),
+       .opacity = kTabGhostOpacity,
+       .visible = false,
+       .participatesInLayout = false},
+      ui::label(
+          {.out = &host.tabGhostLabel,
+           .color = colorSpecFromRole(ColorRole::OnSurface),
+           .maxLines = 1,
+           .textAlign = TextAlign::Center,
+           .ellipsize = TextEllipsize::End,
+           .flexGrow = 1}
+      )
+  );
+  ghost->setZIndex(60);
+  host.root->addChild(std::move(ghost));
+  auto marker = ui::box({.out = &host.tabDropMarker, .fill = colorSpecFromRole(ColorRole::Primary), .visible = false});
+  marker->setParticipatesInLayout(false);
+  marker->setRadius(1.5F);
+  // Under the copy, which usually covers the gap: the marker shows above and below it.
+  marker->setZIndex(55);
+  host.root->addChild(std::move(marker));
+}
+
+bool WorkspaceApplication::tabDragPointer(Host& host, const PointerEvent& event, float x, float y) {
+  if (!host.pressedTab) {
+    return false;
+  }
+  if (event.type == PointerEvent::Type::Motion) {
+    host.tabDrag |= std::abs(x - host.pressX) > 8 || std::abs(y - host.pressY) > 8;
+    if (host.tabDrag) {
+      updateTabEdgeScroll(host);
+      host.surface.requestLayout();
+    }
+    return true;
+  }
+  if (event.type != PointerEvent::Type::Button || event.pressed || event.button != BTN_LEFT) {
+    return false;
+  }
+  const auto tab = *std::exchange(host.pressedTab, std::nullopt);
+  if (!std::exchange(host.tabDrag, false)) {
+    select(host.id, tab);
+    return true;
+  }
+  if (tabDetaches(host, y)) {
+    defer(host.id, tab, WorkspaceCommand::Detach);
+  } else {
+    m_model.move(tab, host.id, tabDropIndex(host, tab, x));
+    host.labels.clear();
+  }
+  host.surface.requestLayout();
+  return true;
+}
+
+bool WorkspaceApplication::tabDetaches(const Host& host, float y) const {
+  // Single Window has no detach, and detaching a lone tab would only reopen its window.
+  return !m_defaults.singleWindow && m_model.windows().at(host.id).tabs.size() > 1 && y > kTabDetachY;
+}
+
+float WorkspaceApplication::tabEdgeScrollSpeed(const Host& host) const {
+  if (!host.pressedTab || !host.tabDrag || tabDetaches(host, host.pointerY) || !host.tabScroll->scrollable()) {
+    return 0;
+  }
+  float left = 0, top = 0;
+  Node::absolutePosition(host.tabScroll, left, top);
+  const float right = left + host.tabScroll->width();
+  const float offset = host.tabScroll->scrollOffset();
+  // Faster the nearer the pointer is to the end, and at full speed past it. Nothing once the bar is at that end,
+  // so the timer stops instead of relaying out the window with nothing to scroll.
+  if (host.pointerX < left + kTabEdgeZone) {
+    return offset <= 0.0F
+        ? 0.0F
+        : -kTabEdgeStep * std::clamp((left + kTabEdgeZone - host.pointerX) / kTabEdgeZone, 0.0F, 1.0F);
+  }
+  if (host.pointerX > right - kTabEdgeZone) {
+    return offset >= host.tabScroll->maxScrollOffset()
+        ? 0.0F
+        : kTabEdgeStep * std::clamp((host.pointerX - right + kTabEdgeZone) / kTabEdgeZone, 0.0F, 1.0F);
+  }
+  return 0;
+}
+
+void WorkspaceApplication::updateTabEdgeScroll(Host& host) {
+  if (tabEdgeScrollSpeed(host) == 0) {
+    host.tabEdgeScroll.stop();
+    return;
+  }
+  if (host.tabEdgeScroll.active()) {
+    return;
+  }
+  host.tabEdgeScroll.startRepeating(std::chrono::milliseconds(16), [this, &host] {
+    const float speed = tabEdgeScrollSpeed(host);
+    if (speed == 0) {
+      host.tabEdgeScroll.stop();
+      return;
+    }
+    auto* scroll = host.tabScroll;
+    scroll->requestScrollToOffset(std::clamp(scroll->scrollOffset() + speed, 0.0F, scroll->maxScrollOffset()));
+    host.surface.requestLayout();
+  });
+}
+
+std::size_t WorkspaceApplication::tabDropIndex(const Host& host, luciole::TabId tab, float x) {
+  // The dragged tab leaves its place first, so only the other tabs count.
+  std::size_t index = 0;
+  for (const auto& [id, button] : host.buttons) {
+    float bx = 0, by = 0;
+    Node::absolutePosition(button, bx, by);
+    if (id != tab && x > bx + button->width() * 0.5F) {
+      ++index;
+    }
+  }
+  return index;
+}
+
+void WorkspaceApplication::layoutTabDrag(Host& host, Renderer& renderer) const {
+  const auto dragged = host.pressedTab && host.tabDrag ? host.pressedTab : std::nullopt;
+  Button* source = nullptr;
+  for (const auto& [id, button] : host.buttons) {
+    button->setOpacity(id == dragged ? kDraggedTabOpacity : 1.0F);
+    if (id == dragged) {
+      source = button;
+    }
+  }
+  host.tabGhost->setVisible(source != nullptr);
+  host.tabDropMarker->setVisible(false);
+  if (source == nullptr) {
+    return;
+  }
+  const auto label = std::ranges::find(host.labels, *dragged, &std::pair<luciole::TabId, std::string>::first);
+  host.tabGhostLabel->setText(label != host.labels.end() ? label->second : std::string{});
+  const float width = source->width(), height = source->height();
+  const auto surfaceWidth = static_cast<float>(host.surface.width());
+  const auto surfaceHeight = static_cast<float>(host.surface.height());
+  const bool detach = tabDetaches(host, host.pointerY);
+  float sx = 0, sy = 0;
+  Node::absolutePosition(source, sx, sy);
+  // Within the strip the copy slides along it; pulled out, it follows the pointer freely.
+  const float x = std::clamp(host.pointerX - host.grabX, 0.0F, std::max(0.0F, surfaceWidth - width));
+  const float y = detach ? std::clamp(host.pointerY - host.grabY, 0.0F, std::max(0.0F, surfaceHeight - height)) : sy;
+  host.tabGhost->arrange(renderer, {x, y, width, height});
+  if (detach) {
+    return;
+  }
+  // The marker sits in the gap before the tab the dragged one would land in front of.
+  const auto index = tabDropIndex(host, *dragged, host.pointerX);
+  std::size_t position = 0;
+  float markerX = -1;
+  for (const auto& [id, button] : host.buttons) {
+    if (id == dragged) {
+      continue;
+    }
+    float bx = 0, by = 0;
+    Node::absolutePosition(button, bx, by);
+    if (position == index) {
+      markerX = bx - Style::spaceXs * 0.5F;
+      break;
+    }
+    markerX = bx + button->width() + Style::spaceXs * 0.5F;
+    ++position;
+  }
+  const auto current = static_cast<std::size_t>(
+      std::ranges::find(host.buttons, *dragged, &std::pair<luciole::TabId, Button*>::first) - host.buttons.begin()
+  );
+  // Dropping there would leave the tab where it is.
+  if (markerX < 0 || index == current) {
+    return;
+  }
+  host.tabDropMarker->setVisible(true);
+  host.tabDropMarker->arrange(renderer, {markerX - 1.5F, 0.0F, 3.0F, kTabStripHeight});
+}
+
 void WorkspaceApplication::tabMenu(Host& host, luciole::TabId tab, float x, float y) {
   auto& page = *m_pages.at(m_model.windows().at(host.id).active);
   std::vector<ContextMenuControlEntry> entries{
-      {.id = 0, .label = "New Tab", .shortcut = "Ctrl+T"},
-      {.id = 1, .label = "Duplicate Tab", .shortcut = "Ctrl+Shift+D"},
-      {.id = 2, .label = "Close Tab", .shortcut = "Ctrl+W"},
-      {.id = 3, .label = "Reopen Closed Tab", .shortcut = "Ctrl+Shift+T"},
+      {.id = 0, .label = "New Tab", .shortcut = luciole::keybindShortcutOptionalLabel(luciole::KeybindCommand::NewTab)},
+      {.id = 1,
+       .label = "Duplicate Tab",
+       .shortcut = luciole::keybindShortcutOptionalLabel(luciole::KeybindCommand::DuplicateTab)},
+      {.id = 2,
+       .label = "Close Tab",
+       .shortcut = luciole::keybindShortcutOptionalLabel(luciole::KeybindCommand::CloseTab)},
+      {.id = 3,
+       .label = "Reopen Closed Tab",
+       .shortcut = luciole::keybindShortcutOptionalLabel(luciole::KeybindCommand::ReopenTab)},
       {.label = "", .separator = true},
-      {.id = 4, .label = "Split View", .shortcut = "F3"},
-      {.id = 5, .label = "Swap Panes"},
-      {.id = 6, .label = "Move Tab to New Window"},
-      {.id = 7, .label = "Move Tab to Next Window"}
+      {.id = 4,
+       .label = "Split View",
+       .shortcut = luciole::keybindShortcutOptionalLabel(luciole::KeybindCommand::SplitView)},
+      {.id = 5, .label = "Swap Panes"}
   };
+  if (!m_defaults.singleWindow) {
+    entries.push_back({.id = 6, .label = "Move Tab to New Window"});
+    entries.push_back({.id = 7, .label = "Move Tab to Next Window"});
+  }
   const auto window = host.id;
   page.workspaceMenu(
       std::move(entries),
@@ -1547,6 +1827,7 @@ void WorkspaceApplication::rebuildStrip(Host& host, const luciole::TabWindow& wi
              .variant = ButtonVariant::Ghost,
              .customPalette = closeTabPalette(foreground),
              .tooltip = "Close tab",
+             .followsCloseButtons = true,
              .minWidth = 24.0F,
              .maxWidth = 24.0F,
              .padding = 0.0F,
@@ -1564,7 +1845,7 @@ void WorkspaceApplication::rebuildStrip(Host& host, const luciole::TabWindow& wi
            .glyphSize = Style::baseGlyphSize,
            .controlHeight = Style::controlHeightSm,
            .variant = ButtonVariant::Ghost,
-           .tooltip = "New tab (Ctrl+T)",
+           .tooltip = luciole::shortcutTooltip("New tab", luciole::KeybindCommand::NewTab),
            .onClick = [this, windowId] {
              defer(windowId, m_model.windows().at(windowId).active, WorkspaceCommand::NewTab);
            }}
@@ -1587,7 +1868,7 @@ void WorkspaceApplication::rebuildStrip(Host& host, const luciole::TabWindow& wi
            .controlHeight = Style::controlHeightSm,
            .selected = window.secondary.has_value(),
            .variant = ButtonVariant::Ghost,
-           .tooltip = "Split view (F3)",
+           .tooltip = luciole::shortcutTooltip("Split view", luciole::KeybindCommand::SplitView),
            .onClick = [this, windowId] {
              defer(windowId, m_model.windows().at(windowId).active, WorkspaceCommand::Split);
            }}
@@ -1620,7 +1901,7 @@ void WorkspaceApplication::rebuildStrip(Host& host, const luciole::TabWindow& wi
              .glyphSize = Style::baseGlyphSize,
              .controlHeight = Style::controlHeightSm,
              .variant = ButtonVariant::Ghost,
-             .tooltip = "Close window (Ctrl+Shift+W)",
+             .tooltip = luciole::shortcutTooltip("Close window", luciole::KeybindCommand::CloseWindow),
              .onClick = [&host] { host.surface.close(); }}
         )
     );
@@ -1746,6 +2027,7 @@ void WorkspaceApplication::prepare(Host& host) {
         ui::box({.out = &host.previewResizeLine, .fill = colorSpecFromRole(ColorRole::OutlineVariant), .width = 1})
     );
     host.root->addChild(std::move(preview));
+    buildTabDrag(host);
     auto bar = ui::box({.out = &host.activePaneBar, .fill = colorSpecFromRole(ColorRole::Primary), .visible = false});
     bar->setParticipatesInLayout(false);
     bar->setRadius(1.0F);
@@ -1833,6 +2115,7 @@ void WorkspaceApplication::prepare(Host& host) {
   const auto width = static_cast<float>(host.surface.width()), height = static_cast<float>(host.surface.height());
   host.root->arrange(renderer, {0, 0, width, height});
   host.strip->arrange(renderer, {0, 0, width, kTabStripHeight});
+  layoutTabDrag(host, renderer);
   const float footer = host.chooser ? kChooserFooterHeight : 0.0F;
   if (host.chooserFooter) {
     host.chooser->sync();

@@ -16,16 +16,16 @@
 #include "browser/path_completion.h"
 #include "browser/places.h"
 #include "clipboard/text_clipboard.h"
+#include "config/keybinds.h"
 #include "config/settings.h"
 #include "config/view_preference_writer.h"
 #include "core/deferred_call.h"
-#include "core/input/key_modifiers.h"
-#include "core/input/key_symbols.h"
 #include "fs/archive_type.h"
 #include "fs/entry_access.h"
 #include "platform/desktop_integration.h"
 #include "platform/terminal_launcher.h"
 #include "render/scene/input_dispatcher.h"
+#include "ui/browser/action_shortcuts.h"
 #include "ui/builders.h"
 #include "ui/controls/scroll_view.h"
 #include "ui/palette.h"
@@ -82,6 +82,7 @@ ContextMenuControlEntry
 MenuController::actionEntry(Action action, const luciole::ActionRequest& request, bool radio) const {
   const auto& definition = luciole::ActionRegistry::definition(action);
   const auto state = m_page.actionState(action, request);
+  auto shortcut = luciole::actionShortcutLabel(action);
   return {
       .id = luciole::ActionRegistry::menuId(action),
       .label = std::string(
@@ -93,7 +94,7 @@ MenuController::actionEntry(Action action, const luciole::ActionRequest& request
       .checkmark = !radio && state.checked != -1,
       .radio = radio,
       .toggleState = state.checked,
-      .shortcut = definition.shortcut.empty() ? std::nullopt : std::optional(std::string(definition.shortcut)),
+      .shortcut = shortcut.empty() ? std::nullopt : std::optional(std::move(shortcut)),
       .destructive = definition.destructive
   };
 }
@@ -106,7 +107,12 @@ std::vector<ContextMenuControlEntry> MenuController::folderMenuEntries(const luc
     addSeparator(entries);
   }
   if (m_page.hasOtherPane()) {
-    entries.push_back({.id = ClosePane, .label = "Close Pane", .shortcut = "Ctrl+Alt+W"});
+    auto shortcut = luciole::keybindShortcutLabel(luciole::KeybindCommand::ClosePane);
+    entries.push_back(
+        {.id = ClosePane,
+         .label = "Close Pane",
+         .shortcut = shortcut.empty() ? std::nullopt : std::optional(std::move(shortcut))}
+    );
   }
   add(Action::Terminal);
   addSeparator(entries);
@@ -200,6 +206,9 @@ std::vector<ContextMenuControlEntry> MenuController::itemMenuEntries(const lucio
     }
     if (single->trashInfo().original) {
       add(Action::OriginalLocation);
+    }
+    if (single->symlink && !trash) {
+      add(Action::ShowLinkTarget);
     }
   }
   addSeparator(entries);
@@ -308,12 +317,15 @@ void MenuController::openFileMenu(std::optional<luciole::EntryId> id, float x, f
 }
 
 void MenuController::showOpenInMenu(const luciole::ActionRequest& request) {
+  const bool singleWindow = m_page.settings().singleWindow;
   std::vector<ContextMenuControlEntry> entries{
       {.id = NewTab, .label = "New Tab"},
       // Without a second pane, the workspace splits the window to open one.
       {.id = OtherPane, .label = m_page.hasOtherPane() ? "Other Pane" : "New Pane"},
-      {.id = NewWindow, .label = "New Window"}
   };
+  if (!singleWindow) {
+    entries.push_back({.id = NewWindow, .label = "New Window"});
+  }
   m_submenus.show(
       std::move(entries),
       [this, request](int id) {
@@ -385,11 +397,11 @@ void MenuController::openPlaceMenu(const luciole::Bookmark& bookmark, float x, f
     entries.push_back({.label = "", .separator = true});
     if (!bookmark.location.isTrash() && bookmark.location != luciole::Location::network()) {
       entries.push_back({.id = 2, .label = "Unpin", .enabled = m_pins.editable()});
-      entries.push_back({.id = 6, .label = "Rename place…", .enabled = m_pins.editable()});
-      entries.push_back({.id = 8, .label = "Change icon…", .enabled = m_pins.editable()});
+      entries.push_back({.id = 6, .label = "Rename Place…", .enabled = m_pins.editable()});
+      entries.push_back({.id = 8, .label = "Change Icon…", .enabled = m_pins.editable()});
     }
-    entries.push_back({.id = 3, .label = "Move up", .enabled = m_pins.editable() && adjacent(true).has_value()});
-    entries.push_back({.id = 4, .label = "Move down", .enabled = m_pins.editable() && adjacent(false).has_value()});
+    entries.push_back({.id = 3, .label = "Move Up", .enabled = m_pins.editable() && adjacent(true).has_value()});
+    entries.push_back({.id = 4, .label = "Move Down", .enabled = m_pins.editable() && adjacent(false).has_value()});
   }
   entries.push_back({.label = "", .separator = true});
   if (bookmark.location == luciole::Location::trash()) {
@@ -479,7 +491,7 @@ void MenuController::openBreadcrumbMenu(const luciole::Location& target, LayoutR
     entries.push_back(std::move(entry));
   }
   entries.push_back({.label = "", .separator = true});
-  entries.push_back({.label = "Sibling folders", .header = true});
+  entries.push_back({.label = "Sibling Folders", .header = true});
   entries.push_back({.label = "Loading folders…", .enabled = false});
   const auto activate = [this, context, target, targets](int id) {
     if (context != m_page.browser().contextSerial()) {
@@ -557,11 +569,15 @@ void MenuController::revealHighlight() {
 }
 
 void MenuController::key(const KeyboardEvent& event) {
+  using K = luciole::KeybindCommand;
+  const bool cancel = luciole::keybindMatches(K::Cancel, event.sym, event.modifiers);
+  const bool focusNext = luciole::keybindMatches(K::FocusNext, event.sym, event.modifiers);
+  const bool focusPrevious = luciole::keybindMatches(K::FocusPrevious, event.sym, event.modifiers);
   if (m_menu == nullptr) {
-    if (event.pressed && KeySymbol::isEscape(event.sym)) {
+    if (event.pressed && cancel) {
       m_page.dismissPopup();
-    } else if (event.pressed && KeySymbol::isTab(event.sym)) {
-      (void)m_page.popupDispatcher().cycleTabFocus((event.modifiers & KeyMod::Shift) != 0);
+    } else if (event.pressed && (focusNext || focusPrevious)) {
+      (void)m_page.popupDispatcher().cycleTabFocus(focusPrevious);
     } else {
       m_page.popupDispatcher().keyEvent(event.sym, event.utf32, event.modifiers, event.pressed, event.preedit);
     }
@@ -570,24 +586,24 @@ void MenuController::key(const KeyboardEvent& event) {
   if (m_submenus.key(event)) {
     return;
   }
-  if (!event.pressed) {
+  if (!event.pressed || event.preedit) {
     return;
   }
-  if (KeySymbol::isEscape(event.sym)) {
+  if (cancel) {
     m_page.dismissPopup();
-  } else if (KeySymbol::isUp(event.sym)) {
+  } else if (luciole::keybindMatches(K::MoveUp, event.sym, event.modifiers)) {
     if (m_menu->moveHighlight(-1)) {
       revealHighlight();
       m_page.popupSurface()->requestRedraw();
     }
-  } else if (KeySymbol::isDown(event.sym)) {
+  } else if (luciole::keybindMatches(K::MoveDown, event.sym, event.modifiers)) {
     if (m_menu->moveHighlight(1)) {
       revealHighlight();
       m_page.popupSurface()->requestRedraw();
     }
-  } else if (KeySymbol::isRight(event.sym)) {
+  } else if (luciole::keybindMatches(K::MoveRight, event.sym, event.modifiers)) {
     m_submenus.openHighlighted();
-  } else if (KeySymbol::isEnter(event.sym) && !m_submenus.openHighlighted()) {
+  } else if (luciole::keybindMatches(K::Validate, event.sym, event.modifiers) && !m_submenus.openHighlighted()) {
     (void)m_menu->activateHighlighted();
   }
 }
@@ -670,38 +686,38 @@ void MenuController::openColumnsMenu(const LayoutRect& anchor, std::optional<luc
   }
   entries.push_back({.label = "", .separator = true});
   entries.push_back(
-      {.id = 100, .label = "Show all columns", .enabled = m_columns.columnVisibility() != luciole::allDetailsColumns()}
+      {.id = 100, .label = "Show All Columns", .enabled = m_columns.columnVisibility() != luciole::allDetailsColumns()}
   );
   entries.push_back(
       {.id = 106,
-       .label = "Reset column visibility",
+       .label = "Reset Column Visibility",
        .enabled = m_columns.columnVisibility() != luciole::DetailsColumnVisibility{}}
   );
   const int left = Style::rtl() ? 1 : -1;
   if (column) {
     entries.push_back({.label = "", .separator = true});
     entries.push_back(
-        {.id = 101, .label = "Move left", .enabled = m_columns.movedColumnOrder(*column, left).has_value()}
+        {.id = 101, .label = "Move Left", .enabled = m_columns.movedColumnOrder(*column, left).has_value()}
     );
     entries.push_back(
-        {.id = 102, .label = "Move right", .enabled = m_columns.movedColumnOrder(*column, -left).has_value()}
+        {.id = 102, .label = "Move Right", .enabled = m_columns.movedColumnOrder(*column, -left).has_value()}
     );
   }
   entries.push_back({.label = "", .separator = true});
   entries.push_back(
       {.id = 103,
-       .label = "Reset column order",
+       .label = "Reset Column Order",
        .enabled = m_columns.columnOrder() != luciole::kDefaultDetailsColumnOrder}
   );
   const std::size_t widthIndex = column ? static_cast<std::size_t>(*column) + 1 : 0;
   entries.push_back(
       {.id = 104,
-       .label = "Reset column width",
+       .label = "Reset Column Width",
        .enabled = m_columns.columnWidths()[widthIndex] != luciole::kDefaultDetailsColumnWidths[widthIndex]}
   );
   entries.push_back(
       {.id = 105,
-       .label = "Reset all column widths",
+       .label = "Reset All Column Widths",
        .enabled = m_columns.columnWidths() != luciole::kDefaultDetailsColumnWidths}
   );
   showContextMenu(
@@ -747,9 +763,13 @@ void MenuController::showActionMenu(
   }
   for (const auto action : actions) {
     if (action) {
-      entries.push_back(
-          actionEntry(*action, request, radio && *action != Action::FoldersFirst && *action != Action::HiddenLast)
-      );
+      entries.push_back(actionEntry(
+          *action, request,
+          radio
+              && *action != Action::FoldersFirst
+              && *action != Action::HiddenLast
+              && *action != Action::ResetFolderView
+      ));
     } else {
       entries.push_back({.label = "", .separator = true});
     }
@@ -773,6 +793,16 @@ void MenuController::showActionMenu(
 }
 
 void MenuController::openSortMenu(std::optional<LayoutRect> anchor, bool alignLeft) {
+  if (m_page.browser().folderView()) {
+    showActionMenu(
+        {Action::SortName, Action::SortType, Action::SortSize, Action::SortModified, Action::SortAccessed,
+         Action::SortCreated, Action::SortOwner, Action::SortGroup, Action::SortPermissions, Action::SortLocation,
+         std::nullopt, Action::Ascending, Action::Descending, std::nullopt, Action::FoldersFirst, Action::HiddenLast,
+         std::nullopt, Action::ResetFolderView},
+        true, !anchor.has_value(), anchor, alignLeft
+    );
+    return;
+  }
   showActionMenu(
       {Action::SortName, Action::SortType, Action::SortSize, Action::SortModified, Action::SortAccessed,
        Action::SortCreated, Action::SortOwner, Action::SortGroup, Action::SortPermissions, Action::SortLocation,
@@ -796,11 +826,23 @@ void MenuController::openMenu() {
     return;
   }
   std::vector<ContextMenuControlEntry> entries{
-      {.id = 9000, .label = "New Tab", .shortcut = "Ctrl+T"},
-      {.id = 9001, .label = "New Window", .shortcut = "Ctrl+N"},
-      {.id = 9002, .label = "Split View", .shortcut = "F3"},
-      {.label = "", .separator = true}
+      {.id = 9000,
+       .label = "New Tab",
+       .shortcut = luciole::keybindShortcutOptionalLabel(luciole::KeybindCommand::NewTab)},
   };
+  if (!m_page.settings().singleWindow) {
+    entries.push_back(
+        {.id = 9001,
+         .label = "New Window",
+         .shortcut = luciole::keybindShortcutOptionalLabel(luciole::KeybindCommand::NewWindow)}
+    );
+  }
+  entries.push_back(
+      {.id = 9002,
+       .label = "Split View",
+       .shortcut = luciole::keybindShortcutOptionalLabel(luciole::KeybindCommand::SplitView)}
+  );
+  entries.push_back({.label = "", .separator = true});
   const auto request = m_page.actionRequest(true);
   entries.push_back(actionEntry(Action::Undo, request));
   entries.push_back(actionEntry(Action::Redo, request));
@@ -808,6 +850,9 @@ void MenuController::openMenu() {
   entries.push_back(actionEntry(Action::Search, request));
   for (const auto action : {Action::Grid, Action::List, Action::Miller, Action::Workbench}) {
     entries.push_back(actionEntry(action, request, true));
+  }
+  if (m_page.browser().folderView()) {
+    entries.push_back(actionEntry(Action::ResetFolderView, request));
   }
   entries.push_back({.label = "", .separator = true});
   entries.push_back(actionEntry(

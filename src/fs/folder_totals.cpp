@@ -20,6 +20,8 @@ struct luciole::FolderTotalsService::State : std::enable_shared_from_this<State>
   CancelToken cancel;
   std::shared_ptr<Progress> progress;
   std::function<void()> changed;
+  NetworkFilesystemCheck check;
+  bool sameDeviceOnly = false;
   GSource* timer = nullptr;
   std::uint64_t serial = 0;
   bool alive = true, running = false;
@@ -76,9 +78,11 @@ luciole::FolderTotalsService::~FolderTotalsService() {
 }
 bool luciole::FolderTotalsService::start(std::span<const DirectoryEntry> entries) {
   const auto state = m_state;
-  if (state->running || entries.empty()) {
+  if (entries.empty()) {
     return false;
   }
+  // A start while a traversal runs supersedes it: clear() below invalidates the old completion through the serial
+  // and cancels the old worker, so only the newest walk can publish.
   clear();
   std::vector<DirectoryEntry> roots(entries.begin(), entries.begin() + std::min<std::size_t>(4096, entries.size()));
   state->snapshot.phase = FolderTotalsPhase::Running;
@@ -90,19 +94,37 @@ bool luciole::FolderTotalsService::start(std::span<const DirectoryEntry> entries
   state->startTimer();
   runJob<FolderTotalsSnapshot>(
       state->cancel,
-      [roots = std::move(roots), token = state->cancel, progress = state->progress,
-       limited = state->snapshot.limited] mutable {
-        return walkFolderTotals(std::move(roots), token, [progress, limited](const FolderTotalsSnapshot& value) {
-          const std::scoped_lock lock(progress->mutex);
-          progress->value = value;
-          progress->value.limited |= limited;
-        });
+      [roots = std::move(roots), token = state->cancel, progress = state->progress, limited = state->snapshot.limited,
+       check = state->check, sameDevice = state->sameDeviceOnly] mutable {
+        if (check && std::ranges::any_of(roots, [&check](const auto& root) {
+              const auto native = root.location().nativePath();
+              return native && check(*native);
+            })) {
+          FolderTotalsSnapshot snapshot;
+          snapshot.phase = FolderTotalsPhase::Unsupported;
+          snapshot.unsupported = roots.size();
+          snapshot.limited = limited;
+          {
+            const std::scoped_lock lock(progress->mutex);
+            progress->value = snapshot;
+          }
+          return snapshot;
+        }
+        return walkFolderTotals(
+            std::move(roots), token,
+            [progress, limited](const FolderTotalsSnapshot& value) {
+              const std::scoped_lock lock(progress->mutex);
+              progress->value = value;
+              progress->value.limited |= limited;
+            },
+            FolderTotalsLimits{.sameDevice = sameDevice}
+        );
       },
       [state, serial = state->serial](auto reply) {
-        state->running = false;
         if (!state->alive || state->serial != serial) {
           return;
         }
+        state->running = false;
         state->stopTimer();
         state->poll(false);
         if (!reply) {
@@ -130,6 +152,7 @@ void luciole::FolderTotalsService::cancel() {
 void luciole::FolderTotalsService::clear() {
   ++m_state->serial;
   m_state->cancel.cancel();
+  m_state->running = false;
   m_state->stopTimer();
   m_state->snapshot = {};
 }
@@ -138,3 +161,7 @@ const luciole::FolderTotalsSnapshot& luciole::FolderTotalsService::snapshot() co
 void luciole::FolderTotalsService::setChangedCallback(std::function<void()> changed) {
   m_state->changed = std::move(changed);
 }
+void luciole::FolderTotalsService::setNetworkFilesystemCheck(NetworkFilesystemCheck check) {
+  m_state->check = std::move(check);
+}
+void luciole::FolderTotalsService::setSameDeviceOnly(bool enabled) { m_state->sameDeviceOnly = enabled; }

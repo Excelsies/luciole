@@ -6,6 +6,8 @@
 #include "app/page/page_context.h"
 #include "browser/browser_controller.h"
 #include "browser/location_presentation.h"
+#include "config/keybinds.h"
+#include "config/settings.h"
 #include "core/input/key_symbols.h"
 #include "platform/desktop_integration.h"
 #include "render/scene/input_dispatcher.h"
@@ -208,25 +210,28 @@ bool LocationBarController::press(const PointerEvent& event, float x, float y) {
     return true;
   }
   const auto& location = m_page.browser().model().snapshot().location;
-  const bool blank = event.button == BTN_LEFT
+  const bool singleClickEdit = m_page.settings().singleClickLocationEdit;
+  const bool canEditHere =
+      event.button == BTN_LEFT
       && m_connection.keyboardModifiers() == 0
       && !m_editingLocation
       && location
       && m_locationArea
       && m_locationArea->containsScenePoint(x, y)
       && !(m_breadcrumbOverflow && m_breadcrumbOverflow->visible() && m_breadcrumbOverflow->containsScenePoint(x, y))
-      && std::ranges::none_of(m_dropBreadcrumbs, [x, y](const auto& crumb) {
-                       return crumb.second->containsScenePoint(x, y);
-                     });
-  if (blank) {
+      && std::ranges::none_of(m_dropBreadcrumbs, [x, y, singleClickEdit, &location](const auto& crumb) {
+           return (!singleClickEdit || crumb.first != *location) && crumb.second->containsScenePoint(x, y);
+         });
+  if (canEditHere) {
     const auto now = std::chrono::steady_clock::now();
-    const bool twice = m_blankLocationClick
+    const bool twice = !singleClickEdit
+        && m_blankLocationClick
         && m_blankLocationClick->location == location
         && m_blankLocationClick->context == m_page.browser().contextSerial()
         && now - m_blankLocationClick->time < std::chrono::milliseconds(400)
         && std::abs(x - m_blankLocationClick->x) <= 6.0F
         && std::abs(y - m_blankLocationClick->y) <= 6.0F;
-    if (twice) {
+    if (singleClickEdit || twice) {
       m_blankLocationClick.reset();
       m_breadcrumbEditTarget = location;
       m_page.surface().requestUpdate();
@@ -245,8 +250,7 @@ void LocationBarController::keyPressed() {
 }
 
 bool LocationBarController::menuKey(const KeyboardEvent& event) {
-  if ((event.sym == XKB_KEY_Menu && event.modifiers == 0)
-      || (event.sym == XKB_KEY_F10 && event.modifiers == KeyMod::Shift)) {
+  if (luciole::keybindMatches(luciole::KeybindCommand::ContextMenu, event.sym, event.modifiers)) {
     if (m_breadcrumbOverflow
         && m_breadcrumbOverflow->visible()
         && m_page.dispatcher().focusedArea() == m_breadcrumbOverflow->inputArea()) {
@@ -268,11 +272,13 @@ bool LocationBarController::completionKey(const KeyboardEvent& event) {
 }
 
 bool LocationBarController::escapeKey(const KeyboardEvent& event) {
-  if (m_editingLocation && event.modifiers == 0 && KeySymbol::isEscape(event.sym)) {
+  if (m_editingLocation && luciole::keybindMatches(luciole::KeybindCommand::Cancel, event.sym, event.modifiers)) {
     endLocationEdit(true);
     return true;
   }
-  if (m_filterOpen && event.modifiers == 0 && KeySymbol::isEscape(event.sym) && !m_editingLocation) {
+  if (m_filterOpen
+      && luciole::keybindMatches(luciole::KeybindCommand::Cancel, event.sym, event.modifiers)
+      && !m_editingLocation) {
     closeFilter();
     return true;
   }
@@ -436,13 +442,16 @@ bool LocationBarController::completionKey(std::uint32_t key, std::uint32_t modif
     clearCompletions();
     return false;
   }
-  if (modifiers != 0 && (!KeySymbol::isTab(key) || modifiers != KeyMod::Shift)) {
+  const bool cancel = luciole::keybindMatches(luciole::KeybindCommand::Cancel, key, modifiers);
+  const bool up = luciole::keybindMatches(luciole::KeybindCommand::MoveUp, key, modifiers);
+  const bool down = luciole::keybindMatches(luciole::KeybindCommand::MoveDown, key, modifiers);
+  if (modifiers != 0 && !cancel && !up && !down && (!KeySymbol::isTab(key) || modifiers != KeyMod::Shift)) {
     return false;
   }
   if (m_completionItems.items.empty()) {
     return false;
   }
-  if (KeySymbol::isEscape(key)) {
+  if (cancel) {
     clearCompletions();
     return true;
   }
@@ -454,12 +463,11 @@ bool LocationBarController::completionKey(std::uint32_t key, std::uint32_t modif
     acceptCompletion(*m_completionIndex, true);
     return true;
   }
-  if (KeySymbol::isDown(key) || KeySymbol::isUp(key)) {
+  if (up || down) {
     const auto count = m_completionItems.items.size();
-    m_completionIndex = m_completionIndex
-        ? (*m_completionIndex + count + (KeySymbol::isDown(key) ? 1 : count - 1)) % count
-        : KeySymbol::isDown(key) ? 0
-                                 : count - 1;
+    m_completionIndex = m_completionIndex ? (*m_completionIndex + count + (down ? 1 : count - 1)) % count
+        : down                            ? 0
+                                          : count - 1;
     m_completionDirty = true;
     m_page.surface().requestLayout();
     return true;

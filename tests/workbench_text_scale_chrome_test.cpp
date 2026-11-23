@@ -115,7 +115,7 @@ namespace {
     Holder root;
     NoPopup popup;
     auto* dialog = static_cast<SettingsDialog*>(
-        root.addChild(std::make_unique<SettingsDialog>([](const OverrideEdit&) {}, [] {}, [] {}, [] {}, [] {}))
+        root.addChild(std::make_unique<SettingsDialog>([](const OverrideEdit&) {}, [] {}, [] {}, [] {}, [] {}, false))
     );
     dialog->setPopupContext(&popup);
     root.setSize(900, 720);
@@ -137,10 +137,10 @@ namespace {
     for (int i = 0; i < 3; ++i) {
       (void)capture.capture(root, 900, 720, 1.0F);
     }
-    auto* label = labelWithText(root, "Clear visit history");
+    auto* label = labelWithText(root, "Clear Visit History");
     TEST_CHECK(label != nullptr);
     const float whole = capture.textWidth(label->text(), label->fontSize());
-    std::println("Clear visit history: label {:.1f} px for {:.1f} px of text at {:.2f}", label->width(), whole, scale);
+    std::println("Clear Visit History: label {:.1f} px for {:.1f} px of text at {:.2f}", label->width(), whole, scale);
     TEST_CHECK(label->width() + 0.5F >= whole);
   }
 } // namespace

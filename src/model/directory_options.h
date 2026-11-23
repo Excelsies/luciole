@@ -12,7 +12,7 @@
 namespace luciole {
   inline constexpr std::array<int, 9> kGridIconSizes{32, 48, 64, 80, 96, 128, 160, 192, 256};
   inline constexpr int kDefaultGridIconSize = 96;
-  inline constexpr std::array<int, 8> kListIconSizes{16, 20, 24, 28, 32, 40, 48, 64};
+  inline constexpr std::array<int, 8> kRowIconSizes{16, 20, 24, 28, 32, 40, 48, 64};
   inline constexpr int kDefaultListIconSize = 32;
   inline constexpr int kMinSidebarWidth = 160;
   inline constexpr int kMaxSidebarWidth = 400;
@@ -73,6 +73,9 @@ namespace luciole {
   };
   enum class ActivationMode : std::uint8_t { SingleClick, DoubleClick };
   enum class TypingMode : std::uint8_t { Search, Typeahead, Filter };
+  enum class DropAction : std::uint8_t { Menu, Copy, Move };
+  // Where a file picker opens when the requesting application suggests no folder.
+  enum class ChooserStartFolder : std::uint8_t { Home, Last };
   // Complete column allocations, including the gap after their contents. Zero
   // is the automatic Name width; metadata always has an explicit allocation.
   inline constexpr std::size_t kDetailsColumnCount = 9;
@@ -252,6 +255,15 @@ namespace luciole {
     bool directoriesFirst = true;
     bool hiddenLast = false;
     bool operator==(const SortOptions&) const = default;
+  };
+
+  // A folder's own sort and view mode; an unset field follows the global default. The mode is List or Grid:
+  // column view is a window-wide mode.
+  struct FolderView {
+    std::optional<SortOptions> sort;
+    std::optional<ViewMode> mode;
+    bool empty() const { return !sort && !mode; }
+    bool operator==(const FolderView&) const = default;
   };
 
   struct FilterOptions {

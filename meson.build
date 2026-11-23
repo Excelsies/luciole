@@ -48,6 +48,7 @@ if not cpp.has_header('stb/stb_image_resize2.h')
   error('system stb/stb_image_resize2.h is required')
 endif
 tomlplusplus = dependency('tomlplusplus', version: '>=3.4')
+xkbcommon = dependency('xkbcommon')
 
 if cpp.get_define('_LIBCPP_VERSION', prefix: '#include <version>') != ''
   add_project_arguments('-fexperimental-library', language: 'cpp')
@@ -74,7 +75,6 @@ subdir('lib')
 
 build_config = configuration_data()
 build_config.set_quoted('LUCIOLE_VERSION', meson.project_version())
-build_config.set_quoted('LUCIOLE_BUILD_REVISION', get_option('build_revision'))
 build_config.set_quoted('LUCIOLE_BUILD_TYPE', get_option('buildtype'))
 build_config.set_quoted('LUCIOLE_COMPILER', cpp.get_id() + ' ' + cpp.version())
 build_config.set_quoted('LUCIOLE_INSTALL_ASSETSDIR', get_option('prefix') / get_option('datadir') / 'luciole/assets')
@@ -83,6 +83,23 @@ build_info = configure_file(
   output: 'luciole_build_info.h',
   configuration: build_config,
 )
+# An explicit packager revision wins; otherwise git describes the checkout at build time.
+# Only cli.cpp and about_controller.cpp include this header, so a new commit rebuilds just them.
+git = find_program('git', required: false)
+if get_option('build_revision') == 'unknown' and git.found()
+  build_revision = vcs_tag(
+    input: 'src/app/build_revision.h.in',
+    output: 'luciole_build_revision.h',
+    command: [git, 'describe', '--tags', '--always', '--dirty=-dirty', '--abbrev=12'],
+    fallback: 'unknown',
+  )
+else
+  build_revision = configure_file(
+    input: 'src/app/build_revision.h.in',
+    output: 'luciole_build_revision.h',
+    configuration: {'VCS_TAG': get_option('build_revision')},
+  )
+endif
 fs = import('fs')
 completion_config = configuration_data()
 completion_config.set('BASH_COMPLETIONS', fs.read('assets/completions/luciole.bash'))
@@ -253,6 +270,7 @@ fs_lib = static_library('luciole-fs',
     'src/fs/atomic_file.cpp',
     'src/fs/background_job.cpp',
     'src/fs/cancel_token.cpp',
+    'src/fs/custom_icons.cpp',
     'src/fs/directory_entries.cpp',
     'src/fs/directory_session.cpp',
     'src/fs/directory_watch.cpp',
@@ -264,11 +282,13 @@ fs_lib = static_library('luciole-fs',
     'src/fs/file_metadata.cpp',
     'src/fs/file_query.cpp',
     'src/fs/filename.cpp',
+    'src/fs/folder_icon.cpp',
     'src/fs/folder_totals.cpp',
     'src/fs/folder_totals_walk.cpp',
     'src/fs/gio_interop.cpp',
     'src/fs/heap_trim.cpp',
     'src/fs/interned_text.cpp',
+    'src/fs/link_target.cpp',
     'src/fs/location.cpp',
     'src/fs/location_mount.cpp',
     'src/fs/mount_interaction.cpp',
@@ -296,6 +316,8 @@ fs_dep = declare_dependency(link_with: fs_lib, include_directories: src_inc, dep
 config_lib = static_library('luciole-config',
   files(
     'src/config/diagnostic.cpp',
+    'src/config/folder_view_store.cpp',
+    'src/config/keybinds.cpp',
     'src/config/settings.cpp',
     'src/config/shared_bookmarks.cpp',
     'src/config/state_store.cpp',
@@ -305,10 +327,10 @@ config_lib = static_library('luciole-config',
     'src/config/visit_store.cpp',
   ),
   include_directories: src_inc,
-  dependencies: [model_dep, fs_dep, tomlplusplus],
+  dependencies: [model_dep, fs_dep, tomlplusplus, xkbcommon],
 )
 config_dep = declare_dependency(link_with: config_lib, include_directories: src_inc,
-  dependencies: [model_dep, fs_dep],
+  dependencies: [model_dep, fs_dep, xkbcommon],
 )
 
 browser_lib = static_library('luciole-browser',
@@ -320,6 +342,7 @@ browser_lib = static_library('luciole-browser',
     'src/browser/directory_model.cpp',
     'src/browser/directory_tree.cpp',
     'src/browser/entry_details.cpp',
+    'src/browser/folder_views.cpp',
     'src/browser/selection_details.cpp',
     'src/browser/selection_size_note.cpp',
     'src/browser/job_routing.cpp',
@@ -576,6 +599,7 @@ ui_lib = static_library('luciole-ui',
     'src/ui/controls/mesh_program.cpp',
     'src/ui/controls/mesh_view.cpp',
     'src/ui/controls/glyph_picker.cpp',
+    'src/ui/controls/icon_picker.cpp',
     'src/ui/controls/miller_view.cpp',
     'src/ui/controls/pane_divider.cpp',
     'src/ui/controls/pane_divider_focus.cpp',
@@ -717,6 +741,8 @@ app = executable('luciole',
     'src/app/page/program_controller.cpp',
     'src/app/page/drag_drop_controller.cpp',
     'src/app/page/file_keyboard_controller.cpp',
+    'src/app/page/folder_icon_controller.cpp',
+    'src/app/page/folder_view_controller.cpp',
     'src/app/page/location_bar_controller.cpp',
     'src/app/page/menu_controller.cpp',
     'src/app/page/mount_controller.cpp',
@@ -743,6 +769,7 @@ app = executable('luciole',
     'src/main.cpp',
   ),
   build_info,
+  build_revision,
   completions,
   app_icon,
   include_directories: include_directories('src', '.'),

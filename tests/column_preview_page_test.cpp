@@ -72,11 +72,13 @@ namespace {
         .message = {},
         .image = bluePage(),
         .imageUpgradeFailed = false,
-        .metadata = {
-            {.label = "Format", .value = "PDF 1.4"},
-            {.label = "Pages", .value = "1"},
-            {.label = "Producer", .value = "a writer", .preview = false},
-        },
+        .metadata =
+            {
+                {.label = "Format", .value = "PDF 1.4"},
+                {.label = "Pages", .value = "1"},
+                {.label = "Producer", .value = "a writer", .preview = false},
+            },
+        .totals = {},
     };
   }
 

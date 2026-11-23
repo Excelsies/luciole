@@ -38,14 +38,16 @@ namespace luciole {
     void setDragCallback(std::function<void(const std::vector<EntryId>&)> start, std::function<void()> cancel);
     void setActivateCallback(std::function<void(EntryId)> callback) { m_activate = std::move(callback); }
     void setCutPredicate(std::function<bool(const Location&)> predicate) { m_cut = std::move(predicate); }
+    // List rows only; other adapters stay dormant.
+    void setFolderSizeEnabled(bool enabled) { m_folderSizes = enabled; }
     void setActivationMode(ActivationMode mode) { m_activationMode = mode; }
     void setPresentation(BrowsePresentation presentation, std::optional<bool> readOnly) {
       m_presentation = presentation;
       m_readOnly = readOnly;
     }
     void setGridIconSize(float size) { m_gridIconSize = size; }
-    // List rows only; 0 keeps the default size.
-    void setListIconSize(int size) { m_listIconSize = size; }
+    // List and Columns rows; 0 keeps the view's default size.
+    void setRowIconSize(int size) { m_rowIconSize = size; }
     void setDetailsColumns(DetailsColumns columns) { m_columns = columns; }
     void setDetailsColumnOrder(DetailsColumnOrder order) { m_columnOrder = order; }
     void setColumnActive(bool active) { m_columnActive = active; }
@@ -55,6 +57,12 @@ namespace luciole {
     std::optional<EntryId> linkedEntry() const { return m_linkedEntry; }
 
   private:
+    struct TileState {
+      std::optional<EntryId> entry;
+      bool visible = false;
+    };
+    void reveal(Node& tile, EntryId id);
+
     BrowserController& m_browser;
     FileIconCache& m_icons;
     ThumbnailService& m_thumbnails;
@@ -81,8 +89,9 @@ namespace luciole {
     std::function<void()> m_cancelDrag;
     BrowsePresentation m_presentation;
     std::optional<bool> m_readOnly;
+    bool m_folderSizes = false;
     float m_gridIconSize = static_cast<float>(kDefaultGridIconSize);
-    int m_listIconSize = 0;
+    int m_rowIconSize = 0;
     DetailsColumns m_columns;
     DetailsColumnOrder m_columnOrder = kDefaultDetailsColumnOrder;
     std::vector<EntryId> m_areaRows;
@@ -90,5 +99,8 @@ namespace luciole {
     std::uint64_t m_areaGeneration = 0;
     bool m_areaSelection = false;
     bool m_areaToggle = false;
+    std::unordered_map<const Node*, TileState> m_tiles;
+    std::unordered_set<EntryId> m_revealed; // Entries that already faded in during this visit.
+    std::uint64_t m_revealVisit = 0;
   };
 } // namespace luciole

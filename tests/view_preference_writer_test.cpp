@@ -51,6 +51,7 @@ namespace {
          {P::ShowSizeCaption, false},
          {P::ShowEmblems, true},
          {P::ShowBackups, true},
+         {P::SingleClickLocationEdit, false},
          {P::SwitchToNewTab, true},
          {P::ConfirmPermanentDeletion, true},
          {P::SidebarTree, false},
@@ -65,6 +66,7 @@ namespace {
          {P::ShowModifiedCaption, true},
          {P::ShowEmblems, false},
          {P::ShowBackups, false},
+         {P::SingleClickLocationEdit, true},
          {P::SwitchToNewTab, false},
          {P::ConfirmPermanentDeletion, false},
          {P::SidebarTree, true},
@@ -114,6 +116,7 @@ namespace {
         && loaded->browser.viewMode == luciole::ViewMode::Grid
         && !loaded->browser.showHidden
         && !loaded->browser.showBackups
+        && loaded->browser.singleClickLocationEdit
         && !loaded->browser.switchToNewTab
         && !loaded->browser.confirmPermanentDeletion
         && loaded->browser.gridIconSize == 64

@@ -21,6 +21,9 @@ namespace luciole::preference_schema {
        {luciole::TypingMode::Typeahead, "typeahead"},
        {luciole::TypingMode::Filter, "filter"}}
   );
+  inline constexpr auto kDropActions = std::to_array<Named<luciole::DropAction>>(
+      {{luciole::DropAction::Menu, "menu"}, {luciole::DropAction::Copy, "copy"}, {luciole::DropAction::Move, "move"}}
+  );
   inline constexpr auto kSortFields = std::to_array<Named<luciole::SortField>>(
       {{luciole::SortField::Name, "name"},
        {luciole::SortField::Size, "size"},
@@ -38,6 +41,12 @@ namespace luciole::preference_schema {
        {luciole::ViewMode::Grid, "grid"},
        {luciole::ViewMode::Miller, "miller"},
        {luciole::ViewMode::Workbench, "workbench"}}
+  );
+  // File pickers have no Columns view: it enters folders on selection, which choosing a folder needs. Nor Workbench.
+  inline constexpr auto kChooserViewModes =
+      std::to_array<Named<luciole::ViewMode>>({{luciole::ViewMode::List, "list"}, {luciole::ViewMode::Grid, "grid"}});
+  inline constexpr auto kChooserStartFolders = std::to_array<Named<luciole::ChooserStartFolder>>(
+      {{luciole::ChooserStartFolder::Home, "home"}, {luciole::ChooserStartFolder::Last, "last"}}
   );
   inline constexpr auto kDensities = std::to_array<Named<luciole::ViewDensity>>(
       {{luciole::ViewDensity::Compact, "compact"}, {luciole::ViewDensity::Comfortable, "comfortable"}}

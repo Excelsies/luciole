@@ -1,5 +1,6 @@
 #pragma once
 
+#include "config/preference_keybind_rule.h"
 #include "config/preference_names.h"
 #include "config/settings.h"
 
@@ -172,6 +173,15 @@ namespace luciole::preference_schema {
   ) {
     return {.preference = preference, .key = key, .field = field, .rule = rule};
   }
+  // List and Columns icon sizes; 0 keeps the view's default size.
+  inline bool rowIconSize(int value) { return value == 0 || std::ranges::contains(luciole::kRowIconSizes, value); }
+  inline constexpr Rule<int> kRowIconSize{
+      rowIconSize, "expected 0 or integer icon size 16, 20, 24, 28, 32, 40, 48, or 64"
+  };
+  inline constexpr Rule<int> kGridIconSize{
+      [](int value) { return std::ranges::contains(luciole::kGridIconSizes, value); },
+      "expected integer icon size 32, 48, 64, 80, 96, 128, 160, 192, or 256"
+  };
   template <int Minimum, int Maximum> bool between(int value) { return value >= Minimum && value <= Maximum; }
   template <int Minimum, int Maximum> bool zeroOrBetween(int value) {
     return value == 0 || between<Minimum, Maximum>(value);
@@ -186,6 +196,11 @@ namespace luciole::preference_schema {
           P::ActivationMode, "activation_mode", [](S& s) -> auto& { return s.activationMode; }, {kActivationModes}
       ),
       describe(P::TypingMode, "typing_mode", [](S& s) -> auto& { return s.typingMode; }, {kTypingModes}),
+      describe(P::DropAction, "drop_action", [](S& s) -> auto& { return s.dropAction; }, {kDropActions}),
+      describe(
+          P::SingleClickLocationEdit, "single_click_location_edit",
+          [](S& s) -> auto& { return s.singleClickLocationEdit; }
+      ),
       describe(
           P::ConfirmPermanentDeletion, "confirm_permanent_deletion",
           [](S& s) -> auto& { return s.confirmPermanentDeletion; }
@@ -195,11 +210,15 @@ namespace luciole::preference_schema {
       ),
       describe(P::SwitchToNewTab, "switch_to_new_tab", [](S& s) -> auto& { return s.switchToNewTab; }),
       describe(P::RestoreLastWindow, "restore_last_window", [](S& s) -> auto& { return s.restoreLastWindow; }),
+      describe(P::SingleWindow, "single_window", [](S& s) -> auto& { return s.singleWindow; }),
       describe(P::ShowHidden, "show_hidden", [](S& s) -> auto& { return s.showHidden; }),
       describe(P::ShowBackups, "show_backups", [](S& s) -> auto& { return s.showBackups; }),
       describe(P::AlwaysShowTabBar, "always_show_tab_bar", [](S& s) -> auto& { return s.alwaysShowTabBar; }),
       describe(P::AlwaysShowStatusBar, "always_show_status_bar", [](S& s) -> auto& { return s.alwaysShowStatusBar; }),
       describe(P::CompactMenus, "compact_menus", [](S& s) -> auto& { return s.compactMenus; }),
+      describe(P::ShowCloseButtons, "show_close_buttons", [](S& s) -> auto& { return s.showCloseButtons; }),
+      describe(P::ReduceAnimations, "reduce_animations", [](S& s) -> auto& { return s.reduceAnimations; }),
+      describe(P::UseSSD, "use_ssd", [](S& s) -> auto& { return s.useSSD; }),
       describe(
           P::BackgroundOpacity, "background_opacity", [](S& s) -> auto& { return s.backgroundOpacity; },
           {0.0, 1.0, "expected a number from 0 to 1"}
@@ -213,15 +232,15 @@ namespace luciole::preference_schema {
       describe(P::DirectoriesFirst, "directories_first", [](S& s) -> auto& { return s.sort.directoriesFirst; }),
       describe(P::HiddenLast, "hidden_last", [](S& s) -> auto& { return s.sort.hiddenLast; }),
       describe(P::ViewMode, "view_mode", [](S& s) -> auto& { return s.viewMode; }, {kViewModes}),
+      describe(P::RememberFolderViews, "remember_folder_views", [](S& s) -> auto& { return s.rememberFolderViews; }),
       describe(
-          P::GridIconSize, "grid_icon_size", [](S& s) -> auto& { return s.gridIconSize; },
-          {[](int value) { return std::ranges::contains(luciole::kGridIconSizes, value); },
-           "expected integer icon size 32, 48, 64, 80, 96, 128, 160, 192, or 256"}
+          P::GridIconSize, "grid_icon_size", [](S& s) -> auto& { return s.gridIconSize; }, kGridIconSize
       ),
       describe(
-          P::ListIconSize, "list_icon_size", [](S& s) -> auto& { return s.listIconSize; },
-          {[](int value) { return value == 0 || std::ranges::contains(luciole::kListIconSizes, value); },
-           "expected 0 or integer icon size 16, 20, 24, 28, 32, 40, 48, or 64"}
+          P::ListIconSize, "list_icon_size", [](S& s) -> auto& { return s.listIconSize; }, kRowIconSize
+      ),
+      describe(
+          P::MillerIconSize, "miller_icon_size", [](S& s) -> auto& { return s.millerIconSize; }, kRowIconSize
       ),
       describe(P::Density, "density", [](S& s) -> auto& { return s.presentation.density; }, {kDensities}),
       describe(
@@ -247,6 +266,31 @@ namespace luciole::preference_schema {
       describe(P::ExpandableFolders, "expandable_folders", [](S& s) -> auto& { return s.expandableFolders; }),
       describe(P::ShowPreview, "show_preview", [](S& s) -> auto& { return s.showPreview; }),
       describe(P::ChooserShowPreview, "chooser_show_preview", [](S& s) -> auto& { return s.chooserShowPreview; }),
+      describe(
+          P::ChooserStartFolder, "chooser_start_folder", [](S& s) -> auto& { return s.chooserStartFolder; },
+          {kChooserStartFolders}
+      ),
+      describe(P::ChooserSortBy, "chooser_sort_by", [](S& s) -> auto& { return s.chooserSort.field; }, {kSortFields}),
+      describe(
+          P::ChooserSortDescending, "chooser_sort_descending", [](S& s) -> auto& { return s.chooserSort.descending; }
+      ),
+      describe(
+          P::ChooserDirectoriesFirst, "chooser_directories_first",
+          [](S& s) -> auto& { return s.chooserSort.directoriesFirst; }
+      ),
+      describe(P::ChooserHiddenLast, "chooser_hidden_last", [](S& s) -> auto& { return s.chooserSort.hiddenLast; }),
+      describe(
+          P::ChooserViewMode, "chooser_view_mode", [](S& s) -> auto& { return s.chooserViewMode; }, {kChooserViewModes}
+      ),
+      describe(P::ChooserShowHidden, "chooser_show_hidden", [](S& s) -> auto& { return s.chooserShowHidden; }),
+      describe(
+          P::ChooserGridIconSize, "chooser_grid_icon_size", [](S& s) -> auto& { return s.chooserGridIconSize; },
+          kGridIconSize
+      ),
+      describe(
+          P::ChooserListIconSize, "chooser_list_icon_size", [](S& s) -> auto& { return s.chooserListIconSize; },
+          kRowIconSize
+      ),
       describe(
           P::PreviewWidth, "preview_width", [](S& s) -> auto& { return s.previewWidth; },
           {between<208, 800>, "expected integer preview width from 208 to 800"}
@@ -421,6 +465,7 @@ namespace luciole::preference_schema {
           P::WorkbenchPreviewPlace, "workbench_preview_place", [](S& s) -> auto& { return s.workbench.previewPlace; },
           {kWorkbenchPreviewPlaces}
       ),
+      describe(P::Keybinds, "keybinds", [](S& s) -> auto& { return s.keybinds; }),
   };
   inline constexpr std::size_t kPreferenceCount = std::tuple_size_v<decltype(kPreferences)>;
   static_assert(kPreferenceCount == std::to_underlying(luciole::BrowserPreferenceId::Count));
