@@ -159,6 +159,7 @@ test_table = [
     'env': ['LUCIOLE_LIBRARY_ASSETS_DIR=' + (meson.project_source_root() / 'lib/assets')]},
   {'name': 'preview-size', 'deps': [ui_dep]},
   {'name': 'workbench-session', 'deps': [app_workbench_dep, event_loop_dep], 'timeout': 90, 'env': gio_env},
+  {'name': 'workbench-folder-sizes', 'deps': [app_workbench_dep, event_loop_dep], 'timeout': 90, 'env': gio_env},
   {'name': 'workbench-session-choices', 'deps': [app_workbench_dep], 'env': gio_env},
   {'name': 'workbench-pane-area', 'deps': [app_workbench_dep], 'env': gio_env},
   {'name': 'workbench-list-tab-pixels', 'deps': [app_workbench_dep, dependency('zlib')],
