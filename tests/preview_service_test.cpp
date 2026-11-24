@@ -132,6 +132,8 @@ namespace {
           {"bundle.pem", "application/x-pem-file", std::format("{}{}", certificate, pem("PRIVATE KEY", body))},
           // Key types the installed MIME database may not class as text: the file is still read and refused.
           {"pgp.asc", "application/pgp-keys", pem("PGP PRIVATE KEY BLOCK", body)},
+          // However the database types a PEM file that holds a key, it is read and refused.
+          {"container.pem", "application/pkcs7-mime", std::format("{}{}", certificate, pem("PRIVATE KEY", body))},
           {"windows.key", "text/plain", std::format("\xEF\xBB\xBF  {}", pem("RSA PRIVATE KEY", body, "\r\n"))},
           {"late.txt", "text/plain", std::format("{}{}", filler, pem("EC PRIVATE KEY", longBody))},
           {"keys.txt", "text/plain", "# public key: age1fakepublickey\nAGE-SECRET-KEY-1QQQQQQQQQQQQQQQQQQQQ\n"},
@@ -161,6 +163,7 @@ namespace {
          {std::tuple<std::string, std::string, std::string>{"cert.pem", "application/x-pem-file", certificate},
           {"public.pem", "application/x-pem-file",
            "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAfake\n-----END PUBLIC KEY-----\n"},
+          {"chain.crt", "application/pkix-cert", certificate},
           {"id_ed25519.pub", "text/x-ssh-public-key", "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIfake throwaway\n"}}) {
       const auto path = root / name;
       write(path, text);
@@ -168,6 +171,18 @@ namespace {
       wait([&] { return !preview.busy(); });
       TEST_CHECK(preview.snapshot().status == luciole::PreviewStatus::Ready);
       TEST_CHECK(preview.snapshot().text == text);
+    }
+    // A binary container is never read as text: the file says what it is and shows nothing.
+    for (const auto* type : {"application/pkix-cert", "application/x-pkcs12", "application/pkcs7-mime"}) {
+      const auto path = root / "binary-container";
+      write(path, std::string("\x30\x82\x01\x0a\x02\x82\x01\x01\x00\xc3\x28", 11));
+      preview.show(entry(path, type), 512);
+      wait([&] { return !preview.busy(); });
+      TEST_CHECK(preview.snapshot().status == luciole::PreviewStatus::Unavailable);
+      TEST_CHECK(preview.snapshot().text.empty());
+      TEST_CHECK(
+          preview.snapshot().message == "This is a binary certificate or key container. Its content is not shown."
+      );
     }
     preview.clear();
   }

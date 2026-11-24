@@ -122,6 +122,20 @@ namespace {
     const auto key =
         made("-----BEGIN OPENSSH PRIVATE KEY-----\nabc\n-----END OPENSSH PRIVATE KEY-----\n", "id_ed25519");
     TEST_CHECK(key.state == State::PrivateKey && key.document == nullptr && !key.identity);
+    // A certificate followed by a private key, however the MIME database types a .pem: refused.
+    const std::string certificate = "-----BEGIN CERTIFICATE-----\nMIIBfake\n-----END CERTIFICATE-----\n";
+    const auto bundle = made(
+        certificate + "-----BEGIN PRIVATE KEY-----\nabc\n-----END PRIVATE KEY-----\n", "bundle.pem",
+        "application/pkcs7-mime"
+    );
+    TEST_CHECK(bundle.state == State::PrivateKey && bundle.document == nullptr);
+    // A certificate alone is text; a binary container (DER, PKCS#12) is never shown, not even as a hex dump.
+    const auto cert = made(certificate, "cert.pem", "application/pkix-cert");
+    TEST_CHECK(cert.state == State::Shown && cert.document != nullptr);
+    const auto der = made("\x30\x82\x01\x0a\x02\x82\x01\x01\x00"s, "cert.der", "application/pkix-cert");
+    TEST_CHECK(der.state == State::Container && der.document == nullptr);
+    const auto bundleP12 = made("\x30\x82\x0a\x3b\x02\x01\x03"s, "store.p12", "application/x-pkcs12");
+    TEST_CHECK(bundleP12.state == State::Container && bundleP12.document == nullptr);
     const auto changed = failed(FileErrorKind::Changed);
     TEST_CHECK(changed.state == State::Changed && changed.document == nullptr);
     const auto denied = failed(FileErrorKind::Denied);

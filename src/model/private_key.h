@@ -19,7 +19,17 @@ namespace luciole::private_key_detail {
       "AGE-SECRET-KEY-PQ-1"sv
   };
   inline constexpr std::array kKeyContentTypes{
-      "application/x-pem-file"sv, "application/x-pem-key"sv, "application/pgp-keys"sv
+      "application/pgp-keys"sv,        "application/pkcs10"sv,
+      "application/pkcs10+pem"sv,      "application/pkcs12"sv,
+      "application/pkcs12+pem"sv,      "application/pkcs7-mime"sv,
+      "application/pkcs7-mime+pem"sv,  "application/pkcs7-signature"sv,
+      "application/pkcs8"sv,           "application/pkcs8+pem"sv,
+      "application/pkcs8-encrypted"sv, "application/pkix-cert"sv,
+      "application/pkix-cert+pem"sv,   "application/pkix-crl"sv,
+      "application/pkix-crl+pem"sv,    "application/pkix-pkipath"sv,
+      "application/x-pem-file"sv,      "application/x-pem-key"sv,
+      "application/x-pkcs12"sv,        "application/x-pkcs7-certificates"sv,
+      "application/x-x509-ca-cert"sv,  "application/x-x509-user-cert"sv,
   };
   inline constexpr auto kPemBegin = "-----BEGIN "sv;
   // "-----BEGIN" in base64, which starts every base64-encoded PEM file.
@@ -132,10 +142,19 @@ namespace luciole::private_key_detail {
 } // namespace luciole::private_key_detail
 
 namespace luciole {
-  // Content types of key files. A preview reads them as text, so that it refuses their text, on a machine whose
-  // MIME database does not class them as text.
+  // Content types of certificate and key containers, PEM text or binary. A MIME database types a .pem in several of
+  // these ways, so a preview does not go by the type: it reads these files and goes by the bytes. PEM text is shown
+  // unless it holds a private key; a binary container (DER, PKCS#12, a keyring) is never shown, as text or as hex.
   inline bool isKeyContentType(std::string_view type) {
     return std::ranges::find(private_key_detail::kKeyContentTypes, type) != private_key_detail::kKeyContentTypes.end();
+  }
+
+  // Whether the bytes are PEM-like text: printable ASCII and line breaks only. Binary containers are not.
+  inline bool looksLikePemText(std::string_view bytes) {
+    return std::ranges::all_of(bytes, [](char c) {
+      const auto byte = static_cast<unsigned char>(c);
+      return (byte >= 0x20 && byte < 0x7F) || byte == '\n' || byte == '\r' || byte == '\t';
+    });
   }
 
   // Whether the bytes hold private key material anywhere: a PEM BEGIN line naming a private key, a PGP, SSH2, PuTTY or

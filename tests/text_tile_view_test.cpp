@@ -64,6 +64,9 @@ namespace {
     rig.view->show(refused(TextDocumentState::PrivateKey));
     rig.idle(std::chrono::milliseconds(20));
     TEST_CHECK(rig.view->message().contains("private key") && rig.view->textureBytes() == 0);
+    rig.view->show(refused(TextDocumentState::Container));
+    rig.idle(std::chrono::milliseconds(20));
+    TEST_CHECK(rig.view->message().contains("binary certificate or key container") && rig.view->textureBytes() == 0);
     rig.view->show(refused(TextDocumentState::Unreadable, "Permission denied"));
     rig.frame();
     TEST_CHECK(rig.view->message() == "This file could not be read: Permission denied");

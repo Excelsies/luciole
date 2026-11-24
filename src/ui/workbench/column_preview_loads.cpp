@@ -79,10 +79,11 @@ namespace luciole {
         if (document.state == TextDocumentState::Shown) {
           m_facts.lines = document.facts.lines; // a cut text counts only the part read
         }
-        const bool words =
-            text || document.state == TextDocumentState::NotText || document.state == TextDocumentState::PrivateKey;
+        const bool refused =
+            document.state == TextDocumentState::PrivateKey || document.state == TextDocumentState::Container;
+        const bool words = text || document.state == TextDocumentState::NotText || refused;
         m_status = words ? ColumnPreviewStatus::Shown : ColumnPreviewStatus::Failed;
-        m_showsText = text || document.state == TextDocumentState::PrivateKey;
+        m_showsText = text || refused;
         needFrame();
       }
 

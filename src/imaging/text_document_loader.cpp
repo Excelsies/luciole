@@ -151,6 +151,11 @@ namespace luciole {
       refused.state = TextDocumentState::PrivateKey;
       return refused;
     }
+    if (isKeyContentType(contentType) && !looksLikePemText(content.bytes)) {
+      TextDocument refused;
+      refused.state = TextDocumentState::Container;
+      return refused;
+    }
     const auto text = content.truncated ? wholeCharacters(content.bytes) : std::string_view(content.bytes);
     auto kind = formats::fileKind(name);
     if (kind.content == formats::ContentKind::Other) {

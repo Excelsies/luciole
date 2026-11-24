@@ -3,6 +3,7 @@
 #include "formats/file_kind.h"
 #include "fs/archive_type.h"
 #include "fs/gio_ptr.h"
+#include "model/private_key.h"
 #include "operations/archive_service.h"
 #include "thumbnails/mesh_preview.h"
 #include "thumbnails/table_loader.h"
@@ -22,11 +23,12 @@ namespace luciole {
 
     constexpr auto kAnimatedTypes = std::array{"image/gif"sv, "image/apng"sv, "image/png"sv, "image/webp"sv};
 
-    // Text types the "text/" prefix and the name do not cover. Key files are text so their loader refuses them.
+    // Text types the "text/" prefix and the name do not cover. Key and certificate containers are read, so their loader
+    // can refuse them: isKeyContentType.
     constexpr auto kTextTypes = std::array{
-        "application/json"sv,  "application/xml"sv,           "application/yaml"sv,      "application/x-yaml"sv,
-        "application/toml"sv,  "application/x-shellscript"sv, "application/x-desktop"sv, "application/sql"sv,
-        "application/x-nix"sv, "application/x-pem-file"sv,    "application/x-pem-key"sv, "application/pgp-keys"sv,
+        "application/json"sv,      "application/xml"sv,  "application/yaml"sv,
+        "application/x-yaml"sv,    "application/toml"sv, "application/x-shellscript"sv,
+        "application/x-desktop"sv, "application/sql"sv,  "application/x-nix"sv,
     };
 
     // What GIO reports when nothing names the type.
@@ -54,6 +56,7 @@ namespace luciole {
       return named.content == formats::ContentKind::Text
           || type.starts_with("text/")
           || listed(kTextTypes, type)
+          || isKeyContentType(type)
           || type.ends_with("+json")
           || type.ends_with("+xml");
     }

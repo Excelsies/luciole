@@ -105,6 +105,10 @@ namespace {
       // Key files are read as text so their loader can refuse them; the bytes decide, never the name.
       Row{"server.pem", "application/x-pem-file", Kind::Text, Kind::Text},
       Row{"signing.asc", "application/pgp-keys", Kind::Text, Kind::Text},
+      // Certificate and key containers a MIME database may type in many ways: all are read, and the bytes decide.
+      Row{"bundle.pem", "application/pkcs7-mime", Kind::Text, Kind::Text},
+      Row{"chain.crt", "application/pkix-cert", Kind::Text, Kind::Text},
+      Row{"store.p12", "application/x-pkcs12", Kind::Text, Kind::Text},
       Row{"id_ed25519", "application/octet-stream", Kind::Binary, Kind::Binary},
   };
 

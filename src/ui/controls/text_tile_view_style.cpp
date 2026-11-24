@@ -81,6 +81,8 @@ namespace luciole::text_tile_view {
       };
     case TextDocumentState::PrivateKey:
       return {"This file holds a private key, so it is not shown.", false};
+    case TextDocumentState::Container:
+      return {"This is a binary certificate or key container, so it is not shown.", false};
     case TextDocumentState::Unreadable:
       return {
           source.message.empty() ? "This file could not be read." : "This file could not be read: " + source.message,

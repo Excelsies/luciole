@@ -26,6 +26,7 @@ namespace luciole {
     Cut,        // the first part of a file too large to show in full
     NotText,    // a hex dump of the first bytes
     PrivateKey, // the bytes hold private key material; nothing is shown
+    Container,  // a binary certificate or key container; nothing is shown, not even as hex
     Unreadable, // message holds the reason
     Changed,    // the file changed while it was read
     Cancelled,
