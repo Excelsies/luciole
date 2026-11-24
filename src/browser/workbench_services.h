@@ -96,6 +96,8 @@ namespace luciole {
     void refreshChild(const std::string& name);
     // Drops the refreshed children and walks the folder again: at once when its walk ended, else once it ends.
     void walkFolderAgain();
+    // The same for a request of the user: the folder's walk may start at once, whatever its last one took.
+    void remeasure();
     // Drops the walks of `root` and of folders below it, started or not, so a started one is cancelled and none starts
     // again; the next enter() plans the walks of the folder the page goes to.
     void release(const Location& root);

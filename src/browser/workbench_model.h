@@ -57,6 +57,9 @@ namespace luciole {
     // kPublishInterval; a change of the folder itself, or of more entries than that, walks the whole folder again.
     // A folder or child walked before is walked again no sooner than its WorkbenchWalks due time.
     void invalidateChild(const std::string& name);
+    // The user asked to reload: the folder is measured again, at once and not for a changed entry alone. The numbers
+    // shown stay until the new ones arrive; a request while the walk runs makes at most one more walk.
+    void remeasure();
     // The drive at `root` is being removed: no walk of it or of a folder below it runs or starts.
     void releaseLocation(const Location& root);
 

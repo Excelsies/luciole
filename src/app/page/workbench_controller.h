@@ -134,6 +134,8 @@ public:
   bool resizing() const;
   // The mode shows no docked preview, so the page reports none and the preview's shortcut changes nothing.
   bool hidesDockedPreview() const;
+  // The user reloaded: the folder's sizes are measured again; the numbers shown stay until the new ones arrive.
+  void remeasure();
   // ~BrowserPage(), before the scene goes: gives the file pane back and frees the view.
   void close();
   // The column preview's editor, made on first use. It lives as long as the page, so a question about unsaved changes

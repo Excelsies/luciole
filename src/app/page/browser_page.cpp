@@ -1614,7 +1614,11 @@ void BrowserPage::runAction(
       {Action::Up, [](BrowserPage& page, const Call&) { page.leaveFolder(); }},
       {Action::Home, [](BrowserPage& page, const Call&) { page.browser().home(); }},
       {Action::Root, [](BrowserPage& page, const Call&) { page.browser().open(luciole::Location::fromPath("/")); }},
-      {Action::Refresh, [](BrowserPage& page, const Call&) { page.browser().refresh(); }},
+      {Action::Refresh,
+       [](BrowserPage& page, const Call&) {
+         page.browser().refresh();
+         page.m_workbench.remeasure(); // the reload command of the key, the menu and the toolbar
+       }},
       {Action::Stop, [](BrowserPage& page, const Call&) { page.browser().stop(); }},
       {Action::EditLocation, [](BrowserPage& page, const Call&) { page.m_locationBar.beginLocationEdit(); }},
       {Action::Search, [](BrowserPage& page, const Call&) { page.m_locationBar.openFilter(); }},

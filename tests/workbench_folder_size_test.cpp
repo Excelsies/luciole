@@ -145,6 +145,106 @@ namespace {
     const auto totals = luciole::walkFolderTotals({entryOf(base / "links")}, {}, [](const auto&) {});
     TEST_CHECK(totals.bytes == 2000 && !totals.partial());
   }
+  // Waits for the measure of the model's folder to settle: a snapshot, nothing measuring, then a pause with no walk
+  // starting again.
+  void settleModel(Pump& pump, luciole::WorkbenchModel& model) {
+    pump.until([&] { return model.snapshot() && !model.measuring(); });
+    const auto end = std::chrono::steady_clock::now() + std::chrono::milliseconds(300);
+    pump.until([&] { return std::chrono::steady_clock::now() > end || model.measuring(); });
+    pump.until([&] { return !model.measuring(); });
+  }
+
+  // F5 measures the opened folder again: after a file was added or removed inside a subfolder, which the folder's
+  // own monitor does not see, the cell gets the new number, and the old one stays until it does.
+  void reloadMeasuresAgain(const fs::path& base) {
+    write(base / "reload" / "a" / "one", 1000);
+    write(base / "reload" / "b" / "one", 3000);
+    write(base / "reload" / "b" / "two", 500);
+    luciole::WorkbenchServices services;
+    luciole::WorkbenchModel model(services.measureCache(), {.ancestorLevels = 0});
+    Pump pump;
+    model.setLocation(Location::fromPath((base / "reload").native()));
+    settleModel(pump, model);
+    TEST_CHECK(model.snapshot()->folderSizeText("a") == "1000 bytes");
+    TEST_CHECK(model.snapshot()->folderSizeText("b") == "3.4\u00a0KiB");
+
+    write(base / "reload" / "a" / "two", 2000);
+    fs::remove(base / "reload" / "b" / "two");
+    const auto pause = std::chrono::steady_clock::now() + std::chrono::milliseconds(400);
+    pump.until([&] { return std::chrono::steady_clock::now() > pause; });
+    TEST_CHECK(model.snapshot()->folderSizeText("a") == "1000 bytes"); // nothing noticed the change
+    model.remeasure();
+    // The old numbers stay in place until the new ones arrive: no snapshot shows a cell empty.
+    std::vector<std::shared_ptr<const WorkbenchSnapshot>> seen;
+    model.setChangedCallback([&] {
+      if (const auto latest = model.snapshot(); latest && (seen.empty() || seen.back() != latest)) {
+        seen.push_back(latest);
+      }
+    });
+    settleModel(pump, model);
+    model.setChangedCallback({});
+    TEST_CHECK(model.snapshot()->folderSizeText("a") == "2.9\u00a0KiB");
+    TEST_CHECK(model.snapshot()->folderSizeText("b") == "2.9\u00a0KiB");
+    for (const auto& snapshot : seen) {
+      TEST_CHECK(!snapshot->folderSizeText("a").empty() && !snapshot->folderSizeText("b").empty());
+    }
+
+    // With a child walked again alone, F5 drops that walk and measures the folder: both folders end exact.
+    write(base / "reload" / "a" / "three", 1000);
+    write(base / "reload" / "b" / "three", 1000);
+    model.invalidateChild("a");
+    model.remeasure();
+    settleModel(pump, model);
+    TEST_CHECK(model.snapshot()->folderSizeText("a") == "3.9\u00a0KiB"); // 4000 bytes
+    TEST_CHECK(model.snapshot()->folderSizeText("b") == "3.9\u00a0KiB");
+  }
+
+  // A second F5 while the walk runs does not start another beside it: the walk ends, and at most one more follows.
+  void reloadDuringAWalk(const fs::path& base) {
+    for (int folder = 0; folder < 3; ++folder) {
+      for (int file = 0; file < 300; ++file) {
+        write(base / "during" / std::format("d{}", folder) / std::format("f{:03}", file), 10);
+      }
+    }
+    struct Gate {
+      std::mutex mutex;
+      std::condition_variable changed;
+      bool open = false;
+      std::size_t walks = 0; // walks that stored a partial table first
+      std::size_t tables = 0;
+    } gate;
+    luciole::MeasureServiceOptions options;
+    options.publishInterval = std::chrono::milliseconds(1);
+    options.afterPartial = [&gate] {
+      std::unique_lock lock(gate.mutex);
+      ++gate.tables;
+      gate.changed.wait_for(lock, std::chrono::seconds(30), [&] { return gate.open; });
+    };
+    luciole::SubtreeMeasureService service(options);
+    luciole::MeasureCache cache(service);
+    luciole::WorkbenchModel model(cache, {.ancestorLevels = 0});
+    Pump pump;
+    model.setLocation(Location::fromPath((base / "during").native()));
+    pump.until([&] {
+      const std::lock_guard lock(gate.mutex);
+      return gate.tables > 0;
+    });
+    write(base / "during" / "d0" / "late", 5000); // changes while the first walk is held
+    model.remeasure();
+    model.remeasure();
+    model.remeasure();
+    {
+      const std::lock_guard lock(gate.mutex);
+      gate.open = true;
+      gate.changed.notify_all();
+    }
+    settleModel(pump, model);
+    TEST_CHECK(model.snapshot()->folderSizeText("d0") == "7.8\u00a0KiB"); // 300 files of 10 bytes and 5000
+    TEST_CHECK(model.snapshot()->folderSizeText("d1") == "2.9\u00a0KiB");
+    const auto status = service.status();
+    TEST_CHECK(status.queued == 0 && status.running == 0);
+  }
+
   // The walk of the folder stops after each partial table until the main context has seen what the model publishes
   // for it, so every partial table is observed. In every snapshot a folder's cell is empty, starts with "≥", or is
   // the final text; once it shows a number it never goes empty again; the last text has no mark.
@@ -230,6 +330,8 @@ int main() {
   textOfAFolderTheSnapshotDoesNotMeasure();
   hardLinkedFileCountsOnce(folder.path());
   cellsGrowWithoutBlinking(folder.path());
+  reloadMeasuresAgain(folder.path());
+  reloadDuringAWalk(folder.path());
   std::println("workbench folder size checks passed");
   return 0;
 }

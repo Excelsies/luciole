@@ -172,6 +172,12 @@ void WorkbenchController::unmount() {
   m_session.reset();
 }
 
+void WorkbenchController::remeasure() {
+  if (m_session) {
+    m_session->model().remeasure();
+  }
+}
+
 void WorkbenchController::close() {
   if (m_session) {
     unmount();

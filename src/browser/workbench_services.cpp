@@ -147,6 +147,14 @@ void luciole::WorkbenchWalks::walkFolderAgain() {
   }
 }
 
+void luciole::WorkbenchWalks::remeasure() {
+  walkFolderAgain();
+  const auto found = std::ranges::find(m_walks, Want::Folder, &Walk::want);
+  if (found != m_walks.end()) {
+    found->due = Clock::now();
+  }
+}
+
 void luciole::WorkbenchWalks::clear() {
   stopTimer();
   m_walks.clear();
