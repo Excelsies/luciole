@@ -69,7 +69,7 @@ namespace luciole {
     std::shared_ptr<const std::vector<VisitRecord>> visits; // ordered by URI; null for none
     workbench::LayoutSettings settings;
     std::optional<FileError> error;
-    bool carry = false; // folders not entered yet keep the size `previous` showed for them
+    bool carry = false; // a measure runs: folders not entered yet keep the size `previous` showed for them
   };
 
   // A child of the folder measured again on its own, as the main context hands it to a build.
@@ -88,7 +88,7 @@ namespace luciole {
     std::vector<WorkbenchChildTable> children;
     std::optional<FileError> error; // the folder's walk failed
     bool folderFinished = false;    // the folder's walk has ended
-    bool carry = false;             // the second pass runs: folders not entered yet keep the size shown before
+    bool carry = false;             // a measure runs: folders not entered yet keep the size shown before
     double now = 0;
   };
 

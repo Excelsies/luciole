@@ -120,8 +120,6 @@ namespace luciole {
     bool jumpsPlanned() const { return m_jumpsPlanned; }
     // The folder's walk or a refreshed child's has not finished.
     bool waiting() const;
-    // The second pass has folders to measure or sizes to apply.
-    bool passPending() const { return m_pass.pending(); }
 
   private:
     void poll();

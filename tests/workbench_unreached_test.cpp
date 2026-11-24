@@ -318,6 +318,47 @@ namespace {
     }
   }
 
+  // A second Refresh before the first one has ended, at any point of it: no snapshot has a blank cell, a root with
+  // nothing counted, or a row that is not entered, from the first press to the end.
+  void sizesStayThroughTwoRefreshes(const fs::path& base) {
+    constexpr int kCount = 8;
+    const auto folder = tree(base / "twice", kCount, 1500);
+    for (const int delayMs : {0, 60, 200, 500, 900}) {
+      Gate gate;
+      Rig rig(kCount + 2000, [&gate] { gate.hold(); });
+      luciole::WorkbenchModel model(rig.cache, {.ancestorLevels = 0});
+      Pump pump;
+      model.setLocation(Location::fromPath(folder.native()));
+      settle(pump, model);
+      gate.paceMs = 15;
+      gate.armed = true;
+      std::vector<std::shared_ptr<const luciole::WorkbenchSnapshot>> seen;
+      model.setChangedCallback([&] {
+        if (const auto latest = model.snapshot(); latest && (seen.empty() || seen.back() != latest)) {
+          seen.push_back(latest);
+        }
+      });
+      model.remeasure();
+      const auto second = std::chrono::steady_clock::now() + std::chrono::milliseconds(delayMs);
+      pump.until([&] { return std::chrono::steady_clock::now() >= second; });
+      model.remeasure();
+      settle(pump, model);
+      model.setChangedCallback({});
+      for (const auto& snapshot : seen) {
+        const auto& root = snapshot->tree.nodes[snapshot->tree.root];
+        TEST_CHECK(root.bytes > 0);
+        for (int i = 0; i < kCount; ++i) {
+          const auto name = std::format("s{:04}", i);
+          TEST_CHECK(!snapshot->folderSizeText(name).empty());
+          const auto id = snapshot->node(name);
+          TEST_CHECK(id != luciole::workbench::kNoNode && !snapshot->tree.nodes[id].notEntered);
+        }
+      }
+      int cut = 0;
+      TEST_CHECK(exactCells(*model.snapshot(), kCount, 1500, 1, cut) == kCount - 1 && cut == 1);
+    }
+  }
+
   // Refresh while a walk runs: the next walk starts when that one ends, not after the wait a changing folder gets.
   void refreshStartsAtOnce(const fs::path& base) {
     const auto folder = tree(base / "atonce", 3, 300, 0);
@@ -346,5 +387,6 @@ int main() {
   refreshMidPass(scratch.path());
   refreshStartsAtOnce(scratch.path());
   sizesStayThroughRefresh(scratch.path());
+  sizesStayThroughTwoRefreshes(scratch.path());
   return 0;
 }
