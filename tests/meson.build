@@ -275,6 +275,7 @@ test_table = [
   {'name': 'navigation-services', 'deps': [browser_dep, platform_dep, event_loop_dep], 'env': gio_env},
   {'name': 'folder-totals', 'deps': [fs_dep], 'timeout': 60, 'env': gio_env},
   {'name': 'subtree-measure-walk', 'deps': [fs_dep], 'timeout': 60, 'env': gio_env},
+  {'name': 'subtree-measure-folded', 'deps': [fs_dep], 'timeout': 60, 'env': gio_env},
   {'name': 'subtree-measure-unentered', 'deps': [fs_dep], 'timeout': 60, 'env': gio_env},
   {'name': 'measure-amend', 'deps': [fs_dep], 'timeout': 60, 'env': gio_env},
   {'name': 'subtree-measure', 'deps': [fs_dep], 'timeout': 60, 'env': gio_env},

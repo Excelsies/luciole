@@ -88,7 +88,7 @@ namespace {
     for (const auto& record : amended->records | std::views::drop(1)) {
       if (record.flags.truncated) {
         ++cut;
-        TEST_CHECK(!record.flags.notEntered); // the entered child stays as the walk left it
+        TEST_CHECK(!record.flags.notEntered);           // the entered child stays as the walk left it
         TEST_CHECK(record.totals.apparentBytes == 200); // the two files it counted
         sum += 200;
         continue;

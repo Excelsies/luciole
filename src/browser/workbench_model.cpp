@@ -472,12 +472,10 @@ void luciole::WorkbenchModel::setVisits(WorkbenchVisits visits) {
 void luciole::WorkbenchModel::releaseLocation(const Location& root) { m_state->walks.release(root); }
 
 void luciole::WorkbenchModel::remeasure() {
-  auto& state = *m_state;
-  if (!state.location || state.unmeasured || state.detached) {
-    return;
+  if (m_state->location && !m_state->unmeasured && !m_state->detached) {
+    m_state->walks.remeasure();
+    m_state->pump();
   }
-  state.walks.remeasure();
-  state.pump();
 }
 
 void luciole::WorkbenchModel::invalidateChild(const std::string& name) {
