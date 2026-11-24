@@ -78,6 +78,7 @@ namespace luciole {
       bool started = false;
       bool finished = false;
       bool again = false;          // its folder changed while it ran: walked again once it ends
+      bool soon = false;           // the user asked for the walk again: it starts as soon as this one ends
       Clock::time_point startedAt; // when its last walk was asked for
       Clock::time_point due;       // when it may be walked again
       MeasureCache::Lease lease;
@@ -100,7 +101,8 @@ namespace luciole {
     void refreshChild(const std::string& name);
     // Drops the refreshed children and walks the folder again: at once when its walk ended, else once it ends.
     void walkFolderAgain();
-    // The same for a request of the user: the folder's walk may start at once, whatever its last one took.
+    // The same for a request of the user: the folder's walk starts at once, or as soon as the one that runs ends,
+    // whatever its last one took.
     void remeasure();
     // Drops the walks of `root` and of folders below it, started or not, so a started one is cancelled and none starts
     // again; the next enter() plans the walks of the folder the page goes to.

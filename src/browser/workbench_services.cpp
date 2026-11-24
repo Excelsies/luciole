@@ -150,10 +150,13 @@ void luciole::WorkbenchWalks::walkFolderAgain() {
 }
 
 void luciole::WorkbenchWalks::remeasure() {
+  const auto running =
+      std::ranges::any_of(m_walks, [](const Walk& walk) { return walk.want == Want::Folder && walking(walk); });
   walkFolderAgain();
   const auto found = std::ranges::find(m_walks, Want::Folder, &Walk::want);
   if (found != m_walks.end()) {
     found->due = Clock::now();
+    found->soon = running;
   }
 }
 
@@ -227,7 +230,9 @@ void luciole::WorkbenchWalks::poll() {
     if (!walk.finished) {
       continue;
     }
-    walk.due = now + std::max<Clock::duration>(kAgainGap, (now - walk.startedAt) * kAgainFactor);
+    walk.due = std::exchange(walk.soon, false)
+        ? now
+        : now + std::max<Clock::duration>(kAgainGap, (now - walk.startedAt) * kAgainFactor);
     if (std::exchange(walk.again, false) && walk.found.stale) {
       walk.started = false;
       walk.finished = false;

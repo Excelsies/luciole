@@ -273,6 +273,22 @@ namespace {
     TEST_CHECK(exactCells(*model.snapshot(), kCount, 1500, 1, cut) == kCount - 1 && cut == 1);
     TEST_CHECK(neverEntered(rig.cache, place) == 0);
   }
+  // Refresh while a walk runs: the next walk starts when that one ends, not after the wait a changing folder gets.
+  void refreshStartsAtOnce(const fs::path& base) {
+    const auto folder = tree(base / "atonce", 3, 300, 0);
+    Gate gate;
+    gate.armed = true;
+    Rig rig(2'000'000, [&gate] { gate.hold(); });
+    luciole::WorkbenchModel model(rig.cache, {.ancestorLevels = 0});
+    Pump pump;
+    model.setLocation(Location::fromPath(folder.native()));
+    pump.until([&] { return gate.heldNow() > 0; });
+    model.remeasure();
+    const auto released = std::chrono::steady_clock::now();
+    gate.release();
+    pump.until([&] { return model.snapshot() && !model.measuring(); });
+    TEST_CHECK(std::chrono::steady_clock::now() - released < std::chrono::milliseconds(700));
+  }
 } // namespace
 
 int main() {
@@ -283,5 +299,6 @@ int main() {
   fewFolders(scratch.path());
   leavingTheFolderMidPass(scratch.path());
   refreshMidPass(scratch.path());
+  refreshStartsAtOnce(scratch.path());
   return 0;
 }
