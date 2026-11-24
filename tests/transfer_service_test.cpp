@@ -399,6 +399,29 @@ namespace {
       TEST_CHECK(!luciole::sameRenamedRevision(before, after, true));
     }
   }
+  void testReplacementSourceGuard(Pump& pump) {
+    for (const auto action : {TransferAction::Copy, TransferAction::Link}) {
+      for (bool alias : {false, true}) {
+        Fixture f;
+        fs::create_directory(f.destination("item"));
+        write(f.destination("item/item"), "source bytes");
+        write(f.destination("item/keep"), "unrelated bytes");
+        if (alias) {
+          fs::create_directory_symlink(f.destination("item"), f.root / "alias");
+        }
+        luciole::TransferService service;
+        pump.run(
+            service, {location(alias ? f.root / "alias/item" : f.destination("item/item"))}, f.destination(""), action,
+            [](const auto&) { return TransferConflictChoice::Replace; }
+        );
+        TEST_CHECK(service.results()[0].outcome == TransferOutcome::Failed);
+        TEST_CHECK(service.results()[0].error->kind == luciole::FileErrorKind::WouldRecurse);
+        TEST_CHECK(read(f.destination("item/item")) == "source bytes");
+        TEST_CHECK(read(f.destination("item/keep")) == "unrelated bytes");
+        f.clean();
+      }
+    }
+  }
   void testReplacementTimestampGuards(Pump& pump) {
     for (const auto action : {TransferAction::Copy, TransferAction::Move}) {
       for (const bool changeRetained : {false, true}) {
@@ -4552,6 +4575,7 @@ int main(int argc, char** argv) {
       testMoveReplacementRecovery(pump);
       testMoveRecoveryGuards(pump);
       testMoveRetentionHandoffFailure();
+      testReplacementSourceGuard(pump);
       testReplacementTimestampGuards(pump);
       drainHistoryCleanup();
       std::println("Replacement filesystem checks passed: {}", fixtureParent);
@@ -4559,6 +4583,7 @@ int main(int argc, char** argv) {
     }
     TEST_CHECK(argc == 1);
     testRenameRevisions();
+    testReplacementSourceGuard(pump);
     testReplacementTimestampGuards(pump);
     testSymbolicLinkDrops(pump);
     testCopyHistory(pump);

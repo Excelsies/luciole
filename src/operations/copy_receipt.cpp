@@ -659,6 +659,23 @@ luciole::CopyReceipt::reverse(const CancelToken& token, std::atomic<std::size_t>
   return reverseImpl(token, completed, {}, -1, true);
 }
 
+std::shared_ptr<const luciole::CopyReceipt>
+luciole::CopyReceipt::withoutPredecessors(std::shared_ptr<const CopyReceipt> receipt) {
+  if (!receipt
+      || !std::ranges::any_of(receipt->m_effects, [](const auto& effect) { return effect->m_previous != nullptr; })) {
+    return receipt;
+  }
+  auto result = std::make_shared<CopyReceipt>(*receipt);
+  for (auto& effect : result->m_effects) {
+    if (effect->m_previous) {
+      effect = std::shared_ptr<const CopyEffect>(
+          new CopyEffect(effect->m_destination, effect->m_storage, effect->m_tree, effect->m_hidden)
+      );
+    }
+  }
+  return result;
+}
+
 luciole::CopyReplayResult luciole::CopyReceipt::reverseImpl(
     const CancelToken& token, std::atomic<std::size_t>& completed, const std::map<std::string, int>& parents,
     int retentionParent, bool captureInverse
