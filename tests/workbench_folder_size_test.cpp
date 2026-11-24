@@ -9,11 +9,13 @@
 
 #include <algorithm>
 #include <chrono>
+#include <condition_variable>
 #include <filesystem>
 #include <format>
 #include <fstream>
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <poll.h>
 #include <print>
 #include <string>
@@ -141,16 +143,30 @@ namespace {
     const auto totals = luciole::walkFolderTotals({entryOf(base / "links")}, {}, [](const auto&) {});
     TEST_CHECK(totals.bytes == 2000 && !totals.partial());
   }
-  // Folders of 400 files each, walked with a snapshot per millisecond: once a cell shows a number it never goes blank
-  // again, a number is marked "≥" until the folder is done, and the last text has no mark.
+  // The walk of the folder stops after each partial table until the main context has seen what the model publishes
+  // for it, so every partial table is observed. In every snapshot a folder's cell is empty, starts with "≥", or is
+  // the final text; once it shows a number it never goes empty again; the last text has no mark.
   void cellsGrowWithoutBlinking(const fs::path& base) {
-    for (int folder = 0; folder < 6; ++folder) {
+    constexpr int kFolders = 6;
+    for (int folder = 0; folder < kFolders; ++folder) {
       for (int file = 0; file < 400; ++file) {
         write(base / "grow" / std::format("d{}", folder) / std::format("f{:03}", file), 10);
       }
     }
+    struct Gate {
+      std::mutex mutex;
+      std::condition_variable changed;
+      std::size_t stored = 0;   // partial tables stored by the walk
+      std::size_t released = 0; // partial tables the main context has looked at
+    } gate;
     luciole::MeasureServiceOptions options;
     options.publishInterval = std::chrono::milliseconds(1);
+    options.afterPartial = [&gate] {
+      std::unique_lock lock(gate.mutex);
+      const auto mine = ++gate.stored;
+      gate.changed.notify_all();
+      gate.changed.wait_for(lock, std::chrono::seconds(30), [&] { return gate.released >= mine; });
+    };
     luciole::SubtreeMeasureService service(options);
     luciole::MeasureCache cache(service);
     luciole::WorkbenchModel model(cache, {.ancestorLevels = 0});
@@ -160,22 +176,48 @@ namespace {
         seen.push_back(latest);
       }
     });
+    const auto stored = [&] {
+      const std::lock_guard lock(gate.mutex);
+      return gate.stored;
+    };
+    const auto release = [&] {
+      const std::lock_guard lock(gate.mutex);
+      gate.released = gate.stored;
+      gate.changed.notify_all();
+    };
     Pump pump;
     model.setLocation(Location::fromPath((base / "grow").native()));
-    pump.until([&] { return model.snapshot() && !model.measuring(); });
+    std::size_t looked = 0;
+    while (!(model.snapshot() && !model.measuring())) {
+      pump.until([&] { return stored() > looked || (model.snapshot() && !model.measuring()); });
+      if (stored() > looked) {
+        // The model publishes at most every kPublishInterval: wait for what it makes of this table.
+        const auto before = seen.size();
+        const auto limit = std::chrono::steady_clock::now() + 3 * luciole::WorkbenchModel::kPublishInterval;
+        pump.until([&] { return seen.size() > before || std::chrono::steady_clock::now() > limit; });
+        looked = stored();
+        release();
+      }
+    }
+    release();
     model.setChangedCallback({});
-    TEST_CHECK(seen.size() >= 2);
-    for (int folder = 0; folder < 6; ++folder) {
+    TEST_CHECK(seen.size() >= 3 && looked >= 3);
+    const auto last = [&](const std::string& name) { return seen.back()->folderSizeText(name); };
+    std::size_t marked = 0;
+    for (int folder = 0; folder < kFolders; ++folder) {
       const auto name = std::format("d{}", folder);
+      const auto final = last(name);
+      TEST_CHECK(final == "3.9\u00a0KiB" && !final.starts_with("≥")); // 400 files of 10 bytes
       bool shown = false;
       for (const auto& snapshot : seen) {
         const auto text = snapshot->folderSizeText(name);
+        TEST_CHECK(text.empty() || text.starts_with("≥") || text == final);
         TEST_CHECK(!shown || !text.empty());
         shown = shown || !text.empty();
+        marked += text.starts_with("≥") ? 1 : 0;
       }
-      TEST_CHECK(seen.back()->folderSizeText(name) == "3.9\u00a0KiB"); // 400 files of 10 bytes
-      TEST_CHECK(!seen.back()->folderSizeText(name).starts_with("≥"));
     }
+    TEST_CHECK(marked > 0); // a partial table was seen with a number in it
   }
 
 } // namespace
