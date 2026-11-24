@@ -62,14 +62,8 @@ bool luciole::DirectoryModel::applySnapshot(
   const auto focusedRow = focused ? rowOf(*focused) : std::nullopt;
   const auto focusedParent = focused ? treeParent(*focused) : std::nullopt;
   const bool focusedSelected = focused && m_selection.selected.contains(*focused);
-  std::unordered_map<EntryId, std::optional<EntryId>> trackedParents;
-  if (m_replacementKeepsFocus) {
-    for (const auto id : trackedIds()) {
-      trackedParents.emplace(id, treeParent(id));
-    }
-  }
   m_preserveRootOrder = preserveRootOrder;
-  m_treeParents = std::move(parents);
+  const auto previousParents = std::exchange(m_treeParents, std::move(parents));
   m_alternateSortKeys.clear();
   m_alternateKeys.clear();
   m_preparedSortField.reset();
@@ -135,7 +129,7 @@ bool luciole::DirectoryModel::applySnapshot(
           entry.symlink || entry.type == FileType::Symlink || (!regular && entry.type != FileType::Unknown);
     }
   }
-  const auto replaced = m_replacementKeepsFocus && sameLocation ? replacedIds(snapshot, slots, trackedParents)
+  const auto replaced = m_replacementKeepsFocus && sameLocation ? replacedIds(snapshot, slots, previousParents)
                                                                 : std::unordered_map<EntryId, EntryId>{};
   std::vector<EntryId> removalOrder;
   if (sameLocation
@@ -178,36 +172,33 @@ bool luciole::DirectoryModel::applySnapshot(
   return true;
 }
 
-std::vector<luciole::EntryId> luciole::DirectoryModel::trackedIds() const {
-  std::vector<EntryId> ids;
-  for (const auto id : {m_selection.focused, m_selection.anchor, m_scrollAnchor}) {
-    if (id) {
-      ids.push_back(*id);
-    }
-  }
-  ids.insert(ids.end(), m_selection.selected.begin(), m_selection.selected.end());
-  return ids;
-}
-
 std::unordered_map<luciole::EntryId, luciole::EntryId> luciole::DirectoryModel::replacedIds(
     const DirectorySnapshot& snapshot, const std::vector<std::uint32_t>& slots,
-    const std::unordered_map<EntryId, std::optional<EntryId>>& parents
+    const std::unordered_map<EntryId, EntryId>& previousParents
 ) const {
   // Name and tree parent of a tracked entry that is gone -> its ID.
   std::map<std::pair<std::string_view, std::optional<EntryId>>, EntryId> wanted;
-  for (const auto id : trackedIds()) {
+  const auto track = [&](EntryId id) {
     if (slots.empty() || slots[sourceSlot(slots, snapshot.entries, id)] == kNoRow) {
       if (const auto source = sourceOf(id)) {
-        const auto parent = parents.find(id);
+        const auto parent = previousParents.find(id);
         wanted.emplace(
             std::pair(
                 std::string_view(m_snapshot.entries.brief(*source).name),
-                parent != parents.end() ? parent->second : std::nullopt
+                parent != previousParents.end() ? std::optional(parent->second) : std::nullopt
             ),
             id
         );
       }
     }
+  };
+  for (const auto id : {m_selection.focused, m_selection.anchor, m_scrollAnchor}) {
+    if (id) {
+      track(*id);
+    }
+  }
+  for (const auto id : m_selection.selected) {
+    track(id);
   }
   std::unordered_map<EntryId, EntryId> replaced;
   if (wanted.empty()) {

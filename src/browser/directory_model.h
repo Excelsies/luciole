@@ -111,12 +111,11 @@ namespace luciole {
 
     // The tracked entries (cursor, anchor, scroll anchor, selection) that `snapshot` no longer lists by ID, each
     // with the ID it lists under the same name: the entry replaced at its path. `slots` are those of `snapshot`.
-    // Only an entry with the same tree parent counts; `parents` holds the old parent of each tracked ID.
+    // Only an entry with the same tree parent counts; `previousParents` are the tree parents of the old listing.
     std::unordered_map<EntryId, EntryId> replacedIds(
         const DirectorySnapshot& snapshot, const std::vector<std::uint32_t>& slots,
-        const std::unordered_map<EntryId, std::optional<EntryId>>& parents
+        const std::unordered_map<EntryId, EntryId>& previousParents
     ) const;
-    std::vector<EntryId> trackedIds() const;
     void followReplacements(const std::unordered_map<EntryId, EntryId>& replaced);
     void prepareSortKeys();
     void rebuildProjection(bool resort = true);
