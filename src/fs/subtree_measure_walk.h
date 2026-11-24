@@ -2,6 +2,7 @@
 
 #include "fs/cancel_token.h"
 #include "fs/file_error.h"
+#include "fs/folded_children.h"
 #include "fs/location.h"
 
 #include <chrono>
@@ -81,6 +82,8 @@ namespace luciole {
     std::shared_ptr<const std::vector<MeasureFile>> files;
     MeasureRemainder otherFiles;
     MeasureRemainder otherDirectories;
+    // Null unless child records were folded into otherDirectories.
+    std::shared_ptr<const FoldedChildren> folded;
   };
 
   struct MeasureTable {
@@ -95,10 +98,17 @@ namespace luciole {
     std::optional<FileError> error; // the root could not be measured; records is empty
   };
 
+  // The compact list of the child records at `indexes`, folded away from `records`.
+  std::shared_ptr<const FoldedChildren>
+  foldedChildren(const std::vector<MeasureRecord>& records, const std::vector<std::uint32_t>& indexes, bool capped);
+
   struct MeasureOptions {
     std::uint32_t detailDepth = 3; // records for the root and this many levels below it
     std::uint32_t fileCap = 24;    // largest files kept per record
     std::uint32_t childCap = 512;  // largest child records kept per record
+    // Folded children kept by name and size, largest first; the rest are only in the remainder. At 16 bytes and a name
+    // each, this many cost about 3 MB.
+    std::uint32_t foldedCap = 100'000;
     std::uint64_t entryBudget = 2'000'000;
     std::uint32_t maxDepth = 128; // deeper directories are counted as items but not entered
     std::size_t hardLinkBound = 100'000;

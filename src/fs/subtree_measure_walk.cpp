@@ -139,6 +139,7 @@ namespace {
         }
       }
       unwind();
+      m_table.records.shrink_to_fit(); // no room is kept for the records that were folded away
       return std::move(m_table);
     }
 
@@ -379,6 +380,7 @@ namespace {
       });
       std::vector<bool> keep(count, false);
       auto& rest = records[parent].otherDirectories;
+      std::vector<std::uint32_t> named; // the folded children that get an entry, largest first
       for (std::size_t i = 0; i < order.size(); ++i) {
         if (i < m_options.childCap) {
           keep[order[i] - first] = true;
@@ -386,8 +388,12 @@ namespace {
           ++rest.count;
           addBelow(rest.totals, records[order[i]].totals);
           rest.totals.items = add(rest.totals.items, records[order[i]].totals.items);
+          if (named.size() < m_options.foldedCap) {
+            named.push_back(order[i]);
+          }
         }
       }
+      records[parent].folded = luciole::foldedChildren(records, named, rest.count > named.size());
       std::vector<std::uint32_t> remap(records.size() - first, kNoMeasureRecord);
       std::vector<luciole::MeasureRecord> tail;
       const auto take = [&](std::uint32_t index) {

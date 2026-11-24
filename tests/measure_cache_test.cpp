@@ -337,6 +337,26 @@ namespace {
     }
     TEST_CHECK(cache.tables() == 3 && cache.records() == 3);
   }
+  // The compact list of folded children counts against the record budget at its size: a table that folded 98 of 100
+  // folders costs more than its records, and the cache stays within its budget with such tables.
+  void foldedChildrenCount(const fs::path& base) {
+    auto options = serviceOptions();
+    options.walk.childCap = 2;
+    SubtreeMeasureService service(options);
+    MeasureCache cache(
+        service, {.recordBudget = 15, .checkAge = std::chrono::hours(1), .maxAge = std::chrono::hours(1)}
+    );
+    const auto folder = tree(base / "folded", 100, 1);
+    const auto found = settle(cache, folder);
+    TEST_CHECK(found.table && found.table->records.size() == 3); // the root and two kept children
+    TEST_CHECK(found.entry()->folded != nullptr && found.entry()->folded->entries.size() == 98);
+    // 98 entries of 16 bytes and 294 bytes of names: well over 1,800 bytes, which is several records.
+    TEST_CHECK(cache.records() > 3 + 5);
+    // A second such folder pushes the first out: the budget counts the lists.
+    const auto other = tree(base / "folded-too", 100, 1);
+    settle(cache, other);
+    TEST_CHECK(cache.tables() == 1 && cache.records() <= 15);
+  }
 } // namespace
 
 int main() {
@@ -351,5 +371,6 @@ int main() {
   emptyTablesEvicted(scratch.path());
   viewIsASnapshot(scratch.path());
   leases(scratch.path());
+  foldedChildrenCount(scratch.path());
   return 0;
 }

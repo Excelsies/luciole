@@ -42,6 +42,8 @@ namespace luciole {
     // folders beyond the child cap. They have an empty name; items counts the folded entries and files the files
     // below them, a later name of a hard-linked file left out.
     std::vector<workbench::NodeId> remainders;
+    // The current folder's children that its table folded into a remainder, by name and size; null when none were.
+    std::shared_ptr<const FoldedChildren> folded;
   };
 
   // The current folder with `levels` levels below it from the cache's view, and one node per ancestor listing its

@@ -35,6 +35,9 @@ namespace luciole {
     double total = 0;                    // the weight of the folder's visible entries, remainders included
     std::optional<FileError> error;      // the folder could not be measured
     bool notMeasured = false;            // the location is not a local folder: nothing is measured, no walk runs
+    // The folder's children its table folded into a remainder, by name and size: the Size cells of rows the tree
+    // does not name. Null when none were.
+    std::shared_ptr<const FoldedChildren> folded = nullptr;
 
     // The share of an entry of the folder's listing: its node's share when the tree names it, otherwise the
     // weight of the listing's own values, with no visits, over the same total, as for an entry folded into a

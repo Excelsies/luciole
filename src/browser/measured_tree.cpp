@@ -84,6 +84,9 @@ namespace {
       auto& tree = m_result.tree;
       tree.now = m_input.now;
       tree.root = level(m_input.current, m_input.entries, m_levels, kNoNode);
+      if (const auto found = m_view.find(m_input.current); found.entry() != nullptr) {
+        m_result.folded = found.entry()->folded;
+      }
       auto expected = m_input.current.parent();
       for (const auto& ancestor : m_input.ancestors | std::views::take(kMaxAncestors)) {
         if (!expected || ancestor.location != *expected) {

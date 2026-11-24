@@ -87,9 +87,18 @@ namespace {
         && priority != luciole::MeasurePriority::Ancestor;
   }
 
-  // What an entry costs against the record budget: a table without records counts as one.
+  // What an entry costs against the record budget: a table without records counts as one, and the compact lists of
+  // folded children count at their size in records.
   std::size_t cost(const Entry& entry) {
-    return std::max<std::size_t>(1, entry.table ? entry.table->records.size() : 0);
+    if (!entry.table) {
+      return 1;
+    }
+    std::size_t listBytes = 0;
+    for (const auto& record : entry.table->records) {
+      listBytes += record.folded ? record.folded->heapBytes() : 0;
+    }
+    constexpr auto kRecordBytes = sizeof(luciole::MeasureRecord);
+    return std::max<std::size_t>(1, entry.table->records.size()) + ((listBytes + kRecordBytes - 1) / kRecordBytes);
   }
 } // namespace
 

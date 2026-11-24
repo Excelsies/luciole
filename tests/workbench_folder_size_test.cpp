@@ -1,3 +1,4 @@
+#include "browser/entry_details.h"
 #include "browser/workbench_model.h"
 #include "browser/workbench_services.h"
 #include "event_loop/glib_poll_source.h"
@@ -86,6 +87,32 @@ namespace {
     TEST_CHECK(snapshot.folderSizeText("n1").empty());
   }
 
+  // The folder's children that its table folded into a remainder are named in a compact list, and the cells find them
+  // there: a snapshot with such a list gives each flag its text.
+  void textOfFoldedChildren() {
+    auto snapshot = snapshotOf({});
+    auto list = std::make_shared<luciole::FoldedChildren>();
+    const auto add = [&list](std::string_view name, std::uint64_t bytes, std::uint8_t flags) {
+      list->names += name;
+      list->entries.push_back(
+          {.apparentBytes = bytes, .nameEnd = static_cast<std::uint32_t>(list->names.size()), .flags = flags}
+      );
+    };
+    using F = luciole::FoldedChildren;
+    add("cut", 1536, F::kTruncated);
+    add("exact", 1536, 0);
+    add("never", 0, F::kTruncated | F::kNotEntered);
+    add("other", 1536, F::kOtherFilesystem);
+    add("unreadable", 1536, F::kUnreadable);
+    snapshot.folded = list;
+    TEST_CHECK(snapshot.folderSizeText("exact") == "1.5\u00a0KiB");
+    TEST_CHECK(snapshot.folderSizeText("cut") == "≥ 1.5\u00a0KiB");
+    TEST_CHECK(snapshot.folderSizeText("never").empty());
+    TEST_CHECK(snapshot.folderSizeText("other").empty());
+    TEST_CHECK(snapshot.folderSizeText("unreadable").empty());
+    TEST_CHECK(snapshot.folderSizeText("absent").empty());
+  }
+
   void write(const fs::path& path, std::size_t bytes) {
     fs::create_directories(path.parent_path());
     std::ofstream(path) << std::string(bytes, 'x');
@@ -152,6 +179,29 @@ namespace {
     const auto end = std::chrono::steady_clock::now() + std::chrono::milliseconds(300);
     pump.until([&] { return std::chrono::steady_clock::now() > end || model.measuring(); });
     pump.until([&] { return !model.measuring(); });
+  }
+
+  // 800 folders, 288 more than the table names: every cell is filled with the exact size, the smallest included.
+  void everyCellOfAWideFolderFills(const fs::path& base) {
+    constexpr int kFolders = 800;
+    for (int folder = 1; folder <= kFolders; ++folder) {
+      write(base / "wide" / std::format("sub{:04}", folder) / "f", static_cast<std::size_t>(folder) * 10);
+    }
+    luciole::WorkbenchServices services;
+    luciole::WorkbenchModel model(services.measureCache(), {.ancestorLevels = 0});
+    Pump pump;
+    model.setLocation(Location::fromPath((base / "wide").native()));
+    settleModel(pump, model);
+    const auto snapshot = model.snapshot();
+    std::size_t named = 0;
+    for (int folder = 1; folder <= kFolders; ++folder) {
+      const auto name = std::format("sub{:04}", folder);
+      named += snapshot->node(name) != luciole::workbench::kNoNode ? 1 : 0;
+      TEST_CHECK(
+          snapshot->folderSizeText(name) == luciole::folderSizeText(static_cast<std::uint64_t>(folder) * 10, false)
+      );
+    }
+    TEST_CHECK(named == 512); // the rest are only in the compact list
   }
 
   // F5 measures the opened folder again: after a file was added or removed inside a subfolder, which the folder's
@@ -328,7 +378,9 @@ int main() {
   const luciole::test::TempFolder folder{"luciole-workbench-folder-size"};
   textOfMeasuredNodes();
   textOfAFolderTheSnapshotDoesNotMeasure();
+  textOfFoldedChildren();
   hardLinkedFileCountsOnce(folder.path());
+  everyCellOfAWideFolderFills(folder.path());
   cellsGrowWithoutBlinking(folder.path());
   reloadMeasuresAgain(folder.path());
   reloadDuringAWalk(folder.path());

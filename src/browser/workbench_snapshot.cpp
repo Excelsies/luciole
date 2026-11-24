@@ -279,6 +279,12 @@ namespace {
     const auto found = std::ranges::lower_bound(shares, name, {}, &luciole::WorkbenchShare::name);
     return found != shares.end() && found->name == name ? &*found : nullptr;
   }
+  bool sameFolded(
+      const std::shared_ptr<const luciole::FoldedChildren>& left,
+      const std::shared_ptr<const luciole::FoldedChildren>& right
+  ) {
+    return left == right || (left && right && *left == *right);
+  }
 } // namespace
 
 double luciole::WorkbenchSnapshot::share(const ListedEntry& entry) const {
@@ -309,8 +315,17 @@ luciole::workbench::NodeId luciole::WorkbenchSnapshot::node(std::string_view nam
 
 std::string luciole::WorkbenchSnapshot::folderSizeText(std::string_view name) const {
   const auto id = node(name);
-  if (notMeasured || id == kNoNode) {
+  if (notMeasured) {
     return {};
+  }
+  if (id == kNoNode) { // a child the table folded: its entry in the compact list
+    const auto* entry = folded ? folded->find(name) : nullptr;
+    constexpr std::uint8_t kBlank =
+        FoldedChildren::kNotEntered | FoldedChildren::kUnreadable | FoldedChildren::kOtherFilesystem;
+    if (entry == nullptr || (entry->flags & kBlank) != 0) {
+      return {};
+    }
+    return luciole::folderSizeText(entry->apparentBytes, (entry->flags & FoldedChildren::kTruncated) != 0);
   }
   const auto& found = tree.nodes[id];
   if (!found.folder
@@ -385,6 +400,7 @@ luciole::finishSnapshot(const WorkbenchDraft& draft, const std::shared_ptr<const
       && previous->location == draft.location
       && previous->settings == draft.settings
       && previous->error == draft.error
+      && sameFolded(previous->folded, draft.measured ? draft.measured->folded : nullptr)
       && sameTree(previous->tree, tree)) {
     return nullptr;
   }
@@ -402,6 +418,8 @@ luciole::finishSnapshot(const WorkbenchDraft& draft, const std::shared_ptr<const
       .shares = std::move(shares),
       .total = total,
       .error = draft.error,
+      .notMeasured = false,
+      .folded = draft.measured ? draft.measured->folded : nullptr,
   });
 }
 
