@@ -86,7 +86,7 @@ namespace luciole {
 
     // `wake` runs on the main context once a walk held back until its due time may start; the owner then calls
     // update(). It may destroy the walks.
-    WorkbenchWalks(MeasureCache& cache, std::function<void()> wake);
+    WorkbenchWalks(MeasureCache& cache, std::function<void()> wake, UnreachedLimits limits = {});
     ~WorkbenchWalks();
     WorkbenchWalks(const WorkbenchWalks&) = delete;
     WorkbenchWalks& operator=(const WorkbenchWalks&) = delete;

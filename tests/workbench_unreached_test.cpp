@@ -359,6 +359,57 @@ namespace {
     }
   }
 
+  // The pass's own limits end it before it reaches a folder that showed a size: that cell goes blank when the pass
+  // ends, and the root is a lower bound that counts exactly the rows still shown.
+  void limitsEndThePassWithCarriedFolders(const fs::path& base) {
+    constexpr int kCount = 8;
+    const auto folder = tree(base / "limited", kCount, 40, 0);
+    Rig rig(kCount + 150);
+    luciole::WorkbenchModel model(
+        rig.cache,
+        {.ancestorLevels = 0,
+         .unreachedLimits = {.children = 1000, .entries = 250, .applyEvery = std::chrono::milliseconds(0)}}
+    );
+    Pump pump;
+    model.setLocation(Location::fromPath(folder.native()));
+    settle(pump, model);
+    const auto filled = [&](const luciole::WorkbenchSnapshot& snapshot) {
+      int count = 0;
+      for (int i = 0; i < kCount; ++i) {
+        count += snapshot.folderSizeText(std::format("s{:04}", i)).empty() ? 0 : 1;
+      }
+      return count;
+    };
+    TEST_CHECK(filled(*model.snapshot()) == kCount); // 40 entries each: the pass reaches every folder
+    for (int i = 0; i < kCount; ++i) {
+      for (int file = 40; file < 140; ++file) {
+        write(folder / std::format("s{:04}", i) / std::format("f{}", file), 100);
+      }
+    }
+    std::vector<int> counts;
+    model.setChangedCallback([&] {
+      if (model.snapshot()) {
+        counts.push_back(filled(*model.snapshot()));
+      }
+    });
+    model.remeasure();
+    settle(pump, model);
+    model.setChangedCallback({});
+    const auto& snapshot = *model.snapshot();
+    // Each folder now costs 140 entries: the pass counts 250 after two and stops; the others it never reached are
+    // blank.
+    TEST_CHECK(filled(snapshot) < kCount && filled(snapshot) >= 2);
+    for (const auto count : counts) {
+      TEST_CHECK(count >= filled(snapshot)); // blank only once the pass ended, never fewer than at the end
+    }
+    const auto& root = snapshot.tree.nodes[snapshot.tree.root];
+    double rows = 0;
+    for (const auto child : luciole::workbench::children(snapshot.tree, snapshot.tree.root)) {
+      rows += snapshot.tree.nodes[child].bytes;
+    }
+    TEST_CHECK(root.lowerBound && root.bytes == rows && root.bytes > 0);
+  }
+
   // Refresh while a walk runs: the next walk starts when that one ends, not after the wait a changing folder gets.
   void refreshStartsAtOnce(const fs::path& base) {
     const auto folder = tree(base / "atonce", 3, 300, 0);
@@ -402,5 +453,6 @@ int main() {
   refreshStartsAtOnce(scratch.path());
   sizesStayThroughRefresh(scratch.path());
   sizesStayThroughTwoRefreshes(scratch.path());
+  limitsEndThePassWithCarriedFolders(scratch.path());
   return 0;
 }

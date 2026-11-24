@@ -20,7 +20,8 @@ namespace luciole {
   using WorkbenchVisits = std::function<std::vector<VisitRecord>(const Location& folder)>;
 
   struct WorkbenchModelOptions {
-    std::size_t ancestorLevels = 64; // ancestors shown and measured, nearest first; at most kMaxAncestors
+    std::size_t ancestorLevels = 64;      // ancestors shown and measured, nearest first; at most kMaxAncestors
+    UnreachedLimits unreachedLimits = {}; // what the second pass of the folder's measure may take
   };
 
   // The measured picture of one Workbench page. Its WorkbenchWalks ask the shared cache for the current folder, whose

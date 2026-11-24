@@ -95,7 +95,7 @@ In Workbench the folder rows' Size cell shows the size Workbench measures for th
 
 When the measure of the open folder runs out of its entry limit before it reaches some subfolders, those are measured one by one afterwards, each with its own limit, and their rows fill in a little later; a subfolder that runs out of its own limit keeps “≥”. This second pass takes the first 1,000 such subfolders by name, and starts no further subfolder once it has counted 2,000,000 entries; the two subfolders being measured at that moment finish within their own 2,000,000-entry limits, so the pass counts at most about 6,000,000 entries. It stops when you leave the folder or refresh, and a subfolder it does not reach stays blank.
 
-A file with several hard links counts once in Workbench, in the folder total and in the rows together, whichever subfolder is measured first, and once per name in List. The same holds across the first measure and the second pass.
+A file with several hard links counts once in Workbench, in the folder total and in the rows together, whichever subfolder is measured first, and once per name in List. The same holds across the first measure and the second pass for up to 100,000 hard-linked files; past that, a later name counts again.
 
 Every subfolder row is filled, however many there are, up to the 100,000 largest subfolders beyond the 512 the picture names; in a folder with more than that, the smallest rows stay blank.
 

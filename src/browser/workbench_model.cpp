@@ -57,11 +57,15 @@ namespace {
 
 struct luciole::WorkbenchModel::State : std::enable_shared_from_this<State> {
   State(MeasureCache& measureCache, WorkbenchModelOptions modelOptions)
-      : cache(measureCache), options(modelOptions), walks(measureCache, [this] {
-          if (const auto self = weak_from_this().lock()) {
-            self->pump();
-          }
-        }) {}
+      : cache(measureCache), options(modelOptions), walks(
+                                                        measureCache,
+                                                        [this] {
+                                                          if (const auto self = weak_from_this().lock()) {
+                                                            self->pump();
+                                                          }
+                                                        },
+                                                        modelOptions.unreachedLimits
+                                                    ) {}
 
   MeasureCache& cache;
   WorkbenchModelOptions options;

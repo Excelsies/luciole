@@ -64,8 +64,8 @@ namespace {
 
 luciole::WorkbenchServices::WorkbenchServices() : m_service(serviceOptions()), m_cache(m_service, cacheOptions()) {}
 
-luciole::WorkbenchWalks::WorkbenchWalks(MeasureCache& cache, std::function<void()> wake)
-    : m_cache(cache), m_pass(cache), m_wake(std::move(wake)) {}
+luciole::WorkbenchWalks::WorkbenchWalks(MeasureCache& cache, std::function<void()> wake, UnreachedLimits limits)
+    : m_cache(cache), m_pass(cache, limits), m_wake(std::move(wake)) {}
 
 luciole::WorkbenchWalks::~WorkbenchWalks() { stopTimer(); }
 
