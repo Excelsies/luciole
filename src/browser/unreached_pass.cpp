@@ -78,9 +78,6 @@ void luciole::UnreachedPass::apply(const Location& folder, bool last) {
 }
 
 void luciole::UnreachedPass::start(const Location& folder, std::size_t slots) {
-  if (m_entries >= m_limits.entries) {
-    m_queue.clear();
-  }
   while (m_running.size() < slots && !m_queue.empty() && m_entries < m_limits.entries) {
     auto name = std::move(m_queue.front());
     m_queue.pop_front();
@@ -104,6 +101,9 @@ void luciole::UnreachedPass::update(
     plan(table);
   }
   harvest();
+  if (m_entries >= m_limits.entries) {
+    m_queue.clear(); // the budget is used up: what is left stays never entered, and the batch is the last
+  }
   apply(folder, m_queue.empty() && m_running.empty());
   if (!m_table) { // applying found the table replaced
     return;

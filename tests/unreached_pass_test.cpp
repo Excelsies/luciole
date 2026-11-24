@@ -175,6 +175,22 @@ namespace {
     TEST_CHECK(!budgeted.pending());
   }
 
+  // When the entry budget ends the pass, the sizes already taken are applied by that same update, with no later one.
+  void budgetEndsWithTheLastUpdate(const fs::path& base) {
+    Rig rig(12 + 1 + 1, 1);
+    const auto folder = tree(base / "last", 12, 4);
+    const auto table = rig.settle(folder);
+    UnreachedPass pass(rig.cache, {.children = 100, .entries = 1, .applyEvery = std::chrono::hours(1)});
+    pass.update(folder, table, 1);
+    TEST_CHECK(pass.pending() && pass.running() == 1);
+    pumpUntil([&] { return rig.service.status().running == 0 && rig.service.status().queued == 0; });
+    const auto settled = std::chrono::steady_clock::now() + std::chrono::milliseconds(100);
+    pumpUntil([&] { return std::chrono::steady_clock::now() > settled; }); // the cache takes the finished table
+    pass.update(folder, rig.cache.find(folder).table, 1);
+    TEST_CHECK(!pass.pending());
+    TEST_CHECK(neverEntered(*rig.cache.find(folder).table) == neverEntered(*table) - 1);
+  }
+
   // Leaving the folder, or a table that is not the planned one, drops the pass: nothing runs or is applied after.
   void reset(const fs::path& base) {
     Rig rig(12 + 1 + 1, 1); // the root's entries and one file of the entered folder
@@ -208,6 +224,7 @@ int main() {
   nothingNeverEntered(scratch.path());
   sizesOfNeverEnteredFolders(scratch.path());
   limits(scratch.path());
+  budgetEndsWithTheLastUpdate(scratch.path());
   reset(scratch.path());
   return 0;
 }
