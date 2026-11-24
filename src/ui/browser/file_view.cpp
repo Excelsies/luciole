@@ -394,8 +394,8 @@ void luciole::FileViewAdapter::setTileVisible(Node& tile, bool visible) {
     reveal(tile, *state.entry);
   }
 }
-std::vector<luciole::EntryId> luciole::FileViewAdapter::staleFolderSizes() const {
-  std::vector<EntryId> stale;
+std::vector<std::size_t> luciole::FileViewAdapter::staleFolderSizes() const {
+  std::vector<std::size_t> stale;
   if (m_folderSizes || !m_folderSizeText || !m_columns.visible(luciole::DetailsColumn::Size)) {
     return stale;
   }
@@ -403,10 +403,12 @@ std::vector<luciole::EntryId> luciole::FileViewAdapter::staleFolderSizes() const
   for (const auto& [tile, state] : m_tiles) {
     const auto* entry = state.entry ? model.entry(*state.entry) : nullptr;
     if (entry != nullptr
+        && state.index < model.rows().size()
+        && model.rows()[state.index] == *state.entry
         && entry->type == luciole::FileType::Directory
         && !entry->symlink
         && state.folderSize != m_folderSizeText(*entry)) {
-      stale.push_back(*state.entry);
+      stale.push_back(state.index);
     }
   }
   return stale;
@@ -444,6 +446,7 @@ void luciole::FileViewAdapter::bindTile(Node& tile, std::size_t index, bool, boo
   }
   const auto id = model.rows()[index];
   auto& state = m_tiles[&tile];
+  state.index = index;
   if (state.entry != id) {
     // A recycled slot may still be fading in its previous entry.
     if (tile.animationManager() != nullptr) {

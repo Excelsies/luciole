@@ -151,6 +151,8 @@ namespace luciole {
     WorkbenchModel& model() noexcept { return m_model; }
     // The Size cell of a folder row of the list, from the measure; blank while the measure shows another folder.
     std::string folderSizeText(const DirectoryEntry& entry) const;
+    // Changes whenever the measure the cells come from does.
+    std::uint64_t sizesSerial() const { return m_model.serial(); }
     LookaheadColumns& lookahead() noexcept { return m_lookahead; }
     const LookaheadColumns& lookahead() const noexcept { return m_lookahead; }
     WorkbenchState& state() noexcept { return m_state; }

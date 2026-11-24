@@ -501,13 +501,14 @@ namespace {
       adapter.bindTile(*tile, index, false, false);
     };
     const std::string measured = "3.9\u00a0KiB"; // big holds 1000 and 3000 bytes: 4000 bytes
+    const auto bigIndex = static_cast<std::size_t>(std::ranges::find(model.rows(), *big) - model.rows().begin());
     rig.frame(*session);
     bind(*big);
     TEST_CHECK(nameLabel(*tile, measured) == nullptr);
     TEST_CHECK(adapter.staleFolderSizes().empty());
 
     rig.settle(*session);
-    TEST_CHECK(adapter.staleFolderSizes() == std::vector<luciole::EntryId>{*big});
+    TEST_CHECK(adapter.staleFolderSizes() == std::vector<std::size_t>{bigIndex});
     bind(*big);
     TEST_CHECK(nameLabel(*tile, measured) != nullptr);
     TEST_CHECK(adapter.staleFolderSizes().empty());

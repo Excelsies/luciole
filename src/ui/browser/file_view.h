@@ -48,8 +48,8 @@ namespace luciole {
     void setFolderSizeText(std::function<std::string(const DirectoryEntry&)> text) {
       m_folderSizeText = std::move(text);
     }
-    // Bound folder rows whose cell text is no longer what the function gives; bind them again to update.
-    std::vector<EntryId> staleFolderSizes() const;
+    // The indices of bound folder rows whose cell text is no longer what the function gives; bind them again.
+    std::vector<std::size_t> staleFolderSizes() const;
     void setActivationMode(ActivationMode mode) { m_activationMode = mode; }
     void setPresentation(BrowsePresentation presentation, std::optional<bool> readOnly) {
       m_presentation = presentation;
@@ -70,6 +70,7 @@ namespace luciole {
     struct TileState {
       std::optional<EntryId> entry;
       bool visible = false;
+      std::size_t index = 0;  // the row it was bound to
       std::string folderSize; // the Size cell text this tile was bound with, for a folder row
     };
     void reveal(Node& tile, EntryId id);

@@ -75,7 +75,16 @@ WorkbenchController::WorkbenchController(
     Hooks hooks
 )
     : m_page(page), m_menus(menus), m_preview(preview), m_list(list), m_icons(icons), m_visits(visits),
-      m_preferences(preferences), m_hooks(std::move(hooks)) {}
+      m_preferences(preferences), m_hooks(std::move(hooks)), m_sizes(
+                                                                 list,
+                                                                 {.rebind =
+                                                                      [this](std::size_t index) {
+                                                                        if (auto* grid = m_page.fileList()) {
+                                                                          grid->notifyItemChanged(index);
+                                                                        }
+                                                                      },
+                                                                  .frameNeeded = [this] { frameNeeded(); }}
+                                                             ) {}
 
 WorkbenchController::~WorkbenchController() = default;
 
@@ -107,24 +116,8 @@ void WorkbenchController::onFrame() {
   m_columnPreview->setAudioVisual(luciole::audioVisualChoice(m_settings.workbench));
   m_columnPreview->setMediaLoop(m_settings.workbench.mediaLoop);
   m_columnPreview->update();
-  refreshFolderSizes();
+  m_sizes.refresh();
   restAt();
-}
-
-// The measure grows while a folder is walked; a row's cell is bound again only when its own text changed.
-void WorkbenchController::refreshFolderSizes() {
-  const auto serial = m_session->model().serial();
-  if (serial == m_sizesSerial) {
-    return;
-  }
-  m_sizesSerial = serial;
-  const auto stale = m_list.staleFolderSizes();
-  for (const auto id : stale) {
-    rebindRow(id);
-  }
-  if (!stale.empty()) {
-    frameNeeded();
-  }
 }
 
 void WorkbenchController::mount() {
@@ -132,10 +125,7 @@ void WorkbenchController::mount() {
       m_page.filePane(), m_page.fileList()->focusArea(), m_services->measureCache(), m_icons, m_hooks.modifiers
   );
   m_session->keepTabRoom(*m_page.fileList());
-  m_sizesSerial = 0;
-  m_list.setFolderSizeText([this](const luciole::DirectoryEntry& entry) {
-    return m_session ? m_session->folderSizeText(entry) : std::string{};
-  });
+  m_sizes.mount(*m_session);
   m_columnPreview = std::make_unique<luciole::WorkbenchPreview>(
       m_session->previewSlot(), m_services->previewWorkers(), luciole::MediaPlayer::available(),
       luciole::WorkbenchPreview::Hooks{
@@ -178,7 +168,7 @@ void WorkbenchController::unmount() {
   markList(std::nullopt);
   m_preview.setTarget(std::nullopt);
   m_columnPreview.reset();
-  m_list.setFolderSizeText({});
+  m_sizes.unmount();
   m_session.reset();
 }
 
@@ -477,44 +467,6 @@ void WorkbenchController::openFile(const luciole::Location& location) {
        .launch = m_hooks.launch,
        .browseArchive = m_hooks.browseArchive}
   );
-}
-
-bool WorkbenchController::inDrive(const luciole::Location& root) const {
-  if (m_editor && m_editor->savingIn(root)) {
-    return true;
-  }
-  if (!m_session) {
-    return false;
-  }
-  const auto& lookahead = m_session->lookahead();
-  for (std::size_t column = 0; column < lookahead.count(); ++column) {
-    if (luciole::locationWithin(lookahead.location(column), root)) {
-      return true;
-    }
-  }
-  return m_columnPreview && m_columnPreview->reading(root);
-}
-
-bool WorkbenchController::unsavedIn(const luciole::Location& root) { return m_editor && m_editor->unsavedIn(root); }
-
-void WorkbenchController::releaseLocation(const luciole::Location& root) {
-  if (!m_session) {
-    return;
-  }
-  m_session->model().releaseLocation(root);
-  m_session->lookahead().releaseLocation(root);
-  if (m_columnPreview) {
-    m_columnPreview->releaseLocation(root);
-  }
-}
-
-bool WorkbenchController::readingDrive(const luciole::Location& root) const {
-  return (m_services != nullptr && m_services->measureService().reading(root))
-      || (m_session && m_session->lookahead().reading(root))
-      || (m_editor && m_editor->savingIn(root))
-      || luciole::MediaPlayer::stopsPending()
-      || luciole::MediaProbe::readsPending()
-      || (m_columnPreview && m_columnPreview->reading(root));
 }
 
 void WorkbenchController::frameNeeded() { m_page.surface().requestUpdate(); }
