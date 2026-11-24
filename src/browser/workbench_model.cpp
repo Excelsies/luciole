@@ -80,6 +80,7 @@ struct luciole::WorkbenchModel::State : std::enable_shared_from_this<State> {
   std::shared_ptr<const WorkbenchSnapshot> published;
   std::optional<WorkbenchDraft> draft;        // the last build, finished again when only settings or visits change
   std::vector<const MeasureTable*> builtFrom; // the tables of the last build
+  bool builtCarry = false;                    // whether the second pass was pending then
   bool rebuild = false;
   bool refinish = false;
   bool building = false;
@@ -132,7 +133,7 @@ struct luciole::WorkbenchModel::State : std::enable_shared_from_this<State> {
       }
     }
     pumping = false;
-    if (location && tables() != builtFrom) {
+    if (location && (tables() != builtFrom || walks.passPending() != builtCarry)) {
       rebuild = true;
     }
     schedule();
@@ -211,6 +212,7 @@ struct luciole::WorkbenchModel::State : std::enable_shared_from_this<State> {
       return;
     }
     builtFrom = tables();
+    builtCarry = walks.passPending();
     const auto* folder = walks.folder();
     const auto* table = folder ? tableOf(folder->found) : nullptr;
     WorkbenchBuildInput input{
@@ -220,6 +222,7 @@ struct luciole::WorkbenchModel::State : std::enable_shared_from_this<State> {
         .children = childTables(),
         .error = table ? table->error : std::nullopt,
         .folderFinished = walks.folderFinished(),
+        .carry = walks.passPending(),
         .now = secondsNow(),
     };
     start([input = std::move(input), settings = settings, visits = visitRecords, previous = published] {

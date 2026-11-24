@@ -1,5 +1,6 @@
 #include "browser/workbench_snapshot.h"
 
+#include "browser/carried_sizes.h"
 #include "browser/entry_details.h"
 #include "browser/location_presentation.h"
 
@@ -362,6 +363,7 @@ std::optional<luciole::WorkbenchDraft> luciole::buildDraft(const WorkbenchBuildI
       .visits = {},
       .settings = {},
       .error = input.error,
+      .carry = input.carry,
   };
   for (const auto& level : request.ancestors) {
     draft.ancestors.push_back(level.location);
@@ -396,11 +398,15 @@ luciole::finishSnapshot(const WorkbenchDraft& draft, const std::shared_ptr<const
       applyVisits(tree, draft.location, draft.ancestors, sorted);
     }
   }
+  auto folded = draft.measured ? draft.measured->folded : nullptr;
+  if (draft.carry && previous && previous->location == draft.location) {
+    carryPreviousSizes(tree, folded, *previous);
+  }
   if (previous
       && previous->location == draft.location
       && previous->settings == draft.settings
       && previous->error == draft.error
-      && sameFolded(previous->folded, draft.measured ? draft.measured->folded : nullptr)
+      && sameFolded(previous->folded, folded)
       && sameTree(previous->tree, tree)) {
     return nullptr;
   }
@@ -419,7 +425,7 @@ luciole::finishSnapshot(const WorkbenchDraft& draft, const std::shared_ptr<const
       .total = total,
       .error = draft.error,
       .notMeasured = false,
-      .folded = draft.measured ? draft.measured->folded : nullptr,
+      .folded = std::move(folded),
   });
 }
 

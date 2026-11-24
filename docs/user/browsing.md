@@ -99,7 +99,7 @@ A file with several hard links counts once in Workbench, in the folder total and
 
 Every subfolder row is filled, however many there are, up to the 100,000 largest subfolders beyond the 512 the picture names; in a folder with more than that, the smallest rows stay blank.
 
-Workbench measures a folder when it opens it and again when its own entries change; a change deeper down, in a subfolder, is not noticed until Refresh (F5, the menu or the toolbar), which measures the open folder again while the old sizes stay until the new ones arrive.
+Workbench measures a folder when it opens it and again when its own entries change; a change deeper down, in a subfolder, is not noticed until Refresh (F5, the menu or the toolbar), which measures the open folder again, and its second pass measures the subfolders the first walk did not reach again, while every size shown stays until its new one arrives; a subfolder the second pass does not reach goes blank once it ends.
 
 The background right-click menu also offers Sort. Changing the sort field, direction, Folders First or Hidden Last shows the beginning of the new order, including in folders that need scrolling. Selected items stay selected. Sort changes made through list headings or Settings follow the same rule.
 

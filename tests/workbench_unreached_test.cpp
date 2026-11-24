@@ -17,6 +17,7 @@
 #include <mutex>
 #include <poll.h>
 #include <string>
+#include <thread>
 #include <vector>
 
 namespace {
@@ -191,8 +192,13 @@ namespace {
     std::atomic<bool> armed = false;
     bool open = false;
     int held = 0;
+    std::atomic<int> paceMs = 0; // when set, a partial table only waits this long
     void hold() {
       if (!armed) {
+        return;
+      }
+      if (paceMs > 0) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(paceMs));
         return;
       }
       std::unique_lock lock(mutex);
@@ -273,6 +279,45 @@ namespace {
     TEST_CHECK(exactCells(*model.snapshot(), kCount, 1500, 1, cut) == kCount - 1 && cut == 1);
     TEST_CHECK(neverEntered(rig.cache, place) == 0);
   }
+  // Refresh on a folder with never-entered folders: from F5 to the end, no cell that showed a size is blank in any
+  // snapshot, the instrument agrees with the cell, and in the end every size is the new one.
+  void sizesStayThroughRefresh(const fs::path& base) {
+    constexpr int kCount = 8;
+    const auto folder = tree(base / "stay", kCount, 1500);
+    Gate gate; // slows each walk after the first measure, so snapshots are built while the pass runs
+    Rig rig(kCount + 2000, [&gate] { gate.hold(); });
+    luciole::WorkbenchModel model(rig.cache, {.ancestorLevels = 0});
+    Pump pump;
+    model.setLocation(Location::fromPath(folder.native()));
+    settle(pump, model);
+    int cut = 0;
+    TEST_CHECK(exactCells(*model.snapshot(), kCount, 1500, 1, cut) == kCount - 1 && cut == 1);
+    gate.paceMs = 15;
+    gate.armed = true;
+    std::vector<std::string> shown;
+    for (int i = 0; i < kCount; ++i) {
+      shown.push_back(model.snapshot()->folderSizeText(std::format("s{:04}", i)));
+    }
+    std::vector<std::shared_ptr<const luciole::WorkbenchSnapshot>> seen;
+    model.setChangedCallback([&] {
+      if (const auto latest = model.snapshot(); latest && (seen.empty() || seen.back() != latest)) {
+        seen.push_back(latest);
+      }
+    });
+    model.remeasure();
+    settle(pump, model);
+    model.setChangedCallback({});
+    TEST_CHECK(exactCells(*model.snapshot(), kCount, 1500, 1, cut) == kCount - 1 && cut == 1);
+    for (const auto& snapshot : seen) {
+      for (int i = 0; i < kCount; ++i) {
+        const auto name = std::format("s{:04}", i);
+        TEST_CHECK(!snapshot->folderSizeText(name).empty());
+        const auto id = snapshot->node(name);
+        TEST_CHECK(id != luciole::workbench::kNoNode && !snapshot->tree.nodes[id].notEntered);
+      }
+    }
+  }
+
   // Refresh while a walk runs: the next walk starts when that one ends, not after the wait a changing folder gets.
   void refreshStartsAtOnce(const fs::path& base) {
     const auto folder = tree(base / "atonce", 3, 300, 0);
@@ -300,5 +345,6 @@ int main() {
   leavingTheFolderMidPass(scratch.path());
   refreshMidPass(scratch.path());
   refreshStartsAtOnce(scratch.path());
+  sizesStayThroughRefresh(scratch.path());
   return 0;
 }
