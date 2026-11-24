@@ -45,6 +45,7 @@ namespace luciole {
     // Something below it was not counted (stopped, not entered or unreadable): a lower bound. A folder on another
     // filesystem is never entered, so its record is final as made with this set and nothing counted.
     bool truncated = false;
+    bool notEntered = false;     // listed and never entered, since the budget or the deadline ended the walk first
     bool foldersOmitted = false; // at the detail depth with folders inside, which have no records
     bool hidden = false;         // the name starts with a dot
     bool operator==(const MeasureFlags&) const = default;

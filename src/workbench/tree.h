@@ -29,6 +29,7 @@ namespace luciole::workbench {
     bool unreadable = false;      // the folder could not be listed
     bool truncated = false;       // the folder's entries were not expanded in this snapshot
     bool otherFilesystem = false; // the folder is on another filesystem and was not scanned
+    bool notEntered = false;      // listed, and the walk ended before it was entered: nothing is known of it
     bool notMeasured = false;     // the location is not a local folder, so nothing below it is measured
   };
 

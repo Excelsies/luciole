@@ -455,6 +455,7 @@ namespace {
             auto& record = m_table.records[child.record];
             record.totals = child.own;
             record.flags.truncated = !cancelled;
+            record.flags.notEntered = !cancelled;
             record.flags.partial = cancelled;
           }
         }

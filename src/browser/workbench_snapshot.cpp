@@ -315,6 +315,7 @@ std::string luciole::WorkbenchSnapshot::folderSizeText(std::string_view name) co
   const auto& found = tree.nodes[id];
   if (!found.folder
       || found.notMeasured
+      || found.notEntered
       || found.otherFilesystem
       || found.unreadable
       || (found.partial && found.bytes <= 0)) {

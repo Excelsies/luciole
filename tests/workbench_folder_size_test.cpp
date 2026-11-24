@@ -56,15 +56,16 @@ namespace {
   // The same text as the List view's cell, with literals worked out by hand: 1536 bytes are 1.5\u00a0KiB.
   void textOfMeasuredNodes() {
     const auto snapshot = snapshotOf({
-        {.name = "", .bytes = 1536, .folder = true},                          // n1 measured
-        {.name = "", .bytes = 1536, .folder = true, .partial = true},         // n2 still measuring
-        {.name = "", .bytes = 1536, .folder = true, .lowerBound = true},      // n3 cut short
-        {.name = "", .bytes = 0, .folder = true, .partial = true},            // n4 nothing counted yet
-        {.name = "", .bytes = 1536, .folder = true, .notMeasured = true},     // n5
-        {.name = "", .bytes = 1536, .folder = true, .otherFilesystem = true}, // n6
-        {.name = "", .bytes = 1536, .folder = true, .unreadable = true},      // n7
-        {.name = "", .bytes = 0, .folder = true},                             // n8 empty and measured
-        {.name = "", .bytes = 1536, .folder = false},                         // n9 a file
+        {.name = "", .bytes = 1536, .folder = true},                                      // n1 measured
+        {.name = "", .bytes = 1536, .folder = true, .partial = true},                     // n2 still measuring
+        {.name = "", .bytes = 1536, .folder = true, .lowerBound = true},                  // n3 cut short
+        {.name = "", .bytes = 0, .folder = true, .partial = true},                        // n4 nothing counted yet
+        {.name = "", .bytes = 1536, .folder = true, .notMeasured = true},                 // n5
+        {.name = "", .bytes = 1536, .folder = true, .otherFilesystem = true},             // n6
+        {.name = "", .bytes = 1536, .folder = true, .unreadable = true},                  // n7
+        {.name = "", .bytes = 0, .folder = true},                                         // n8 empty and measured
+        {.name = "", .bytes = 1536, .folder = false},                                     // n9 a file
+        {.name = "", .bytes = 0, .folder = true, .lowerBound = true, .notEntered = true}, // n10 listed, never entered
     });
     TEST_CHECK(snapshot.folderSizeText("n1") == "1.5\u00a0KiB");
     TEST_CHECK(snapshot.folderSizeText("n2") == "≥ 1.5\u00a0KiB");
@@ -75,6 +76,7 @@ namespace {
     TEST_CHECK(snapshot.folderSizeText("n7").empty());
     TEST_CHECK(snapshot.folderSizeText("n8") == "0 bytes");
     TEST_CHECK(snapshot.folderSizeText("n9").empty());
+    TEST_CHECK(snapshot.folderSizeText("n10").empty()); // a lower bound of nothing is blank, not "≥ 0 bytes"
     TEST_CHECK(snapshot.folderSizeText("missing").empty());
   }
 

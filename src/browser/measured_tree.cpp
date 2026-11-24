@@ -40,6 +40,7 @@ namespace {
     node.lowerBound = record.flags.truncated;
     node.unreadable = record.flags.unreadable;
     node.otherFilesystem = record.flags.otherFilesystem;
+    node.notEntered = record.flags.notEntered;
     return node;
   }
 

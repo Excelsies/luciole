@@ -380,6 +380,60 @@ namespace {
     TEST_CHECK(late.truncated && late.records[0].flags.truncated);
   }
 
+  // Four folders of five files of 10 bytes. A child the walk lists and does not enter is marked never entered (and
+  // reads as a lower bound of nothing); one it enters and cuts keeps what it counted and is not marked.
+  void neverEntered(const fs::path& base) {
+    const auto root = base / "never";
+    for (int folder = 0; folder < 4; ++folder) {
+      fs::create_directories(root / std::format("d{}", folder));
+      for (int file = 0; file < 5; ++file) {
+        writeFile(root / std::format("d{}", folder) / std::format("f{}", file), 10);
+      }
+    }
+    const auto children = [](const MeasureTable& table) {
+      std::vector<const luciole::MeasureRecord*> found;
+      const auto& top = table.records[0];
+      for (std::uint32_t i = 0; i < top.childCount; ++i) {
+        found.push_back(&table.records[top.firstChild + i]);
+      }
+      return found;
+    };
+    MeasureOptions options;
+    options.entryBudget = 4 + 5; // the four folders, then one whole folder
+    const auto whole = measure(root, options);
+    int complete = 0, unreached = 0;
+    for (const auto* child : children(whole)) {
+      if (child->flags.notEntered) {
+        ++unreached;
+        TEST_CHECK(child->flags.truncated && !child->flags.partial && child->totals.apparentBytes == 0);
+      } else {
+        ++complete;
+        TEST_CHECK(!child->flags.truncated && child->totals.apparentBytes == 50);
+      }
+    }
+    TEST_CHECK(complete == 1 && unreached == 3);
+    options.entryBudget = 4 + 5 + 2; // one whole folder, one cut after two files, two never entered
+    const auto cut = measure(root, options);
+    int finished = 0, entered = 0;
+    unreached = 0;
+    for (const auto* child : children(cut)) {
+      if (child->flags.notEntered) {
+        ++unreached;
+      } else if (child->flags.truncated) {
+        ++entered;
+        TEST_CHECK(child->totals.apparentBytes == 20);
+      } else {
+        ++finished;
+        TEST_CHECK(child->totals.apparentBytes == 50);
+      }
+    }
+    TEST_CHECK(finished == 1 && entered == 1 && unreached == 2);
+    options.entryBudget = 2'000'000;
+    for (const auto* child : children(measure(root, options))) {
+      TEST_CHECK(!child->flags.notEntered && !child->flags.truncated);
+    }
+  }
+
   // 40 folders, each with inner/ holding 100 files of 10 bytes.
   fs::path wideTree(const fs::path& base) {
     const auto root = base / "wide";
@@ -478,6 +532,7 @@ int main() {
   detailDepth(scratch.path());
   caps(scratch.path());
   budget(scratch.path());
+  neverEntered(scratch.path());
   const auto wide = wideTree(scratch.path());
   cancellation(wide);
   growingPartials(wide);
