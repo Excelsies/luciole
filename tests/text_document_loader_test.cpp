@@ -206,6 +206,26 @@ namespace {
     cancelled.cancel();
     TEST_CHECK(loaded(json, "application/json", cancelled).state == State::Cancelled);
   }
+
+  // Every byte that can be shown has been checked: the check covers all bytes read, and nothing past them is ever
+  // shown, so a key block beyond the first window is either refused (inside it) or cannot be reached (outside it).
+  void testNothingUncheckedIsShown() {
+    const Folder folder;
+    const std::string key = "-----BEGIN PRIVATE KEY-----\nabc\n-----END PRIVATE KEY-----\n";
+    std::string filler;
+    while (filler.size() < kTextDocumentReadBytes + 4096) {
+      filler += "-----BEGIN CERTIFICATE-----\nMIIBfake\n-----END CERTIFICATE-----\n";
+    }
+    const auto inside = loaded(folder.write("inside.pem", key + filler), "application/x-pem-file");
+    TEST_CHECK(inside.state == State::PrivateKey && inside.document == nullptr);
+    const auto beyond = loaded(folder.write("beyond.pem", filler + key), "application/x-pem-file");
+    TEST_CHECK(beyond.state == State::Cut && beyond.facts.bytes == kTextDocumentReadBytes);
+    for (const auto& block : beyond.document->blocks) {
+      for (const auto& line : block.lines) {
+        TEST_CHECK(!formats::joinedText(line).contains("PRIVATE KEY"));
+      }
+    }
+  }
 } // namespace
 
 int main() {
@@ -216,6 +236,7 @@ int main() {
   testNotText();
   testRefusals();
   testLoadsFromDisk();
+  testNothingUncheckedIsShown();
   std::println("text-document-loader: all checks passed");
   return 0;
 }

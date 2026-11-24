@@ -173,6 +173,19 @@ namespace {
       TEST_CHECK(preview.snapshot().status == luciole::PreviewStatus::Ready);
       TEST_CHECK(preview.snapshot().text == text);
     }
+    // A key past the bytes read is never on screen: the preview shows the first window, which was all checked.
+    {
+      std::string beyond;
+      while (beyond.size() < 70U * 1024U) {
+        beyond += "an ordinary line of text before the key\n";
+      }
+      const auto path = root / "beyond.txt";
+      write(path, beyond + pem("PRIVATE KEY", body));
+      preview.show(entry(path, "text/plain"), 512);
+      wait([&] { return !preview.busy(); });
+      TEST_CHECK(preview.snapshot().status == luciole::PreviewStatus::Ready);
+      TEST_CHECK(!preview.snapshot().text.contains("PRIVATE KEY") && !preview.snapshot().text.contains("BEGIN"));
+    }
     // PEM with a BOM, a UTF-8 comment or CRLF is text; so is a multi-byte character cut at the end of the bytes read.
     for (const auto& [name, text] : std::vector<std::pair<std::string, std::string>>{
              {"bom.pem", "\xEF\xBB\xBF" + certificate},

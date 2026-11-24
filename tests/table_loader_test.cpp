@@ -237,6 +237,25 @@ namespace {
     writeFile(key, "name,key\nhost,\"-----BEGIN OPENSSH PRIVATE KEY-----\"\n");
     TEST_CHECK(load(request(key, "text/csv")).error() == "This file holds a private key, so it is not shown.");
 
+    // A spreadsheet is read from compressed XML, so the check runs on the cells that would be shown.
+    const auto sheetKey = folder.path() / "keys.xlsx";
+    writeZip(
+        sheetKey,
+        xlsxMembers({{"Keys", "<row r=\"1\">" + textCell("A1", "-----BEGIN OPENSSH PRIVATE KEY-----") + "</row>"}})
+    );
+    TEST_CHECK(load(request(sheetKey)).error() == "This file holds a private key, so it is not shown.");
+    const auto odsKey = folder.path() / "keys.ods";
+    writeZip(
+        odsKey,
+        odsMembers(
+            {{"S",
+              "<table:table-row><table:table-cell><text:p>PrivateKey = "
+              "yAnzfakeWireGuardKeyForTestsOnlyAAAAAAAAAAA=</text:p>"
+              "</table:table-cell></table:table-row>"}}
+        )
+    );
+    TEST_CHECK(load(request(odsKey)).error() == "This file holds a private key, so it is not shown.");
+
     TableRequest remote{.location = Location::trash().child("a.csv"), .name = "a.csv", .contentType = "text/csv"};
     TEST_CHECK(load(remote).error() == "Only local files are shown as tables.");
     remote.name = "a.xlsx";

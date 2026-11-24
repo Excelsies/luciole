@@ -190,6 +190,13 @@ void luciole::startTableLoad(
         if (!grid) {
           return std::unexpected(std::move(grid.error()));
         }
+        // The cells come out of compressed XML, so the check is on the text that would be shown.
+        const auto holdsKey = [](std::string_view text) { return luciole::containsPrivateKey(text); };
+        if (holdsKey(grid->text)
+            || std::ranges::any_of(grid->columnNames, holdsKey)
+            || std::ranges::any_of(grid->sheetNames, holdsKey)) {
+          return std::unexpected("This file holds a private key, so it is not shown.");
+        }
         return std::make_shared<const formats::TableGrid>(std::move(*grid));
       },
       std::move(done)
