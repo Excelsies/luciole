@@ -98,6 +98,8 @@ namespace luciole {
     std::optional<FileError> error; // the root could not be measured; records is empty
   };
 
+  // The marks of a child record as its compact list entry keeps them.
+  std::uint8_t foldedFlagsOf(const MeasureFlags& flags);
   // The compact list of the child records at `indexes`, folded away from `records`.
   std::shared_ptr<const FoldedChildren>
   foldedChildren(const std::vector<MeasureRecord>& records, const std::vector<std::uint32_t>& indexes, bool capped);

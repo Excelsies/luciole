@@ -65,13 +65,14 @@ namespace {
 luciole::WorkbenchServices::WorkbenchServices() : m_service(serviceOptions()), m_cache(m_service, cacheOptions()) {}
 
 luciole::WorkbenchWalks::WorkbenchWalks(MeasureCache& cache, std::function<void()> wake)
-    : m_cache(cache), m_wake(std::move(wake)) {}
+    : m_cache(cache), m_pass(cache), m_wake(std::move(wake)) {}
 
 luciole::WorkbenchWalks::~WorkbenchWalks() { stopTimer(); }
 
 // Bounded by the new walks times the walks left.
 void luciole::WorkbenchWalks::enter(const Location& folder, std::span<const Location> ancestors) {
   stopTimer();
+  m_pass.reset();
   auto left = std::exchange(m_walks, {});
   m_jumpsPlanned = false;
   m_walks.push_back(
@@ -137,6 +138,7 @@ void luciole::WorkbenchWalks::refreshChild(const std::string& name) {
 }
 
 void luciole::WorkbenchWalks::walkFolderAgain() {
+  m_pass.reset();
   std::erase_if(m_walks, [](const Walk& walk) { return walk.want == Want::Child; });
   if (const auto current = std::ranges::find(m_walks, Want::Folder, &Walk::want); current != m_walks.end()) {
     const bool running = walking(*current);
@@ -157,11 +159,15 @@ void luciole::WorkbenchWalks::remeasure() {
 
 void luciole::WorkbenchWalks::clear() {
   stopTimer();
+  m_pass.reset();
   m_walks.clear();
   m_jumpsPlanned = false;
 }
 
 void luciole::WorkbenchWalks::release(const Location& root) {
+  if (const auto* current = folder(); current && locationWithin(current->location, root)) {
+    m_pass.reset();
+  }
   std::erase_if(m_walks, [&root](const Walk& walk) { return locationWithin(walk.location, root); });
 }
 
@@ -171,6 +177,20 @@ void luciole::WorkbenchWalks::update() {
     walkFolderAgain();
   }
   start();
+  updatePass();
+}
+
+// The pass takes the walks left over once nothing else may start, and only for a finished table of the folder that is
+// not known to be stale.
+void luciole::WorkbenchWalks::updatePass() {
+  const auto* current = folder();
+  if (current == nullptr) {
+    m_pass.reset();
+    return;
+  }
+  const auto found = current->finished ? m_cache.find(current->location) : MeasureFind{};
+  const bool settled = found.entry() != nullptr && found.record == 0 && !found.stale && !found.measuring;
+  m_pass.update(current->location, settled ? found.table : nullptr, running() < kWalks ? kWalks - running() : 0);
 }
 
 const luciole::WorkbenchWalks::Walk* luciole::WorkbenchWalks::folder() const {
@@ -184,9 +204,9 @@ bool luciole::WorkbenchWalks::folderFinished() const {
 }
 
 bool luciole::WorkbenchWalks::waiting() const {
-  return std::ranges::any_of(m_walks, [](const Walk& walk) {
-    return (walk.want == Want::Folder || walk.want == Want::Child) && !walk.finished;
-  });
+  return m_pass.pending() || std::ranges::any_of(m_walks, [](const Walk& walk) {
+           return (walk.want == Want::Folder || walk.want == Want::Child) && !walk.finished;
+         });
 }
 
 // A table of the folder's own is read with find(), so a walk that ended stale is not started again; only a folder
@@ -246,7 +266,7 @@ luciole::WorkbenchWalks::Walk* luciole::WorkbenchWalks::next(Clock::time_point n
 // Bounded by the walk count.
 void luciole::WorkbenchWalks::start() {
   const auto now = Clock::now();
-  for (std::size_t step = 0; step < m_walks.size() && running() < kWalks; ++step) {
+  for (std::size_t step = 0; step < m_walks.size() && running() + m_pass.running() < kWalks; ++step) {
     auto* walk = next(now);
     if (walk == nullptr) {
       break;

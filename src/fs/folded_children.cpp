@@ -13,12 +13,23 @@ std::shared_ptr<const luciole::FoldedChildren> luciole::FoldedChildren::make(std
     list->names += source.name;
     list->entries.push_back(
         {.apparentBytes = source.apparentBytes,
+         .allocatedBytes = source.allocatedBytes,
          .nameEnd = static_cast<std::uint32_t>(list->names.size()),
          .flags = source.flags}
     );
   }
   list->names.shrink_to_fit();
   return list;
+}
+
+std::uint8_t luciole::foldedFlagsOf(const MeasureFlags& flags) {
+  using F = FoldedChildren;
+  return static_cast<std::uint8_t>(
+      (flags.truncated ? F::kTruncated : 0)
+      | (flags.notEntered ? F::kNotEntered : 0)
+      | (flags.unreadable ? F::kUnreadable : 0)
+      | (flags.otherFilesystem ? F::kOtherFilesystem : 0)
+  );
 }
 
 std::shared_ptr<const luciole::FoldedChildren> luciole::foldedChildren(
@@ -32,12 +43,8 @@ std::shared_ptr<const luciole::FoldedChildren> luciole::foldedChildren(
     sources.push_back(
         {.name = record.name,
          .apparentBytes = record.totals.apparentBytes,
-         .flags = static_cast<std::uint8_t>(
-             (record.flags.truncated ? F::kTruncated : 0)
-             | (record.flags.notEntered ? F::kNotEntered : 0)
-             | (record.flags.unreadable ? F::kUnreadable : 0)
-             | (record.flags.otherFilesystem ? F::kOtherFilesystem : 0)
-         )}
+         .allocatedBytes = record.totals.allocatedBytes,
+         .flags = foldedFlagsOf(record.flags)}
     );
   }
   return F::make(std::move(sources), capped);

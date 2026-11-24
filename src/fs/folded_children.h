@@ -9,7 +9,7 @@
 
 namespace luciole {
   // The name and size of every child folder a record folded into its remainder, as the Size column needs them: found by
-  // name, with no records below. Names are one string, entries sorted by name, so a child costs 16 bytes and its name.
+  // name, with no records below. Names are one string, entries sorted by name, so a child costs 24 bytes and its name.
   struct FoldedChildren {
     static constexpr std::uint8_t kTruncated = 1;  // entered and cut, or never entered: the size is a lower bound
     static constexpr std::uint8_t kNotEntered = 2; // listed, and the walk ended first
@@ -18,6 +18,7 @@ namespace luciole {
 
     struct Entry {
       std::uint64_t apparentBytes = 0;
+      std::uint64_t allocatedBytes = 0;
       std::uint32_t nameEnd = 0; // where its name ends in `names`
       std::uint8_t flags = 0;
       bool operator==(const Entry&) const = default;
@@ -54,6 +55,7 @@ namespace luciole {
     struct Source {
       std::string_view name;
       std::uint64_t apparentBytes = 0;
+      std::uint64_t allocatedBytes = 0;
       std::uint8_t flags = 0;
     };
     // The list of `sources` in any order, sorted by name; null for none.

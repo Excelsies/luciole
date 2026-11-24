@@ -1,6 +1,7 @@
 #pragma once
 
 #include "browser/measure_cache.h"
+#include "browser/unreached_pass.h"
 #include "fs/subtree_measure.h"
 
 #include <chrono>
@@ -54,7 +55,10 @@ namespace luciole {
   // not started again because it ended stale, unless its own folder was invalidated while it ran. A walk asked again
   // starts no sooner than kAgainGap after its last one ended, nor sooner than kAgainFactor times as long as that one
   // took, so a folder that keeps changing is walked a few times, not back to back. A walk without the ancestor budget
-  // that ends with a table that budget cut short is walked again in full. Main context only.
+  // that ends with a table that budget cut short is walked again in full. A folder whose finished walk left folders
+  // never entered has them walked one by one by an UnreachedPass, in the walks no other want takes; it ends when the
+  // page leaves the folder or the folder is walked again, and the folder counts as waiting until it is done. Main
+  // context only.
   class WorkbenchWalks {
   public:
     using Clock = std::chrono::steady_clock;
@@ -121,11 +125,13 @@ namespace luciole {
     std::size_t running() const;
     Walk* next(Clock::time_point now);
     void start();
+    void updatePass();
     void wakeForDue(Clock::time_point now);
     void stopTimer();
     bool folderMeasuresChild() const;
 
     MeasureCache& m_cache;
+    UnreachedPass m_pass;
     std::function<void()> m_wake;
     std::vector<Walk> m_walks; // for the current folder
     bool m_jumpsPlanned = false;

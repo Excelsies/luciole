@@ -1,4 +1,5 @@
 #include "browser/measure_cache.h"
+#include "fs/measure_amend.h"
 #include "temp_folder.h"
 #include "test_check.h"
 
@@ -357,6 +358,45 @@ namespace {
     settle(cache, other);
     TEST_CHECK(cache.tables() == 1 && cache.records() <= 15);
   }
+
+  // Amendments replace the table the cache serves, once, and only the table they were made for.
+  void amending(const fs::path& base) {
+    auto options = serviceOptions();
+    options.walk.entryBudget = 12 + 1; // the root's twelve entries, then the first child is cut
+    SubtreeMeasureService service(options);
+    MeasureCache cache(
+        service, {.recordBudget = 100'000, .checkAge = std::chrono::hours(1), .maxAge = std::chrono::hours(1)}
+    );
+    const auto folder = tree(base / "amended", 12, 3);
+    const auto first = settle(cache, folder);
+    const auto table = first.table;
+    std::vector<luciole::MeasureAmendment> amendments;
+    const auto& top = table->records[0];
+    for (auto c = top.firstChild; c < top.firstChild + top.childCount; ++c) {
+      if (table->records[c].flags.notEntered) {
+        const auto& name = table->records[c].name;
+        amendments.push_back(
+            luciole::amendmentOf(
+                name, luciole::measureSubtree(Location::fromPath((base / "amended" / name).native()), {})
+            )
+        );
+      }
+    }
+    TEST_CHECK(amendments.size() == 11 && cache.find(folder).table == table);
+    int heard = 0;
+    const auto id = cache.addListener([&heard] { ++heard; });
+    const auto amended = cache.amend(folder, table, amendments);
+    TEST_CHECK(amended != nullptr && cache.find(folder).table == amended);
+    TEST_CHECK(amended->records[0].totals.files == 1 + (11 * 3) && heard == 1); // one file of the cut child
+    TEST_CHECK(!cache.find(folder).stale && !cache.find(folder).measuring);
+    // The table it was made for is gone: nothing is applied twice, and a stale `from` changes nothing.
+    TEST_CHECK(cache.amend(folder, table, amendments) == nullptr);
+    TEST_CHECK(cache.amend(folder, amended, amendments) == nullptr); // nothing left to amend
+    TEST_CHECK(cache.amend(Location::fromPath((base / "elsewhere").native()), table, amendments) == nullptr);
+    cache.invalidate(folder);
+    TEST_CHECK(cache.amend(folder, amended, amendments) == nullptr); // stale tables are not amended
+    cache.removeListener(id);
+  }
 } // namespace
 
 int main() {
@@ -372,5 +412,6 @@ int main() {
   viewIsASnapshot(scratch.path());
   leases(scratch.path());
   foldedChildrenCount(scratch.path());
+  amending(scratch.path());
   return 0;
 }

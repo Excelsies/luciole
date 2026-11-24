@@ -277,6 +277,30 @@ luciole::MeasureFind luciole::MeasureCache::measure(const Location& folder, Meas
   return state.view(entry, entry.table && !entry.table->records.empty() ? 0 : kNoMeasureRecord);
 }
 
+std::shared_ptr<const luciole::MeasureTable> luciole::MeasureCache::amend(
+    const Location& folder, const std::shared_ptr<const MeasureTable>& from,
+    std::span<const MeasureAmendment> amendments
+) {
+  auto& state = *m_state;
+  const auto found = state.entries.find(folder.uri());
+  if (found == state.entries.end() || !from || found->second.table != from) {
+    return nullptr;
+  }
+  auto& entry = found->second;
+  if (!entry.complete || entry.stale || entry.walk.valid()) {
+    return nullptr;
+  }
+  auto amended = amendedTable(*from, amendments);
+  if (!amended) {
+    return nullptr;
+  }
+  entry.table = amended;
+  state.touched();
+  state.evict();
+  state.notify();
+  return amended;
+}
+
 luciole::MeasureFind luciole::MeasureCache::find(const Location& folder) const {
   const auto& state = *m_state;
   const auto found = locate(folder, [&state](const std::string& uri) -> const MeasureTable* {

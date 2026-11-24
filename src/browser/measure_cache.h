@@ -1,5 +1,6 @@
 #pragma once
 
+#include "fs/measure_amend.h"
 #include "fs/subtree_measure.h"
 
 #include <chrono>
@@ -7,6 +8,7 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <span>
 #include <string>
 #include <unordered_map>
 
@@ -84,6 +86,13 @@ namespace luciole {
     std::shared_ptr<const MeasureView> view() const;
     // Marks the location and every cached ancestor stale; for change notifications.
     void invalidate(const Location& location);
+    // Replaces the folder's complete table `from`, as long as it is the one served, not stale and not being walked
+    // again, by a copy with `amendments` applied, and returns that copy; listeners hear of it. Null when it was not
+    // replaced, also when no amendment applied.
+    std::shared_ptr<const MeasureTable> amend(
+        const Location& folder, const std::shared_ptr<const MeasureTable>& from,
+        std::span<const MeasureAmendment> amendments
+    );
     // A lease on the folder; taking one starts no walk.
     Lease lease(const Location& folder);
 
