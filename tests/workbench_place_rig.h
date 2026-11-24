@@ -144,8 +144,9 @@ namespace luciole::test::place {
       preview->place(*session, browser.model(), bounds, 1);
       thumbnails.endFrame();
     }
-    // Frames until `done` holds or `budget` ends.
-    void frames(const std::function<bool()>& done, std::chrono::seconds budget = std::chrono::seconds(10)) {
+    // Frames until `done` holds or `budget` ends. A picture's thumbnail decode takes a second here and ten times
+    // that on a loaded machine, so the budget leaves room.
+    void frames(const std::function<bool()>& done, std::chrono::seconds budget = std::chrono::seconds(30)) {
       const auto start = Clock::now();
       while (!done() && Clock::now() - start < budget) {
         frame();

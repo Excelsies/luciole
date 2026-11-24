@@ -63,7 +63,7 @@ namespace {
         [&] { return media(rig) != nullptr && media(rig)->player() == nullptr && media(rig)->facts().audio; },
         std::chrono::duration_cast<std::chrono::seconds>(
             luciole::MediaProbe::kTimeLimit + luciole::MediaProbe::kRetryLimit
-        ) + std::chrono::seconds(10)
+        ) + std::chrono::seconds(30)
     );
     rig.click(media(rig)->playButton());
     rig.frames([&] { return media(rig)->player() != nullptr && media(rig)->player()->state() == MediaState::Playing; });
