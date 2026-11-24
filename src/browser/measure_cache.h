@@ -87,11 +87,12 @@ namespace luciole {
     // Marks the location and every cached ancestor stale; for change notifications.
     void invalidate(const Location& location);
     // Replaces the folder's complete table `from`, as long as it is the one served, not stale and not being walked
-    // again, by a copy with `amendments` applied, and returns that copy; listeners hear of it. Null when it was not
-    // replaced, also when no amendment applied.
+    // again, by a copy with `amendments` applied, and returns that copy; listeners hear of it. `more` says
+    // amendments follow, so the copy keeps the hard-linked files counted. Null when it was not replaced, also when no
+    // amendment applied.
     std::shared_ptr<const MeasureTable> amend(
         const Location& folder, const std::shared_ptr<const MeasureTable>& from,
-        std::span<const MeasureAmendment> amendments
+        std::span<const MeasureAmendment> amendments, bool more = false
     );
     // A lease on the folder; taking one starts no walk.
     Lease lease(const Location& folder);

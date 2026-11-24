@@ -141,6 +141,7 @@ namespace {
       }
       unwind();
       m_table.hardLinksOverflow = m_hardLinks.overflow();
+      m_table.hardLinks = m_hardLinks.take();
       m_table.records.shrink_to_fit(); // no room is kept for the records that were folded away
       return std::move(m_table);
     }
@@ -273,8 +274,14 @@ namespace {
     }
 
     void addFile(Frame& frame, std::string_view name, const struct statx& info) {
-      const bool counted = info.stx_nlink <= 1 || m_hardLinks.first(info.stx_ino);
       const bool sized = S_ISREG(info.stx_mode) || S_ISLNK(info.stx_mode);
+      const bool counted = info.stx_nlink <= 1
+          || m_hardLinks.first(
+              {.inode = info.stx_ino,
+               .apparentBytes = sized ? info.stx_size : 0,
+               .allocatedBytes = blockBytes(info.stx_blocks),
+               .direct = frame.depth == 0}
+          );
       MeasureFile file{
           .name = std::string(name),
           .apparentBytes = counted && sized ? info.stx_size : 0,
@@ -283,6 +290,7 @@ namespace {
           .hidden = name.starts_with('.'),
           .symlink = S_ISLNK(info.stx_mode),
           .repeatedLink = !counted,
+          .inode = info.stx_nlink > 1 ? info.stx_ino : 0,
       };
       addBelow(frame.totals, totalsOf(file));
       if (frame.record == kNoMeasureRecord) {

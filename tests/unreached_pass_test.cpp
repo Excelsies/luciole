@@ -191,6 +191,28 @@ namespace {
     TEST_CHECK(neverEntered(*rig.cache.find(folder).table) == neverEntered(*table) - 1);
   }
 
+  // A file with a name in several folders counts once, though the folders come in different batches.
+  void linksAcrossBatches(const fs::path& base) {
+    const auto root = base / "links";
+    writeFile(root / "s000" / "lnk", 300);
+    for (int i = 0; i < 6; ++i) {
+      writeFile(root / std::format("s{:03}", i) / "own", 100);
+      if (i > 0) {
+        fs::create_hard_link(root / "s000" / "lnk", root / std::format("s{:03}", i) / "lnk");
+      }
+    }
+    Rig rig(6 + 2, 1); // the root's folders and the two files of the folder entered first
+    const auto folder = Location::fromPath(root.native());
+    const auto table = rig.settle(folder);
+    TEST_CHECK(neverEntered(*table) == 5);
+    UnreachedPass pass(rig.cache, {.children = 100, .entries = 2'000'000, .applyEvery = std::chrono::milliseconds(0)});
+    rig.run(pass, folder, 1);
+    const auto after = rig.cache.find(folder).table;
+    TEST_CHECK(neverEntered(*after) == 0);
+    TEST_CHECK(after->records[0].totals.apparentBytes == 6 * 100 + 300 && after->records[0].totals.files == 7);
+    TEST_CHECK(after->hardLinks == nullptr); // dropped with the last batch
+  }
+
   // Leaving the folder, or a table that is not the planned one, drops the pass: nothing runs or is applied after.
   void reset(const fs::path& base) {
     Rig rig(12 + 1 + 1, 1); // the root's entries and one file of the entered folder
@@ -224,6 +246,7 @@ int main() {
   nothingNeverEntered(scratch.path());
   sizesOfNeverEnteredFolders(scratch.path());
   limits(scratch.path());
+  linksAcrossBatches(scratch.path());
   budgetEndsWithTheLastUpdate(scratch.path());
   reset(scratch.path());
   return 0;

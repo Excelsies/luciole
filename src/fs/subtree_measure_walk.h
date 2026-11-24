@@ -3,6 +3,7 @@
 #include "fs/cancel_token.h"
 #include "fs/file_error.h"
 #include "fs/folded_children.h"
+#include "fs/hard_links.h"
 #include "fs/location.h"
 
 #include <chrono>
@@ -60,6 +61,7 @@ namespace luciole {
     bool hidden = false;
     bool symlink = false;
     bool repeatedLink = false; // a later name of a hard-linked file: no bytes, not counted as a file
+    std::uint64_t inode = 0;   // of a file with more than one name, else 0
   };
 
   // Entries folded into one piece: files beyond the file cap, or directories beyond the child cap.
@@ -94,6 +96,8 @@ namespace luciole {
     bool partial = false;               // handed out while the walk runs
     bool truncated = false;             // the budget, the deadline or the depth limit stopped the walk
     bool cancelled = false;
+    // The hard-linked files counted, so a later walk of another folder can leave out the ones counted here.
+    std::shared_ptr<const HardLinks> hardLinks = nullptr;
     bool hardLinksOverflow = false; // more hard-linked files than the bound; later ones count at every name
     std::optional<FileError> error; // the root could not be measured; records is empty
   };

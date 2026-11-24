@@ -71,6 +71,15 @@ namespace {
     return result;
   }
 
+  int neverEnteredCount(const MeasureTable& table) {
+    int count = 0;
+    const auto& top = table.records[0];
+    for (auto c = top.firstChild; c < top.firstChild + top.childCount; ++c) {
+      count += table.records[c].flags.notEntered ? 1 : 0;
+    }
+    return count;
+  }
+
   // The budget ends the walk once the root is listed: one child is entered and cut, the others never entered.
   // Which one is entered depends on the order the filesystem lists them, so every check holds for any of them.
   void namedChildren(const fs::path& base) {
@@ -169,6 +178,87 @@ namespace {
     const auto missing = luciole::amendmentOf("gone", measure(base / "nowhere"));
     TEST_CHECK(missing.flags.unreadable && missing.flags.truncated && missing.totals.apparentBytes == 0);
   }
+
+  void link(const fs::path& from, const fs::path& to) {
+    fs::create_directories(to.parent_path());
+    fs::create_hard_link(from, to);
+  }
+
+  // Three folders, each with a 100 byte file of its own and a name of one 300 byte file, in the folder itself or one
+  // level down. The walk of the root enters none: the budget ends it first.
+  fs::path linked(const fs::path& base, const std::string& name, bool nested, int own = 1) {
+    const auto root = base / name;
+    writeFile(root / "s0" / (nested ? "in/lnk" : "lnk"), 300);
+    for (int i = 0; i < 3; ++i) {
+      for (int file = 0; file < own; ++file) {
+        writeFile(root / std::format("s{}", i) / std::format("u{}", file), 100);
+      }
+      if (i > 0) {
+        link(root / "s0" / (nested ? "in/lnk" : "lnk"), root / std::format("s{}", i) / (nested ? "in/lnk" : "lnk"));
+      }
+    }
+    return root;
+  }
+
+  // A file linked into several folders the walk never entered counts once in the root, as one walk counts it, and the
+  // cells add up to the root.
+  void linksAcrossNeverEnteredFolders(const fs::path& base) {
+    for (const bool nested : {false, true}) {
+      const auto root = linked(base, nested ? "nested" : "direct", nested);
+      MeasureOptions options;
+      options.entryBudget = 3; // the root's three folders
+      const auto table = measure(root, options);
+      TEST_CHECK(neverEnteredCount(table) == 3);
+      const auto amended = luciole::amendedTable(table, amendmentsFor(root, table));
+      TEST_CHECK(amended != nullptr);
+      const auto& top = amended->records[0];
+      TEST_CHECK(top.totals.apparentBytes == 3 * 100 + 300 && top.totals.files == 3 + 1);
+      std::uint64_t cells = 0;
+      std::uint64_t files = 0;
+      for (auto c = top.firstChild; c < top.firstChild + top.childCount; ++c) {
+        cells += amended->records[c].totals.apparentBytes;
+        files += amended->records[c].totals.files;
+        // The folder that kept the bytes shows the file at full size, the others as a later name.
+        if (!nested) {
+          for (const auto& file : *amended->records[c].files) {
+            TEST_CHECK(file.name != "lnk" || file.repeatedLink == (file.apparentBytes == 0));
+          }
+        }
+      }
+      TEST_CHECK(cells == 600 && files == 4);
+      TEST_CHECK(top.flags.truncated == false);
+      // The same tree measured in one unbounded walk gives the same root.
+      TEST_CHECK(measure(root).records[0].totals.apparentBytes == 600);
+    }
+  }
+
+  // One folder the walk entered, whole, and others it never entered all name the file.
+  void linkToAnEnteredFolder(const fs::path& base) {
+    const auto root = linked(base, "entered", false, 2);
+    MeasureOptions options;
+    options.entryBudget = 3 + 3; // the root's folders and the three files of the folder entered first
+    const auto table = measure(root, options);
+    TEST_CHECK(neverEnteredCount(table) == 2);
+    const auto amended = luciole::amendedTable(table, amendmentsFor(root, table));
+    TEST_CHECK(amended != nullptr);
+    TEST_CHECK(amended->records[0].totals.apparentBytes == 3 * 200 + 300);
+    TEST_CHECK(!amended->records[0].flags.truncated);
+  }
+
+  // Past the bound of the walk, a later name counts again, as in one walk with that bound.
+  void linksPastTheBound(const fs::path& base) {
+    const auto root = linked(base, "bound", false);
+    MeasureOptions options;
+    options.entryBudget = 3;
+    options.hardLinkBound = 0;
+    const auto table = measure(root, options);
+    const auto amended = luciole::amendedTable(table, amendmentsFor(root, table));
+    TEST_CHECK(amended != nullptr && amended->records[0].totals.apparentBytes == 3 * 100 + 3 * 300);
+    TEST_CHECK(amended->hardLinksOverflow);
+    MeasureOptions whole;
+    whole.hardLinkBound = 0;
+    TEST_CHECK(measure(root, whole).records[0].totals.apparentBytes == 3 * 100 + 3 * 300);
+  }
 } // namespace
 
 int main() {
@@ -177,5 +267,8 @@ int main() {
   rootBecomesExact(scratch.path());
   foldedChildren(scratch.path());
   nothingToAmend(scratch.path());
+  linksAcrossNeverEnteredFolders(scratch.path());
+  linkToAnEnteredFolder(scratch.path());
+  linksPastTheBound(scratch.path());
   return 0;
 }

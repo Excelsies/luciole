@@ -67,7 +67,7 @@ void luciole::UnreachedPass::apply(const Location& folder, bool last) {
   if (m_batch.empty() || (!last && now - m_applied < m_limits.applyEvery)) {
     return;
   }
-  const auto amended = m_cache.amend(folder, m_table, m_batch);
+  const auto amended = m_cache.amend(folder, m_table, m_batch, !last);
   m_batch.clear();
   m_applied = now;
   if (amended) {
