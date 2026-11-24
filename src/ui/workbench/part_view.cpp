@@ -172,8 +172,11 @@ namespace luciole {
     m_builtWidth = width;
     m_builtHeight = height;
     ++m_builds;
-    // A layout for the wheel or a restyle keeps the tween a pending worker layout still owes.
-    const float transition = m_animate && m_shownOnce ? m_part->transitionMs() : 0;
+    // A layout for the wheel or a restyle keeps the tween a pending worker layout still owes. One made while a tween
+    // runs, such as the pane settling by a few pixels as a new folder comes in, tweens on from the frame on screen
+    // instead of cutting it to its end.
+    const bool tweening = m_animate || m_view->transitioning();
+    const float transition = tweening && m_shownOnce ? m_part->transitionMs() : 0;
     m_transitionMs = resizing ? 0 : std::max(m_transitionMs, transition);
     m_animate = false;
     m_loading = m_inputs.snapshot.tree == nullptr;

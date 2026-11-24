@@ -2,8 +2,10 @@
 #include "workbench/iris_hit.h"
 #include "workbench_view_rig.h"
 
+#include <chrono>
 #include <cstddef>
 #include <format>
+#include <print>
 #include <string>
 #include <vector>
 #include <xkbcommon/xkbcommon-keysyms.h>
@@ -129,10 +131,71 @@ namespace {
     TEST_NEAR(rig.mores.back().sceneX, origin.x + rowX, 0.5F);
     TEST_NEAR(rig.mores.back().sceneY, origin.y + rowY, 0.5F);
   }
+
+  // A step of the Iris dial out to the parent folder, whose picture the open folder's cannot give, while the pane
+  // settles by a few pixels: it shrinks while the parent loads and grows back as the parent's rings tween in, as the
+  // page's instrument pane can. The dial morphs from the rings on screen to the parent's in tweens that run to their
+  // end: a layout that is not a divider drag carries the tween on.
+  void irisStepOutMorphsWhileThePaneSettles() {
+    // Iris tweens over 260 ms; one that ends before 250 was cut. Ticks are 16 ms.
+    constexpr int kTick = 16;
+    constexpr int kFullTween = 250;
+    constexpr float kSettle = 4;
+    Rig rig;
+    rig.open("big");
+    rig.settle();
+    choose(rig, WorkbenchInstrument::Iris);
+    rig.settle();
+    const auto& part = rig.view->instrument();
+    const auto& view = part.shapeView();
+    TEST_CHECK(!view.shapes().empty() && !view.transitioning());
+    const float tall = part.height();
+    rig.open("");
+    int tweens = 0;
+    int cuts = 0;
+    bool shrunk = false;
+    bool grown = false;
+    bool was = false;
+    int ran = 0; // ms the tween on screen has run
+    const auto deadline = Clock::now() + std::chrono::seconds(20);
+    rig.frame();
+    while (true) {
+      if (view.transitioning() && !was) {
+        ++tweens;
+        ran = 0;
+      }
+      if (!view.transitioning() && was && ran < kFullTween) {
+        ++cuts;
+      }
+      was = view.transitioning();
+      if (!shrunk && part.shownSnapshot().tree == nullptr) {
+        rig.height -= kSettle;
+        shrunk = true;
+      } else if (shrunk && !grown && part.shownSnapshot().tree != nullptr && was && ran >= 2 * kTick) {
+        rig.height += kSettle;
+        grown = true;
+      }
+      if (grown && rig.loaded() && rig.model.snapshot()->location == rig.fixture.at("")) {
+        break;
+      }
+      TEST_CHECK(Clock::now() < deadline);
+      rig.pump.once();
+      rig.animations.tick(kTick);
+      if (was) {
+        ran += kTick;
+      }
+      rig.frame();
+    }
+    std::println(stderr, "iris step out: {} tweens, {} cut short", tweens, cuts);
+    TEST_CHECK(part.height() == tall);
+    TEST_CHECK(tweens >= 1);
+    TEST_CHECK(cuts == 0);
+  }
 } // namespace
 
 int main() {
   irisChipsFollowThePageTrail();
   irisMoreOpensAtItsRowFromTheKeyboard();
+  irisStepOutMorphsWhileThePaneSettles();
   return 0;
 }
