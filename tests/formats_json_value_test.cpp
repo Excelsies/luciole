@@ -158,7 +158,7 @@ namespace {
     TEST_CHECK(document->find("k0") == nullptr);
     TEST_CHECK(document->find("k40001") == nullptr);
     TEST_CHECK(document->find("") == nullptr);
-    TEST_CHECK(::test::withinBudget(seconds, 1.0));
+    TEST_CHECK(TEST_WITHIN_GUARD(seconds, 1.0));
   }
 
   void testEveryTruncation() {

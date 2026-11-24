@@ -248,7 +248,7 @@ namespace {
           luciole::audioVisualName(kind), meanMs, worstMs, offMs, differing(middle, last)
       );
       TEST_CHECK(differing(middle, last) > 100);
-      TEST_CHECK(::test::withinBudget(meanMs, 25));
+      TEST_CHECK(TEST_WITHIN_BUDGET(meanMs, 25));
       keep(last, std::format("view-{}.png", luciole::audioVisualName(kind)));
     }
   }

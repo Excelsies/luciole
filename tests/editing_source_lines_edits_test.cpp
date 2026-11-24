@@ -310,11 +310,11 @@ namespace {
         "edit {:.3f} ms, edit opening a comment {:.3f} ms",
         createMs, screenMs, endMs, editMs, openMs
     );
-    TEST_CHECK(::test::withinBudget(createMs, kCreateBoundMs));
-    TEST_CHECK(::test::withinBudget(screenMs, kScanBoundMs));
-    TEST_CHECK(::test::withinBudget(endMs, kScanBoundMs));
-    TEST_CHECK(::test::withinBudget(editMs, kEditBoundMs));
-    TEST_CHECK(::test::withinBudget(openMs, kEditBoundMs));
+    TEST_CHECK(TEST_WITHIN_GUARD(createMs, kCreateBoundMs));
+    TEST_CHECK(TEST_WITHIN_GUARD(screenMs, kScanBoundMs));
+    TEST_CHECK(TEST_WITHIN_GUARD(endMs, kScanBoundMs));
+    TEST_CHECK(TEST_WITHIN_GUARD(editMs, kEditBoundMs));
+    TEST_CHECK(TEST_WITHIN_GUARD(openMs, kEditBoundMs));
   }
 } // namespace
 

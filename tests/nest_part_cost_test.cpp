@@ -342,7 +342,7 @@ namespace {
     // Protects the main context against a frame spent on one snapshot or hover change: the dearest of them, in
     // thread processor time, divided by the machine slowdown, stays under the budget.
     std::println("  dearest part cost {:.2f} ms against the {:.2f} ms budget", worst, kBudgetMs);
-    TEST_CHECK(::test::withinBudget(worst, kBudgetMs));
+    TEST_CHECK(TEST_WITHIN_BUDGET(worst, kBudgetMs));
   }
 
   // The bound is on the part's own processor time: a part made kStretch times slower goes over it, and the division by

@@ -389,8 +389,9 @@ namespace {
     return 1000.0 * static_cast<double>(std::clock() - start) / CLOCKS_PER_SEC;
   }
 
+  // The caps guard against work that grows faster than the input, which takes minutes on 1 MiB.
   template <typename Work> bool withinCap(const Work& work) {
-    return ::test::withinBudget(elapsedMs(work), kHostileCapMs);
+    return ::test::withinGuard(elapsedMs(work), kHostileCapMs, "hostile 1 MiB operation, ms");
   }
 
   void testHostileQuotes() {

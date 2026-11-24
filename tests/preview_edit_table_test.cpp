@@ -357,7 +357,7 @@ namespace {
     );
     TEST_CHECK(editing.view->table().get() != before); // shown at once
     TEST_CHECK(formats::gridCellText(*editing.view->table(), row, column) == "renamed");
-    TEST_CHECK(::test::withinBudget(spent, kChangeBudgetMs));
+    TEST_CHECK(TEST_WITHIN_BUDGET(spent, kChangeBudgetMs));
   }
 
   // The table of kInlineGridBytes with 4 columns.

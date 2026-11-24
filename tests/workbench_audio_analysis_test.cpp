@@ -137,8 +137,8 @@ namespace {
     }
     const auto [low, high] = std::ranges::minmax(sums);
     TEST_CHECK(low / kFrames > 0.4);
-    TEST_CHECK(::test::withinBudget(high / kFrames, 0.75));
-    TEST_CHECK(::test::withinBudget((high - low) / kFrames, 0.2));
+    TEST_CHECK(TEST_WITHIN_BUDGET(high / kFrames, 0.75));
+    TEST_CHECK(TEST_WITHIN_BUDGET((high - low) / kFrames, 0.2));
   }
 
   // Frames of `period`-second kicks over four seconds at `fps`: one hit per kick, at most 75 ms after it starts.
@@ -447,7 +447,7 @@ namespace {
     const double perFrame = (threadMilliseconds() - start) / kFrames;
     std::println("audio analysis: {:.4f} ms of processor time per frame", perFrame);
     TEST_CHECK(sink > 0.0F);
-    TEST_CHECK(::test::withinBudget(perFrame, 0.2));
+    TEST_CHECK(TEST_WITHIN_BUDGET(perFrame, 0.2));
   }
 } // namespace
 

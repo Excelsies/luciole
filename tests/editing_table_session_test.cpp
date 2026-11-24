@@ -359,8 +359,8 @@ namespace {
     const double insertRowSeconds = secondsSince(start);
     std::println("setCell {:.4f} s, insertRow {:.4f} s of processor time", setCellSeconds, insertRowSeconds);
     TEST_CHECK(session.rowCount() == 20'001);
-    TEST_CHECK(::test::withinBudget(setCellSeconds, kChangeSecondsBound));
-    TEST_CHECK(::test::withinBudget(insertRowSeconds, kChangeSecondsBound));
+    TEST_CHECK(TEST_WITHIN_BUDGET(setCellSeconds, kChangeSecondsBound));
+    TEST_CHECK(TEST_WITHIN_BUDGET(insertRowSeconds, kChangeSecondsBound));
   }
 } // namespace
 

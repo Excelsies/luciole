@@ -344,7 +344,7 @@ namespace {
       rig.settle();
     }
     std::println("update after a 1,500 x 256 table: {:.2f} ms of processor time", least);
-    TEST_CHECK(::test::withinBudget(least, 2.5));
+    TEST_CHECK(TEST_WITHIN_BUDGET(least, 2.5));
   }
 
   void showsNothingWithoutTable() {

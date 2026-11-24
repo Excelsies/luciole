@@ -211,7 +211,7 @@ namespace {
     }
     TEST_CHECK(all[0] == 0 && all[5] == 0);
     // One sort for the folder; a sort per entry takes seconds here.
-    TEST_CHECK(::test::withinBudget(seconds, 0.05));
+    TEST_CHECK(TEST_WITHIN_GUARD(seconds, 0.05));
   }
 
   void testVisitsChangeOrderAndShares() {

@@ -435,7 +435,7 @@ namespace {
     );
     TEST_CHECK(circles > 1000 && shapes.shapes.size() > 1000);
     TEST_CHECK(rig.view->sceneBuilds() == builds);
-    TEST_CHECK(::test::withinBudget(total / kFrames, 16));
+    TEST_CHECK(TEST_WITHIN_BUDGET(total / kFrames, 16));
   }
 } // namespace
 

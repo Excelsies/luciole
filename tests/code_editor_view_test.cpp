@@ -163,7 +163,7 @@ namespace {
     }
     const double perUpdate = (cpuMs() - start) / 50;
     std::println("an idle update takes {:.4f} ms", perUpdate);
-    TEST_CHECK(::test::withinBudget(perUpdate, 0.5));
+    TEST_CHECK(TEST_WITHIN_BUDGET(perUpdate, 0.5));
     TEST_CHECK(rig.framesAsked == asked && rig.view->drawnStrips() == drawn && !rig.view->blinking());
     rig.focus();
     TEST_CHECK(rig.view->blinking() && rig.framesAsked == asked);
@@ -300,10 +300,10 @@ namespace {
         typed[typed.size() / 2], typed.back(), enter, pasteKey, pasteRest, pageKey, pageRest
     );
     // Bounds well above the measured cost, low enough to catch work that grows with the document.
-    TEST_CHECK(::test::withinBudget(typed[typed.size() / 2], 10.0));
-    TEST_CHECK(::test::withinBudget(enter, 20.0));
-    TEST_CHECK(::test::withinBudget(pasteKey, 40.0));
-    TEST_CHECK(::test::withinBudget(pageKey, 40.0));
+    TEST_CHECK(TEST_WITHIN_GUARD(typed[typed.size() / 2], 10.0));
+    TEST_CHECK(TEST_WITHIN_GUARD(enter, 20.0));
+    TEST_CHECK(TEST_WITHIN_GUARD(pasteKey, 40.0));
+    TEST_CHECK(TEST_WITHIN_GUARD(pageKey, 40.0));
   }
 } // namespace
 

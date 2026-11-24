@@ -130,7 +130,7 @@ namespace {
     TEST_NEAR(up->ax, 0.0, kExact);
     TEST_NEAR(up->ay, 0.06, kExact);
     TEST_NEAR(up->k, 0.9, kExact);
-    TEST_CHECK(::test::withinBudget(elapsed, 100));
+    TEST_CHECK(TEST_WITHIN_GUARD(elapsed, 100));
   }
 
   // A folder whose weights cannot be packed has no frames for its children: no similarity, no conversion,
