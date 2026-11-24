@@ -226,6 +226,33 @@ namespace {
     TEST_CHECK(after->hardLinks == nullptr); // dropped with the last batch
   }
 
+  // A second pass over a table a first one left folders in, as a second view of the folder starts, counts a linked file
+  // once: the first keeps what it counted while folders are left.
+  void linksAcrossTwoPasses(const fs::path& base) {
+    const auto root = base / "twopasses";
+    writeFile(root / "s000" / "lnk", 300);
+    for (int i = 0; i < 6; ++i) {
+      writeFile(root / std::format("s{:03}", i) / "own", 100);
+      if (i > 0) {
+        fs::create_hard_link(root / "s000" / "lnk", root / std::format("s{:03}", i) / "lnk");
+      }
+    }
+    Rig rig(6 + 2, 1);
+    const auto folder = Location::fromPath(root.native());
+    rig.settle(folder);
+    UnreachedPass first(rig.cache, {.children = 3, .entries = 2'000'000, .applyEvery = std::chrono::milliseconds(0)});
+    rig.run(first, folder, 1);
+    const auto left = rig.cache.find(folder).table;
+    TEST_CHECK(neverEntered(*left) == 2 && left->hardLinks != nullptr);
+    UnreachedPass second(
+        rig.cache, {.children = 100, .entries = 2'000'000, .applyEvery = std::chrono::milliseconds(0)}
+    );
+    rig.run(second, folder, 1);
+    const auto after = rig.cache.find(folder).table;
+    TEST_CHECK(neverEntered(*after) == 0);
+    TEST_CHECK(after->records[0].totals.apparentBytes == 6 * 100 + 300 && after->hardLinks == nullptr);
+  }
+
   // A folder measured again walks its never-entered folders again: the tables cached for them by the earlier pass
   // are not served.
   void sizesAfterAChange(const fs::path& base) {
@@ -283,6 +310,7 @@ int main() {
   limits(scratch.path());
   linksAcrossBatches(scratch.path());
   sizesAfterAChange(scratch.path());
+  linksAcrossTwoPasses(scratch.path());
   budgetEndsWithTheLastUpdate(scratch.path());
   reset(scratch.path());
   return 0;

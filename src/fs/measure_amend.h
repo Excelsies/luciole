@@ -26,8 +26,8 @@ namespace luciole {
   // A copy of `table` where each amendment replaces the never-entered child of the root it names, kept as a record or
   // only in the folded list, and the root's totals follow. Amendments that name no never-entered child are
   // ignored. A file with several names counts once across the walk of the root and the amendments, as in one walk:
-  // an amendment gives up the bytes of a file already counted, and the copy keeps the files counted while `more`
-  // amendments are to follow. Null when none applied, so the caller keeps `table`.
+  // an amendment gives up the bytes of a file already counted, and the copy keeps the files counted while a folder is
+  // still never entered. Null when none applied, so the caller keeps `table`.
   std::shared_ptr<const MeasureTable>
-  amendedTable(const MeasureTable& table, std::span<const MeasureAmendment> amendments, bool more = false);
+  amendedTable(const MeasureTable& table, std::span<const MeasureAmendment> amendments);
 } // namespace luciole

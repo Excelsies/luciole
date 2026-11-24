@@ -114,7 +114,7 @@ namespace {
 } // namespace
 
 std::shared_ptr<const luciole::MeasureTable>
-luciole::amendedTable(const MeasureTable& table, std::span<const MeasureAmendment> amendments, bool more) {
+luciole::amendedTable(const MeasureTable& table, std::span<const MeasureAmendment> amendments) {
   if (table.records.empty() || amendments.empty()) {
     return nullptr;
   }
@@ -172,7 +172,15 @@ luciole::amendedTable(const MeasureTable& table, std::span<const MeasureAmendmen
   if (list) {
     root.folded = std::move(list);
   }
-  if (!more) {
+  // The files counted stay while a folder is still never entered: a later pass over this table needs them.
+  bool left = false;
+  for (auto c = root.firstChild; c < root.firstChild + root.childCount && !left; ++c) {
+    left = out->records[c].flags.notEntered;
+  }
+  left = left || (root.folded && std::ranges::any_of(root.folded->entries, [](const FoldedChildren::Entry& entry) {
+                    return (entry.flags & FoldedChildren::kNotEntered) != 0;
+                  }));
+  if (!left) {
     out->hardLinks.reset();
   } else if (counted) {
     std::ranges::sort(counted->kept, {}, &HardLinkEntry::inode);
