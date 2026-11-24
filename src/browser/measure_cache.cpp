@@ -304,10 +304,14 @@ std::shared_ptr<const luciole::MeasureTable> luciole::MeasureCache::amend(
   return amended;
 }
 
-void luciole::MeasureCache::discard(const Location& folder) {
+void luciole::MeasureCache::discardBefore(const Location& folder, const Location& reference) {
   auto& state = *m_state;
   const auto found = state.entries.find(folder.uri());
-  if (found != state.entries.end() && !found->second.walk.valid()) {
+  const auto newer = state.entries.find(reference.uri());
+  const bool older = newer == state.entries.end()
+      || found == state.entries.end()
+      || found->second.measuredAt < newer->second.measuredAt;
+  if (older && found != state.entries.end() && !found->second.walk.valid()) {
     state.entries.erase(found);
     state.touched();
   }

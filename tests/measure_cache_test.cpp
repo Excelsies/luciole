@@ -397,6 +397,26 @@ namespace {
     TEST_CHECK(cache.amend(folder, amended, amendments) == nullptr); // stale tables are not amended
     cache.removeListener(id);
   }
+
+  // A table is forgotten only when it is older than the table of the folder above it: one made after that table still
+  // describes the folder.
+  void discardingBefore(const fs::path& base) {
+    SubtreeMeasureService service(serviceOptions());
+    MeasureCache cache(
+        service, {.recordBudget = 100'000, .checkAge = std::chrono::hours(1), .maxAge = std::chrono::hours(1)}
+    );
+    const auto folder = tree(base / "discarded", 2, 2);
+    const auto child = Location::fromPath((base / "discarded" / "d000").native());
+    settle(cache, child); // a table of the child made first
+    settle(cache, folder);
+    TEST_CHECK(cache.find(child).record == 0);
+    cache.discardBefore(child, folder);
+    TEST_CHECK(cache.find(child).record != 0); // older: forgotten, the folder's table answers
+    settle(cache, child);                      // made after the folder's table
+    const auto kept = cache.find(child).table;
+    cache.discardBefore(child, folder);
+    TEST_CHECK(cache.find(child).record == 0 && cache.find(child).table == kept);
+  }
 } // namespace
 
 int main() {
@@ -413,5 +433,6 @@ int main() {
   leases(scratch.path());
   foldedChildrenCount(scratch.path());
   amending(scratch.path());
+  discardingBefore(scratch.path());
   return 0;
 }
