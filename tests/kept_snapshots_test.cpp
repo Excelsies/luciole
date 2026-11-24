@@ -154,7 +154,7 @@ namespace {
     );
     TEST_CHECK(merged.listed.size() == 100 && merged.count == 19997);
     TEST_CHECK(merged.listed.front().name == "f00996" && merged.listed.front().value == "996 bytes");
-    TEST_CHECK(TEST_WITHIN_BUDGET(ms, 50));
+    TEST_CHECK(TEST_WITHIN_GUARD(ms, 50));
   }
 
   // Where a merged piece is drawn: the middle of the box around its hittable shapes, whatever their kinds.

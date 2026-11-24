@@ -480,7 +480,7 @@ namespace {
       for (std::size_t k = 0; k < std::min<std::size_t>(layout.tileCount(), 8); ++k) {
         TEST_CHECK(layout.renderTile(k).has_value());
       }
-      TEST_CHECK(TEST_WITHIN_BUDGET(threadSeconds() - start, kBound));
+      TEST_CHECK(TEST_WITHIN_GUARD(threadSeconds() - start, kBound));
       TEST_CHECK(doc->bytesCapped);
       TEST_CHECK(layout.width() == static_cast<int>(480 * scale));
       TEST_CHECK(layout.tileCount() <= kMaxTextTiles);
@@ -500,7 +500,7 @@ namespace {
       for (std::size_t k = 0; k < std::min<std::size_t>(rows.tileCount(), 8); ++k) {
         TEST_CHECK(rows.renderTile(k).has_value());
       }
-      TEST_CHECK(TEST_WITHIN_BUDGET(threadSeconds() - start, kBound));
+      TEST_CHECK(TEST_WITHIN_GUARD(threadSeconds() - start, kBound));
       TEST_CHECK(many->linesCapped);
       TEST_CHECK(many->blocks[0].lines.size() == formats::kStyledTextLines);
     }

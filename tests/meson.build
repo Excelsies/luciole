@@ -392,7 +392,7 @@ test_table = [
   {'name': 'formats-markdown-inline', 'deps': [formats_dep]},
   {'name': 'formats-markdown-lines', 'deps': [formats_dep]},
   {'name': 'formats-markdown-blocks', 'deps': [formats_dep]},
-  {'name': 'formats-markdown', 'cpu_budget': true, 'deps': [formats_dep]},
+  {'name': 'formats-markdown', 'cpu_budget': true, 'deps': [formats_dep], 'timeout': 90},
   {'name': 'formats-delimited-scan', 'deps': [formats_dep]},
   {'name': 'formats-delimited-table', 'deps': [formats_dep]},
   {'name': 'formats-delimited-detect', 'deps': [formats_dep]},

@@ -359,7 +359,7 @@ namespace {
         "speed: 10,000 inserts and 1,000 newlines on 1,019,999 bytes took {:.3f} s of processor time", seconds
     );
     TEST_CHECK(buffer.lineCount() == 21'000 && buffer.byteCount() == 1'019'999 + 10'000 + 5'000);
-    TEST_CHECK(TEST_WITHIN_BUDGET(seconds, kSpeedBoundSeconds));
+    TEST_CHECK(TEST_WITHIN_GUARD(seconds, kSpeedBoundSeconds));
   }
 } // namespace
 
