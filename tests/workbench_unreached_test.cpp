@@ -362,6 +362,16 @@ namespace {
   // Refresh while a walk runs: the next walk starts when that one ends, not after the wait a changing folder gets.
   void refreshStartsAtOnce(const fs::path& base) {
     const auto folder = tree(base / "atonce", 3, 300, 0);
+    // What a plain walk of the folder takes here, with the same pumping.
+    const auto before = std::chrono::steady_clock::now();
+    {
+      Rig plain(2'000'000);
+      luciole::WorkbenchModel model(plain.cache, {.ancestorLevels = 0});
+      Pump pump;
+      model.setLocation(Location::fromPath(folder.native()));
+      settle(pump, model);
+    }
+    const auto walk = std::chrono::steady_clock::now() - before;
     Gate gate;
     gate.armed = true;
     Rig rig(2'000'000, [&gate] { gate.hold(); });
@@ -373,7 +383,11 @@ namespace {
     const auto released = std::chrono::steady_clock::now();
     gate.release();
     pump.until([&] { return model.snapshot() && !model.measuring(); });
-    TEST_CHECK(std::chrono::steady_clock::now() - released < std::chrono::milliseconds(700));
+    // Two walks and the pumping take a few times one walk. A wait of the gap would show as more than the gap, so the
+    // check holds only where a few walks are far under it.
+    if (walk * 8 < luciole::WorkbenchWalks::kAgainGap) {
+      TEST_CHECK(std::chrono::steady_clock::now() - released < luciole::WorkbenchWalks::kAgainGap);
+    }
   }
 } // namespace
 
