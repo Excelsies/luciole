@@ -151,7 +151,7 @@ namespace luciole {
       refused.state = TextDocumentState::PrivateKey;
       return refused;
     }
-    if (isKeyContentType(contentType) && !looksLikePemText(content.bytes)) {
+    if (isKeyContentType(contentType) && !looksLikePemText(content.bytes, content.truncated)) {
       TextDocument refused;
       refused.state = TextDocumentState::Container;
       return refused;

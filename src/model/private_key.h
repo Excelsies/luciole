@@ -149,12 +149,36 @@ namespace luciole {
     return std::ranges::find(private_key_detail::kKeyContentTypes, type) != private_key_detail::kKeyContentTypes.end();
   }
 
-  // Whether the bytes are PEM-like text: printable ASCII and line breaks only. Binary containers are not.
-  inline bool looksLikePemText(std::string_view bytes) {
-    return std::ranges::all_of(bytes, [](char c) {
-      const auto byte = static_cast<unsigned char>(c);
-      return (byte >= 0x20 && byte < 0x7F) || byte == '\n' || byte == '\r' || byte == '\t';
-    });
+  // Whether the bytes are text rather than a binary container: valid UTF-8 (a BOM is valid) with no control byte
+  // below 0x20 other than tab, line breaks and form feed. A character cut at the end of the bytes read is fine when
+  // `cut` says the file goes on. DER, PKCS#12 and keyrings have NUL or other control bytes, or invalid UTF-8.
+  inline bool looksLikePemText(std::string_view bytes, bool cut = false) {
+    for (std::size_t i = 0; i < bytes.size();) {
+      const auto byte = static_cast<unsigned char>(bytes[i]);
+      if (byte < 0x80) {
+        if (byte < 0x20 && byte != '\t' && byte != '\n' && byte != '\r' && byte != '\f') {
+          return false;
+        }
+        ++i;
+        continue;
+      }
+      const std::size_t length = byte >= 0xC2 && byte <= 0xDF
+          ? 2
+          : (byte >= 0xE0 && byte <= 0xEF ? 3 : (byte >= 0xF0 && byte <= 0xF4 ? 4 : 0));
+      if (length == 0) {
+        return false;
+      }
+      for (std::size_t k = 1; k < length; ++k) {
+        if (i + k >= bytes.size()) {
+          return cut; // the sequence runs past the bytes read
+        }
+        if ((static_cast<unsigned char>(bytes[i + k]) & 0xC0U) != 0x80U) {
+          return false;
+        }
+      }
+      i += length;
+    }
+    return true;
   }
 
   // Whether the bytes hold private key material anywhere: a PEM BEGIN line naming a private key, a PGP, SSH2, PuTTY or

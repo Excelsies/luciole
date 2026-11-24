@@ -132,6 +132,23 @@ namespace {
     // A certificate alone is text; a binary container (DER, PKCS#12) is never shown, not even as a hex dump.
     const auto cert = made(certificate, "cert.pem", "application/pkix-cert");
     TEST_CHECK(cert.state == State::Shown && cert.document != nullptr);
+    // PEM text with a BOM and CRLF, a UTF-8 comment, or an `openssl x509 -text` header is text, not a container.
+    for (const auto& pem : {
+             "\xEF\xBB\xBF" + certificate,
+             std::string("-----BEGIN CERTIFICATE-----\r\nMIIBfake\r\n-----END CERTIFICATE-----\r\n"),
+             "# émetteur : Société Générale – 日本\n" + certificate,
+             "Certificate:\n    Data:\n        Version: 3 (0x2)\n        Subject: CN=example\n\f\n" + certificate,
+         }) {
+      const auto shown = made(pem, "cert.pem", "application/pkix-cert");
+      TEST_CHECK(shown.state == State::Shown && shown.document != nullptr);
+    }
+    // A multi-byte character cut at the end of the bytes read is text when the file goes on, binary when it does not.
+    const std::string cutAt = certificate + "caf\xC3";
+    TEST_CHECK(made(cutAt, "cert.pem", "application/pkix-cert", true).state == State::Cut);
+    TEST_CHECK(made(cutAt, "cert.pem", "application/pkix-cert").state == State::Container);
+    // Binary has a control byte or bytes that are not UTF-8.
+    TEST_CHECK(made(certificate + "\x01", "cert.pem", "application/pkix-cert").state == State::Container);
+    TEST_CHECK(made(certificate + "\xC3\x28", "cert.pem", "application/pkix-cert").state == State::Container);
     const auto der = made("\x30\x82\x01\x0a\x02\x82\x01\x01\x00"s, "cert.der", "application/pkix-cert");
     TEST_CHECK(der.state == State::Container && der.document == nullptr);
     const auto bundleP12 = made("\x30\x82\x0a\x3b\x02\x01\x03"s, "store.p12", "application/x-pkcs12");

@@ -20,6 +20,7 @@
 #include <sys/stat.h>
 #include <thread>
 #include <tuple>
+#include <vector>
 
 namespace {
   void wait(auto predicate) {
@@ -171,6 +172,21 @@ namespace {
       wait([&] { return !preview.busy(); });
       TEST_CHECK(preview.snapshot().status == luciole::PreviewStatus::Ready);
       TEST_CHECK(preview.snapshot().text == text);
+    }
+    // PEM with a BOM, a UTF-8 comment or CRLF is text; so is a multi-byte character cut at the end of the bytes read.
+    for (const auto& [name, text] : std::vector<std::pair<std::string, std::string>>{
+             {"bom.pem", "\xEF\xBB\xBF" + certificate},
+             {"comment.pem", "# émetteur : Société Générale – 日本\n" + certificate},
+             {"crlf.pem", "-----BEGIN CERTIFICATE-----\r\nMIIBfake\r\n-----END CERTIFICATE-----\r\n"},
+             {"header.pem", "Certificate:\n    Data:\n        Subject: CN=example\n" + certificate},
+             {"cut.pem", std::string(64U * 1024U - 1U, 'A') + "\xC3\xA9" + "\n"},
+         }) {
+      const auto path = root / name;
+      write(path, text);
+      preview.show(entry(path, "application/pkcs7-mime"), 512);
+      wait([&] { return !preview.busy(); });
+      TEST_CHECK(preview.snapshot().status == luciole::PreviewStatus::Ready);
+      TEST_CHECK(!preview.snapshot().text.empty());
     }
     // A binary container is never read as text: the file says what it is and shows nothing.
     for (const auto* type : {"application/pkix-cert", "application/x-pkcs12", "application/pkcs7-mime"}) {

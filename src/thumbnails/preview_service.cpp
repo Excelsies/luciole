@@ -120,7 +120,8 @@ namespace {
     if (containsPrivateKey(bytes)) {
       return {{}, "This file looks like it contains a private key. Its text is not shown."};
     }
-    if (entry.contentType && isKeyContentType(*entry.contentType) && !looksLikePemText(bytes)) {
+    const bool wholeFile = static_cast<std::uint64_t>(before.st_size) <= bytes.size();
+    if (entry.contentType && isKeyContentType(*entry.contentType) && !looksLikePemText(bytes, !wholeFile)) {
       return {{}, "This is a binary certificate or key container. Its content is not shown."};
     }
     bool truncated = static_cast<std::uint64_t>(before.st_size) > bytes.size();
