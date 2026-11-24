@@ -1,6 +1,7 @@
 #include "fs/measure_amend.h"
 
 #include <algorithm>
+#include <optional>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -65,10 +66,11 @@ namespace {
 
   // Takes out of the amendment the files `counted` has, and adds the others to it. Their sizes leave the totals and
   // the folder's own file pieces: the later name reads as a later name, as in one walk.
-  void leaveOutCounted(MeasureAmendment& amendment, Counted& counted) {
-    if (!amendment.hardLinks) {
-      return;
+  void leaveOutCounted(MeasureAmendment& amendment, std::optional<Counted>& made, const luciole::MeasureTable& table) {
+    if (!amendment.hardLinks || amendment.hardLinks->entries.empty()) {
+      return; // most batches name no linked file: the set is built when one does
     }
+    auto& counted = made ? *made : made.emplace(table);
     std::shared_ptr<std::vector<luciole::MeasureFile>> files;
     for (auto entry : amendment.hardLinks->entries) {
       if (!counted.seen.contains(entry.inode)) {
@@ -126,10 +128,10 @@ luciole::amendedTable(const MeasureTable& table, std::span<const MeasureAmendmen
   }
   std::shared_ptr<FoldedChildren> list; // a copy, made at the first folded child amended
   bool changed = false;
-  Counted counted(table);
+  std::optional<Counted> counted;
   for (auto amendment : amendments) {
     if (const auto found = never.find(amendment.name); found != never.end()) {
-      leaveOutCounted(amendment, counted);
+      leaveOutCounted(amendment, counted, table);
       auto& record = out->records[found->second];
       replace(root.totals, record.totals, amendment.totals);
       record.totals = amendment.totals;
@@ -149,7 +151,7 @@ luciole::amendedTable(const MeasureTable& table, std::span<const MeasureAmendmen
       if (shown == nullptr || (shown->flags & FoldedChildren::kNotEntered) == 0) {
         continue;
       }
-      leaveOutCounted(amendment, counted);
+      leaveOutCounted(amendment, counted, table);
       auto& entry = list->entries[static_cast<std::size_t>(shown - list->entries.data())];
       MeasureTotals was{.apparentBytes = entry.apparentBytes, .allocatedBytes = entry.allocatedBytes};
       replace(root.totals, was, amendment.totals);
@@ -170,13 +172,14 @@ luciole::amendedTable(const MeasureTable& table, std::span<const MeasureAmendmen
   if (list) {
     root.folded = std::move(list);
   }
-  out->hardLinksOverflow = out->hardLinksOverflow || counted.overflow;
-  out->hardLinks.reset();
-  if (more) {
-    std::ranges::sort(counted.kept, {}, &HardLinkEntry::inode);
+  if (!more) {
+    out->hardLinks.reset();
+  } else if (counted) {
+    std::ranges::sort(counted->kept, {}, &HardLinkEntry::inode);
     out->hardLinks =
-        std::make_shared<const HardLinks>(HardLinks{.entries = std::move(counted.kept), .bound = counted.bound});
+        std::make_shared<const HardLinks>(HardLinks{.entries = std::move(counted->kept), .bound = counted->bound});
   }
+  out->hardLinksOverflow = out->hardLinksOverflow || (counted && counted->overflow);
   // The root is a lower bound while any child, kept or folded, still is.
   bool cut = root.flags.unreadable;
   for (auto c = root.firstChild; c < root.firstChild + root.childCount && !cut; ++c) {
