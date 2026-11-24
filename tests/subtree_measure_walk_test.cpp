@@ -367,7 +367,10 @@ namespace {
     // The tree has 8 entries. A budget of exactly 8 may cut before the empty folder, which is not read to find out it
     // is empty, or not, by the order the filesystem lists its folders in; one more always finishes.
     options.entryBudget = 8;
-    TEST_CHECK(measure(root, options).entries == 8);
+    const auto atCount = measure(root, options);
+    TEST_CHECK(atCount.entries == 8);
+    TEST_CHECK(atCount.truncated == atCount.records[0].flags.truncated);
+    TEST_CHECK(atCount.truncated || atCount.records[0].totals.files == 5);
     options.entryBudget = 9;
     const auto exact = measure(root, options);
     TEST_CHECK(!exact.truncated && exact.records[0].totals.files == 5);
