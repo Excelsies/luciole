@@ -4,6 +4,7 @@
 #include "temp_folder.h"
 #include "test_check.h"
 
+#include <algorithm>
 #include <chrono>
 #include <filesystem>
 #include <format>
@@ -164,6 +165,18 @@ namespace {
     UnreachedPass capped(rig.cache, {.children = 3, .entries = 2'000'000, .applyEvery = std::chrono::milliseconds(0)});
     rig.run(capped, folder, 1);
     TEST_CHECK(neverEntered(*rig.cache.find(folder).table) == 11 - 3);
+    // The folders it walked are the first by name among those never entered.
+    std::vector<std::string> names;
+    for (const auto& record : table->records) {
+      if (record.flags.notEntered) {
+        names.push_back(record.name);
+      }
+    }
+    std::ranges::sort(names);
+    const auto after = rig.cache.find(folder).table;
+    for (std::size_t i = 0; i < names.size(); ++i) {
+      TEST_CHECK((sizeOf(*after, names[i]) != 0) == (i < 3));
+    }
     // Each folder counts at least its four first files: a budget of five stops after two of them with one worker.
     Rig again(12 + 1 + 1, 1);
     const auto second = tree(base / "limits2", 12, 4);
