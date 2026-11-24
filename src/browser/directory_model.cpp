@@ -13,6 +13,7 @@
 #include <cstring>
 #include <gio/gio.h>
 #include <limits>
+#include <map>
 #include <utility>
 
 namespace {
@@ -61,6 +62,12 @@ bool luciole::DirectoryModel::applySnapshot(
   const auto focusedRow = focused ? rowOf(*focused) : std::nullopt;
   const auto focusedParent = focused ? treeParent(*focused) : std::nullopt;
   const bool focusedSelected = focused && m_selection.selected.contains(*focused);
+  std::unordered_map<EntryId, std::optional<EntryId>> trackedParents;
+  if (m_replacementKeepsFocus) {
+    for (const auto id : trackedIds()) {
+      trackedParents.emplace(id, treeParent(id));
+    }
+  }
   m_preserveRootOrder = preserveRootOrder;
   m_treeParents = std::move(parents);
   m_alternateSortKeys.clear();
@@ -128,8 +135,8 @@ bool luciole::DirectoryModel::applySnapshot(
           entry.symlink || entry.type == FileType::Symlink || (!regular && entry.type != FileType::Unknown);
     }
   }
-  const auto replaced =
-      m_replacementKeepsFocus && sameLocation ? replacedIds(snapshot, slots) : std::unordered_map<EntryId, EntryId>{};
+  const auto replaced = m_replacementKeepsFocus && sameLocation ? replacedIds(snapshot, slots, trackedParents)
+                                                                : std::unordered_map<EntryId, EntryId>{};
   std::vector<EntryId> removalOrder;
   if (sameLocation
       && snapshot.status == DirectoryStatus::Ready
@@ -171,23 +178,36 @@ bool luciole::DirectoryModel::applySnapshot(
   return true;
 }
 
-std::unordered_map<luciole::EntryId, luciole::EntryId>
-luciole::DirectoryModel::replacedIds(const DirectorySnapshot& snapshot, const std::vector<std::uint32_t>& slots) const {
-  std::unordered_map<std::string_view, EntryId> wanted; // name of a tracked entry that is gone -> its ID
-  const auto track = [&](EntryId id) {
-    if (slots.empty() || slots[sourceSlot(slots, snapshot.entries, id)] == kNoRow) {
-      if (const auto source = sourceOf(id)) {
-        wanted.emplace(m_snapshot.entries.brief(*source).name, id);
-      }
-    }
-  };
+std::vector<luciole::EntryId> luciole::DirectoryModel::trackedIds() const {
+  std::vector<EntryId> ids;
   for (const auto id : {m_selection.focused, m_selection.anchor, m_scrollAnchor}) {
     if (id) {
-      track(*id);
+      ids.push_back(*id);
     }
   }
-  for (const auto id : m_selection.selected) {
-    track(id);
+  ids.insert(ids.end(), m_selection.selected.begin(), m_selection.selected.end());
+  return ids;
+}
+
+std::unordered_map<luciole::EntryId, luciole::EntryId> luciole::DirectoryModel::replacedIds(
+    const DirectorySnapshot& snapshot, const std::vector<std::uint32_t>& slots,
+    const std::unordered_map<EntryId, std::optional<EntryId>>& parents
+) const {
+  // Name and tree parent of a tracked entry that is gone -> its ID.
+  std::map<std::pair<std::string_view, std::optional<EntryId>>, EntryId> wanted;
+  for (const auto id : trackedIds()) {
+    if (slots.empty() || slots[sourceSlot(slots, snapshot.entries, id)] == kNoRow) {
+      if (const auto source = sourceOf(id)) {
+        const auto parent = parents.find(id);
+        wanted.emplace(
+            std::pair(
+                std::string_view(m_snapshot.entries.brief(*source).name),
+                parent != parents.end() ? parent->second : std::nullopt
+            ),
+            id
+        );
+      }
+    }
   }
   std::unordered_map<EntryId, EntryId> replaced;
   if (wanted.empty()) {
@@ -195,7 +215,7 @@ luciole::DirectoryModel::replacedIds(const DirectorySnapshot& snapshot, const st
   }
   for (std::size_t index = 0; index < snapshot.entries.size() && replaced.size() < wanted.size(); ++index) {
     const auto brief = snapshot.entries.brief(index);
-    if (const auto found = wanted.find(brief.name); found != wanted.end()) {
+    if (const auto found = wanted.find({brief.name, treeParent(brief.id)}); found != wanted.end()) {
       replaced.emplace(found->second, brief.id);
     }
   }

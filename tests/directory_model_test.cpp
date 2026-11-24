@@ -1065,6 +1065,79 @@ namespace {
     TEST_CHECK(!hidden.selection().focused);
   }
 
+  // Two expanded folders hold a file of the same name. An entry replaced or removed in one never attaches to the other.
+  void testReplacementKeepsTheParent() {
+    const auto folder = [](EntryId id, const char* name) { return entry(id, name, luciole::FileType::Directory); };
+    const auto both = [&](EntryId first, EntryId second, std::uint64_t generation) {
+      return snapshot(
+          {folder(1, "folder1"), entry(first, "x.txt"), folder(3, "folder2"), entry(second, "x.txt")}, generation
+      );
+    };
+    const std::unordered_map<EntryId, EntryId> parents{{2, 1}, {4, 3}};
+    const auto start = [&](DirectoryModel& model) {
+      model.setReplacementKeepsFocus(true);
+      model.applySnapshot(both(2, 4, 1), parents);
+    };
+
+    DirectoryModel removed; // the focused file in the first folder is deleted: the cursor does not go to the other
+    start(removed);
+    TEST_CHECK(removed.select(2));
+    removed.applySnapshot(snapshot({folder(1, "folder1"), folder(3, "folder2"), entry(4, "x.txt")}, 2), {{4, 3}});
+    TEST_CHECK(removed.selection().focused != 4);
+    selected(removed, {});
+
+    DirectoryModel replaced; // replaced in the first folder: the cursor stays on that one, the other is untouched
+    start(replaced);
+    TEST_CHECK(replaced.select(2));
+    replaced.applySnapshot(both(22, 4, 2), {{22, 1}, {4, 3}});
+    selected(replaced, {22});
+    TEST_CHECK(replaced.selection().focused == 22);
+    DirectoryModel second;
+    start(second);
+    TEST_CHECK(second.select(4));
+    second.applySnapshot(both(2, 44, 2), {{2, 1}, {44, 3}});
+    selected(second, {44});
+
+    DirectoryModel several; // both selected, one replaced: each keeps its own
+    start(several);
+    TEST_CHECK(several.select(2) && several.select(4, SelectionMode::Toggle));
+    several.applySnapshot(both(22, 4, 2), {{22, 1}, {4, 3}});
+    selected(several, {22, 4});
+    several.applySnapshot(both(22, 44, 3), {{22, 1}, {44, 3}});
+    selected(several, {22, 44});
+    several.applySnapshot(snapshot({folder(1, "folder1"), entry(22, "x.txt"), folder(3, "folder2")}, 4), {{22, 1}});
+    selected(several, {22}); // one of the two deleted: the other stays alone
+  }
+
+  // A folder replaced by a file of the same name, or the other way round, is the same path: the cursor stays on it.
+  // With a filter on, Down from there goes to the next row the filter shows.
+  void testReplacementAcrossTypesAndFilters() {
+    DirectoryModel model;
+    model.setReplacementKeepsFocus(true);
+    model.applySnapshot(snapshot({entry(1, "a"), entry(2, "d", luciole::FileType::Directory), entry(3, "z")}));
+    TEST_CHECK(model.select(2));
+    model.applySnapshot(snapshot({entry(1, "a"), entry(22, "d"), entry(3, "z")}, 2));
+    selected(model, {22});
+    TEST_CHECK(model.selection().focused == 22);
+    model.applySnapshot(snapshot({entry(1, "a"), entry(222, "d", luciole::FileType::Directory), entry(3, "z")}, 3));
+    selected(model, {222});
+
+    DirectoryModel filtered;
+    filtered.setReplacementKeepsFocus(true);
+    filtered.applySnapshot(
+        snapshot({entry(1, "match-a"), entry(2, "match-b"), entry(3, "other"), entry(4, "match-c")})
+    );
+    filtered.setFilter({.text = "match"});
+    TEST_CHECK(filtered.select(2));
+    filtered.applySnapshot(
+        snapshot({entry(1, "match-a"), entry(22, "match-b"), entry(3, "other"), entry(4, "match-c")}, 2)
+    );
+    rows(filtered, {1, 22, 4}); // "other" is hidden
+    TEST_CHECK(filtered.selection().focused == 22);
+    const auto at = std::ranges::find(filtered.rows(), *filtered.selection().focused);
+    TEST_CHECK(at != filtered.rows().end() && at + 1 != filtered.rows().end() && *(at + 1) == 4);
+  }
+
   struct Fixture {
     luciole::test::TempFolder tempFolder{"luciole-model-test"};
     std::filesystem::path path = tempFolder.path();
@@ -1155,6 +1228,8 @@ int main() {
     testSnapshotReconciliation();
     testSelectionAfterRemoval();
     testReplacedFileKeepsTheCursor();
+    testReplacementKeepsTheParent();
+    testReplacementAcrossTypesAndFilters();
     testDirectoryServiceIntegration();
     std::println("directory model checks passed");
     return 0;
