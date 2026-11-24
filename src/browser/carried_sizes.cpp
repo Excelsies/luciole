@@ -47,6 +47,10 @@ void luciole::carryPreviousSizes(
     return;
   }
   double added = 0;
+  double addedFiles = 0;
+  bool carriedAny = false;
+  bool notCarried = false;
+  bool lower = false; // a row that is a lower bound
   double addedToRemainder = 0;
   const auto root = tree.root;
   NodeId remainder = kNoNode;
@@ -55,7 +59,12 @@ void luciole::carryPreviousSizes(
     if (node.name.empty() && node.folder) {
       remainder = child;
     } else if (node.notEntered) {
-      if (const auto shown = shownBy(previous, node.name)) {
+      const auto shown = shownBy(previous, node.name);
+      notCarried = notCarried || !shown;
+      if (shown) {
+        carriedAny = true;
+        lower = lower || shown->lowerBound;
+        addedFiles += shown->fromNode ? gain(shown->files, node.files) : 0;
         added += gain(shown->bytes, node.bytes);
         node.bytes = shown->bytes;
         node.files = shown->fromNode ? shown->files : node.files;
@@ -65,6 +74,8 @@ void luciole::carryPreviousSizes(
         node.notEntered = false;
         node.partial = false;
       }
+    } else {
+      lower = lower || node.lowerBound;
     }
   }
   if (folded) {
@@ -74,9 +85,12 @@ void luciole::carryPreviousSizes(
         continue;
       }
       const auto shown = shownBy(previous, std::string(folded->nameOf(i)));
+      notCarried = notCarried || !shown;
       if (!shown) {
         continue;
       }
+      carriedAny = true;
+      lower = lower || shown->lowerBound;
       copy = copy ? copy : std::make_shared<FoldedChildren>(*folded);
       auto& entry = copy->entries[i];
       addedToRemainder += gain(shown->bytes, static_cast<double>(entry.apparentBytes));
@@ -90,5 +104,10 @@ void luciole::carryPreviousSizes(
   if (remainder != kNoNode) {
     tree.nodes[remainder].bytes += addedToRemainder;
   }
-  tree.nodes[root].bytes += added + addedToRemainder;
+  auto& top = tree.nodes[root];
+  top.bytes += added + addedToRemainder;
+  top.files += addedFiles;
+  if (carriedAny && !notCarried) { // every unknown folder is known again: the root is as exact as the rows
+    top.lowerBound = lower || previous.tree.nodes[previous.tree.root].lowerBound;
+  }
 }

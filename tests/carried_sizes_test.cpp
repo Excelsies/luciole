@@ -142,6 +142,28 @@ namespace {
     TEST_CHECK(tree.nodes[remainder].name.empty() && tree.nodes[remainder].bytes == 3072 + 1024);
   }
 
+  // The root follows its rows: its file count moves with theirs, and it is a lower bound only while a folder is not
+  // known or a row is one.
+  void rootFollowsTheRows() {
+    const auto previous = snapshotOf({sized("a", 1000), sized("b", 2000)});
+    const auto carried = [&](std::vector<Child> rows, const WorkbenchSnapshot& before) {
+      auto tree = snapshotOf(rows).tree;
+      tree.nodes[tree.root].lowerBound = true; // the new first walk was cut
+      std::shared_ptr<const FoldedChildren> none;
+      luciole::carryPreviousSizes(tree, none, before);
+      return tree;
+    };
+    const auto exact = carried({never("a"), never("b")}, previous);
+    const auto& root = exact.nodes[exact.root];
+    TEST_CHECK(!root.lowerBound && root.bytes == 3000 && root.files == 6); // two rows of three files
+    const auto unknown = carried({never("a"), never("z")}, previous);
+    TEST_CHECK(unknown.nodes[unknown.root].lowerBound && unknown.nodes[unknown.root].files == 3);
+    const auto cut = snapshotOf({sized("a", 1000), sized("b", 2000, true)});
+    TEST_CHECK(carried({never("a"), never("b")}, cut).nodes[0].lowerBound);
+    // A row the new walk entered and cut keeps the root a lower bound too.
+    TEST_CHECK(carried({never("a"), sized("c", 5, true)}, previous).nodes[0].lowerBound);
+  }
+
   // A folder the old snapshot also knew nothing of stays blank.
   void blankStaysBlank() {
     auto tree = snapshotOf({never("a")}).tree;
@@ -154,5 +176,6 @@ namespace {
 int main() {
   sizesCarried();
   blankStaysBlank();
+  rootFollowsTheRows();
   return 0;
 }
