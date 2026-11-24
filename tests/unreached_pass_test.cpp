@@ -213,6 +213,28 @@ namespace {
     TEST_CHECK(after->hardLinks == nullptr); // dropped with the last batch
   }
 
+  // A folder measured again walks its never-entered folders again: the tables cached for them by the earlier pass
+  // are not served.
+  void sizesAfterAChange(const fs::path& base) {
+    Rig rig(12 + 1 + 1, 1);
+    const auto folder = tree(base / "changed", 12, 4);
+    const auto table = rig.settle(folder);
+    UnreachedPass pass(rig.cache);
+    rig.run(pass, folder, 1);
+    std::string name; // a folder the walk never entered
+    for (const auto& record : table->records) {
+      name = name.empty() && record.flags.notEntered ? record.name : name;
+    }
+    const auto before = sizeOf(*rig.cache.find(folder).table, name);
+    writeFile(base / "changed" / name / "f0", 100 + 5000); // one file grows: no entry is added
+    rig.cache.invalidate(folder);
+    const auto fresh = rig.settle(folder);
+    TEST_CHECK(fresh != table && neverEntered(*fresh) > 0);
+    pass.update(folder, fresh, 1);
+    rig.run(pass, folder, 1);
+    TEST_CHECK(sizeOf(*rig.cache.find(folder).table, name) == before + 5000);
+  }
+
   // Leaving the folder, or a table that is not the planned one, drops the pass: nothing runs or is applied after.
   void reset(const fs::path& base) {
     Rig rig(12 + 1 + 1, 1); // the root's entries and one file of the entered folder
@@ -247,6 +269,7 @@ int main() {
   sizesOfNeverEnteredFolders(scratch.path());
   limits(scratch.path());
   linksAcrossBatches(scratch.path());
+  sizesAfterAChange(scratch.path());
   budgetEndsWithTheLastUpdate(scratch.path());
   reset(scratch.path());
   return 0;

@@ -94,6 +94,9 @@ namespace luciole {
         const Location& folder, const std::shared_ptr<const MeasureTable>& from,
         std::span<const MeasureAmendment> amendments, bool more = false
     );
+    // Forgets the folder's own table, so the next measure() walks it again; a folder being walked keeps its walk.
+    // Tables of other folders are untouched, ancestors included.
+    void discard(const Location& folder);
     // A lease on the folder; taking one starts no walk.
     Lease lease(const Location& folder);
 

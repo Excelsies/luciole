@@ -82,6 +82,7 @@ void luciole::UnreachedPass::start(const Location& folder, std::size_t slots) {
     auto name = std::move(m_queue.front());
     m_queue.pop_front();
     auto location = folder.child(name);
+    m_cache.discard(location); // a table of an earlier pass may be old
     auto lease = m_cache.lease(location);
     auto found = m_cache.measure(location, MeasurePriority::Current);
     m_running.push_back(

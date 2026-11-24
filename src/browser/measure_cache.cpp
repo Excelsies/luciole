@@ -304,6 +304,15 @@ std::shared_ptr<const luciole::MeasureTable> luciole::MeasureCache::amend(
   return amended;
 }
 
+void luciole::MeasureCache::discard(const Location& folder) {
+  auto& state = *m_state;
+  const auto found = state.entries.find(folder.uri());
+  if (found != state.entries.end() && !found->second.walk.valid()) {
+    state.entries.erase(found);
+    state.touched();
+  }
+}
+
 luciole::MeasureFind luciole::MeasureCache::find(const Location& folder) const {
   const auto& state = *m_state;
   const auto found = locate(folder, [&state](const std::string& uri) -> const MeasureTable* {
