@@ -1,5 +1,6 @@
 #include "fs/subtree_measure_walk.h"
 
+#include "fs/hard_links.h"
 #include "fs/native_listing.h"
 #include "fs/posix_fd.h"
 
@@ -96,8 +97,8 @@ namespace {
   class Walker {
   public:
     Walker(const luciole::MeasureOptions& options, const luciole::MeasureProgress& progress)
-        : m_options(options), m_progress(progress),
-          m_budget(std::min<std::uint64_t>(options.entryBudget, kMaxEntries)) {}
+        : m_options(options), m_progress(progress), m_budget(std::min<std::uint64_t>(options.entryBudget, kMaxEntries)),
+          m_hardLinks(options.hardLinkBound) {}
 
     luciole::MeasureTable run(const luciole::Location& root) {
       const auto path = root.isNative() && !root.isTrash() ? root.nativePath() : std::nullopt;
@@ -139,6 +140,7 @@ namespace {
         }
       }
       unwind();
+      m_table.hardLinksOverflow = m_hardLinks.overflow();
       m_table.records.shrink_to_fit(); // no room is kept for the records that were folded away
       return std::move(m_table);
     }
@@ -270,21 +272,8 @@ namespace {
       });
     }
 
-    // False for a later name of a hard-linked file; beyond the bound every name counts.
-    bool firstLink(std::uint64_t inode) {
-      if (m_hardLinks.contains(inode)) {
-        return false;
-      }
-      if (m_hardLinks.size() < m_options.hardLinkBound) {
-        m_hardLinks.insert(inode);
-      } else {
-        m_table.hardLinksOverflow = true;
-      }
-      return true;
-    }
-
     void addFile(Frame& frame, std::string_view name, const struct statx& info) {
-      const bool counted = info.stx_nlink <= 1 || firstLink(info.stx_ino);
+      const bool counted = info.stx_nlink <= 1 || m_hardLinks.first(info.stx_ino);
       const bool sized = S_ISREG(info.stx_mode) || S_ISLNK(info.stx_mode);
       MeasureFile file{
           .name = std::string(name),
@@ -478,7 +467,7 @@ namespace {
     std::vector<Frame> m_stack;
     std::vector<std::pair<std::uint32_t, std::uint32_t>> m_ranges; // descendants of each record, as indices
     std::unordered_set<std::uint64_t> m_directories;
-    std::unordered_set<std::uint64_t> m_hardLinks;
+    luciole::HardLinkSet m_hardLinks;
     dev_t m_rootDevice = 0;
     std::chrono::steady_clock::time_point m_lastProgress;
     Stop m_stop = Stop::None;
