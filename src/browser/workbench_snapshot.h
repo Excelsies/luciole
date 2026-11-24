@@ -102,6 +102,12 @@ namespace luciole {
   std::shared_ptr<const WorkbenchSnapshot>
   unmeasuredSnapshot(const Location& location, const workbench::LayoutSettings& settings, std::uint64_t serial);
 
+  // The snapshot of a folder whose build failed: no tree, only the error; numbered one past `previous`.
+  std::shared_ptr<const WorkbenchSnapshot> failedSnapshot(
+      const std::shared_ptr<const WorkbenchSnapshot>& previous, const Location& location,
+      const workbench::LayoutSettings& settings, const FileError& error
+  );
+
   // Grafts the refreshed children into one copy of the tree and adjusts the folder's totals, sets visit counts,
   // ranks Jump ahead and computes the shares. Null when the result equals `previous` in everything but the tree's
   // time; otherwise numbered one past `previous`. Processor work only, for a worker.

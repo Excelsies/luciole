@@ -423,6 +423,23 @@ luciole::finishSnapshot(const WorkbenchDraft& draft, const std::shared_ptr<const
   });
 }
 
+std::shared_ptr<const luciole::WorkbenchSnapshot> luciole::failedSnapshot(
+    const std::shared_ptr<const WorkbenchSnapshot>& previous, const Location& location,
+    const workbench::LayoutSettings& settings, const FileError& error
+) {
+  return std::make_shared<const WorkbenchSnapshot>(WorkbenchSnapshot{
+      .serial = (previous ? previous->serial : 0) + 1,
+      .location = location,
+      .settings = settings,
+      .tree = {},
+      .jump = {},
+      .jumpLocations = {},
+      .shares = {},
+      .total = 0,
+      .error = error,
+  });
+}
+
 bool luciole::measurable(const Location& location) {
   return location.isNative() && !location.isTrash() && location.nativePath().has_value();
 }

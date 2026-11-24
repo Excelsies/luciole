@@ -271,19 +271,7 @@ struct luciole::WorkbenchModel::State : std::enable_shared_from_this<State> {
     }
     if (serial == generation) {
       if (!reply) {
-        publish(
-            std::make_shared<const WorkbenchSnapshot>(WorkbenchSnapshot{
-                .serial = (published ? published->serial : 0) + 1,
-                .location = *location,
-                .settings = settings,
-                .tree = {},
-                .jump = {},
-                .jumpLocations = {},
-                .shares = {},
-                .total = 0,
-                .error = reply.error(),
-            })
-        );
+        publish(failedSnapshot(published, *location, settings, reply.error()));
       } else {
         if (reply->draft) {
           draft = std::move(reply->draft);
