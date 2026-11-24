@@ -16,6 +16,7 @@
 #include <memory>
 #include <mutex>
 #include <poll.h>
+#include <print>
 #include <string>
 #include <thread>
 #include <vector>
@@ -192,12 +193,14 @@ namespace {
     std::atomic<bool> armed = false;
     bool open = false;
     int held = 0;
+    std::atomic<int> paced = 0;  // partial tables seen while paced
     std::atomic<int> paceMs = 0; // when set, a partial table only waits this long
     void hold() {
       if (!armed) {
         return;
       }
       if (paceMs > 0) {
+        ++paced;
         std::this_thread::sleep_for(std::chrono::milliseconds(paceMs));
         return;
       }
@@ -323,7 +326,8 @@ namespace {
   void sizesStayThroughTwoRefreshes(const fs::path& base) {
     constexpr int kCount = 8;
     const auto folder = tree(base / "twice", kCount, 1500);
-    for (const int delayMs : {0, 60, 200, 500, 900}) {
+    // The second press comes after this many partial tables of the measure the first one started.
+    for (const int partials : {0, 2, 6, 14, 30}) {
       Gate gate;
       Rig rig(kCount + 2000, [&gate] { gate.hold(); });
       luciole::WorkbenchModel model(rig.cache, {.ancestorLevels = 0});
@@ -339,11 +343,11 @@ namespace {
         }
       });
       model.remeasure();
-      const auto second = std::chrono::steady_clock::now() + std::chrono::milliseconds(delayMs);
-      pump.until([&] { return std::chrono::steady_clock::now() >= second; });
+      pump.until([&] { return gate.paced >= partials; });
       model.remeasure();
       settle(pump, model);
       model.setChangedCallback({});
+      TEST_CHECK(gate.paced > partials && seen.size() >= 2); // the measure was running, with snapshots built meanwhile
       for (const auto& snapshot : seen) {
         const auto& root = snapshot->tree.nodes[snapshot->tree.root];
         TEST_CHECK(root.bytes > 0);
@@ -438,6 +442,12 @@ namespace {
     // check holds only where a few walks are far under it.
     if (walk * 8 < luciole::WorkbenchWalks::kAgainGap) {
       TEST_CHECK(std::chrono::steady_clock::now() - released < luciole::WorkbenchWalks::kAgainGap);
+    } else {
+      std::println(
+          "skipped: a plain walk took {} ms, too slow to tell a wait of {} ms from the walks",
+          std::chrono::duration_cast<std::chrono::milliseconds>(walk).count(),
+          std::chrono::duration_cast<std::chrono::milliseconds>(luciole::WorkbenchWalks::kAgainGap).count()
+      );
     }
   }
 } // namespace
