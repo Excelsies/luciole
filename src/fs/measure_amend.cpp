@@ -195,7 +195,7 @@ luciole::amendedTable(const MeasureTable& table, std::span<const MeasureAmendmen
   }
   if (root.folded) {
     cut = cut || std::ranges::any_of(root.folded->entries, [](const FoldedChildren::Entry& entry) {
-            return (entry.flags & (FoldedChildren::kTruncated | FoldedChildren::kUnreadable)) != 0;
+            return FoldedChildren::cut(entry.flags);
           });
   }
   root.flags.truncated = cut;

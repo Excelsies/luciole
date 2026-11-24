@@ -82,6 +82,7 @@ void luciole::carryPreviousSizes(
     std::shared_ptr<FoldedChildren> copy;
     for (std::size_t i = 0; i < folded->entries.size(); ++i) {
       if ((folded->entries[i].flags & FoldedChildren::kNotEntered) == 0) {
+        lower = lower || FoldedChildren::cut(folded->entries[i].flags);
         continue;
       }
       const auto shown = shownBy(previous, std::string(folded->nameOf(i)));

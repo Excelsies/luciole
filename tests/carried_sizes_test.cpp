@@ -164,6 +164,24 @@ namespace {
     TEST_CHECK(carried({never("a"), sized("c", 5, true)}, previous).nodes[0].lowerBound);
   }
 
+  // A folded folder the new walk entered and cut keeps the root a lower bound, though every never-entered folder is
+  // carried and the old root was exact.
+  void foldedCutKeepsTheRootLower() {
+    const auto previous = snapshotOf({sized("a", 1000)});
+    for (const auto flag : {FoldedChildren::kTruncated, FoldedChildren::kUnreadable}) {
+      auto tree = snapshotOf({never("a")}).tree;
+      tree.nodes[tree.root].lowerBound = true;
+      auto folded = listOf({{"d", 100, flag}});
+      luciole::carryPreviousSizes(tree, folded, previous);
+      TEST_CHECK(tree.nodes[tree.root].lowerBound);
+    }
+    auto tree = snapshotOf({never("a")}).tree;
+    tree.nodes[tree.root].lowerBound = true;
+    auto whole = listOf({{"d", 100, 0}});
+    luciole::carryPreviousSizes(tree, whole, previous);
+    TEST_CHECK(!tree.nodes[tree.root].lowerBound); // a whole folded folder does not
+  }
+
   // A folder the old snapshot also knew nothing of stays blank.
   void blankStaysBlank() {
     auto tree = snapshotOf({never("a")}).tree;
@@ -177,5 +195,6 @@ int main() {
   sizesCarried();
   blankStaysBlank();
   rootFollowsTheRows();
+  foldedCutKeepsTheRootLower();
   return 0;
 }

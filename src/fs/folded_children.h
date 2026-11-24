@@ -15,6 +15,8 @@ namespace luciole {
     static constexpr std::uint8_t kNotEntered = 2; // listed, and the walk ended first
     static constexpr std::uint8_t kUnreadable = 4;
     static constexpr std::uint8_t kOtherFilesystem = 8; // not entered, another filesystem
+    // Whether a child with these flags was entered and not counted whole: the folder holding it is a lower bound.
+    static constexpr bool cut(std::uint8_t flags) { return (flags & (kTruncated | kUnreadable)) != 0; }
 
     struct Entry {
       std::uint64_t apparentBytes = 0;
