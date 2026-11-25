@@ -9,7 +9,7 @@
 #include <toml++/toml.hpp>
 
 // The browser.open_as_archive list: the names of the archive container types that open in the archive browser.
-// Only preference_schema.h includes this header.
+// Reached through preference_rules.h.
 namespace luciole::preference_schema {
   template <class T> struct Rule;
   template <> struct Rule<luciole::ArchiveContainerSet> {};

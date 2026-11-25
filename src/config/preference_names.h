@@ -7,7 +7,7 @@
 #include <string_view>
 #include <utility>
 
-// The TOML words of each enum preference. Only preference_schema.h includes this header.
+// The TOML words of each enum preference. Reached through preference_rules.h.
 namespace luciole::preference_schema {
   template <class T> struct Named {
     T value;

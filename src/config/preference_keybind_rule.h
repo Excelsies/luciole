@@ -8,8 +8,8 @@
 #include <string_view>
 #include <toml++/toml.hpp>
 
-// The browser.keybinds table: command names with up to four shortcut strings each. Only preference_schema.h
-// includes this header.
+// The browser.keybinds table: command names with up to four shortcut strings each. Reached through
+// preference_rules.h.
 namespace luciole::preference_schema {
   template <class T> struct Rule;
   template <> struct Rule<luciole::KeybindConfig> {};
