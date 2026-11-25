@@ -440,7 +440,8 @@ namespace {
       throwFileError(FileErrorKind::Unsupported, "Archive file size is inconsistent or exceeds the output limit.");
     }
     total += length - end;
-    if (::ftruncate(output, static_cast<off_t>(length)) != 0 || ::fsync(output) != 0) {
+    // Private extraction data uses buffered writes; the caller checks close before publication.
+    if (::ftruncate(output, static_cast<off_t>(length)) != 0) {
       systemError("Could not finish extracted data");
     }
   }
@@ -632,7 +633,7 @@ luciole::archive_work::Prepared luciole::archive_work::extract(
       const auto path = safePath(bounded(archive_entry_pathname(header)), work);
       if (bodies.contains(path)) {
         const auto& entry = contents->entries[entries.at(path)];
-        const auto output = opened(
+        auto output = opened(
             ::openat(
                 data.get(), std::to_string(entries.at(path)).c_str(),
                 O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0600
@@ -641,6 +642,9 @@ luciole::archive_work::Prepared luciole::archive_work::extract(
         extractData(reader, output.get(), total, entry.size);
         bodySizes.emplace(path, static_cast<std::uint64_t>(statFd(output.get()).st_size));
         publish(path, output.get());
+        if (output.close() != 0) {
+          systemError("Could not close extracted data");
+        }
       } else {
         reader.skip();
       }
