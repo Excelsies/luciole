@@ -3,6 +3,7 @@
 #include "config/keybinds.h"
 #include "core/input/key_modifiers.h"
 #include "directory_fixture.h"
+#include "fs/archive_container.h"
 #include "fs/archive_type.h"
 #include "fs/gio_interop.h"
 #include "test_check.h"
@@ -606,6 +607,60 @@ namespace {
     TEST_CHECK(!R::state(A::Compress, c, R::capture(c)).enabled);
     TEST_CHECK(R::openAction(c, R::capture(c)) == A::Open);
   }
+  // Archive containers: Open follows browser.open_as_archive, the menu entries do not.
+  void testArchiveContainerActions() {
+    luciole::DirectoryModel model;
+    auto data = snapshot();
+    test::editEntries(data, [&](auto& entries) {
+      entries.push_back(entry(7, "app.jar"));
+      entries.push_back(entry(8, "lib.whl"));
+      entries.back().contentType = "application/zip";
+      entries.push_back(entry(9, "real.zip"));
+      entries.back().contentType = "application/zip";
+    });
+    model.applySnapshot(data);
+    const auto set = [](std::string_view name) {
+      luciole::ArchiveContainerSet types;
+      types.set(*luciole::archiveContainerByName(name));
+      return types;
+    };
+    luciole::ActionContext off{.model = model, .context = 1, .query = {}, .pinned = {}};
+    luciole::ActionContext jarOn = off;
+    jarOn.openAsArchive = set("jar");
+    luciole::ActionContext whlOn = off;
+    whlOn.openAsArchive = set("whl");
+    model.select(7);
+    auto request = R::capture(off);
+    TEST_CHECK(R::openAction(off, request) == A::Open);
+    TEST_CHECK(R::openAction(jarOn, request) == A::BrowseArchive);
+    TEST_CHECK(R::openAction(whlOn, request) == A::Open);
+    // The menu entries are enabled whatever the setting is.
+    for (const auto* context : {&off, &jarOn, &whlOn}) {
+      for (const auto action : {A::BrowseArchive, A::ExtractHere, A::ExtractTo}) {
+        TEST_CHECK(R::state(action, *context, request).enabled);
+      }
+    }
+    model.select(8);
+    request = R::capture(off);
+    TEST_CHECK(R::openAction(off, request) == A::Open);
+    TEST_CHECK(R::openAction(jarOn, request) == A::Open);
+    TEST_CHECK(R::openAction(whlOn, request) == A::BrowseArchive);
+    TEST_CHECK(R::state(A::BrowseArchive, off, request).enabled && R::state(A::ExtractHere, off, request).enabled);
+    model.select(9);
+    request = R::capture(off);
+    for (const auto* context : {&off, &jarOn, &whlOn}) {
+      TEST_CHECK(R::openAction(*context, request) == A::BrowseArchive);
+    }
+    // A container that is no longer readable offers no archive action.
+    test::editEntries(data, [&](auto& entries) {
+      std::ranges::find(entries, "app.jar", [](const auto& e) { return e.name; })->access.read = false;
+    });
+    ++data.generation;
+    model.applySnapshot(data);
+    model.select(7);
+    request = R::capture(jarOn);
+    TEST_CHECK(R::openAction(jarOn, request) == A::Open && !R::state(A::ExtractHere, jarOn, request).enabled);
+  }
   void testSplitArchiveActions() {
     luciole::DirectoryModel model;
     auto data = snapshot();
@@ -1055,6 +1110,7 @@ int main() {
     testPointerActivation();
     testTerminalActions();
     testArchiveActions();
+    testArchiveContainerActions();
     testSplitArchiveActions();
     testCompressedArchiveActions();
     testExecutionActions();

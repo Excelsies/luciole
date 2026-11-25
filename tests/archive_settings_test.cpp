@@ -151,6 +151,12 @@ namespace {
           != nullptr
       );
     }
+    TEST_CHECK(
+        labelWithText(
+            *rig.dialog, "A type that is switched on opens in the archive browser instead of its default application."
+        )
+        != nullptr
+    );
     for (const auto& type : luciole::kArchiveContainerTypes) {
       auto* toggle = rowToggle(*rig.dialog, type.label);
       TEST_CHECK(toggle != nullptr && !toggle->checked());
@@ -187,6 +193,25 @@ namespace {
     rig.dialog->sync(settings, luciole::BrowserSettings{}, false, "");
     TEST_CHECK(rowToggle(*rig.dialog, "Android Package (.apk)")->checked() && !jar->checked());
   }
+
+  // With a list in the base file, switching every type off is an override of [], not a removed override.
+  void switchingEveryTypeOffOverridesANonEmptyBase(Rig& rig) {
+    luciole::BrowserSettings base;
+    base.openAsArchive = setOf({"jar", "epub"});
+    rig.dialog->sync(base, base, false, "");
+    auto* jar = rowToggle(*rig.dialog, "Java Archive (.jar)");
+    auto* epub = rowToggle(*rig.dialog, "EPUB Book (.epub)");
+    TEST_CHECK(jar != nullptr && epub != nullptr && jar->checked() && epub->checked());
+    rig.edits.clear();
+    rig.reveal(*jar);
+    rig.click(*jar);
+    rig.reveal(*epub);
+    rig.click(*epub);
+    TEST_CHECK(rig.edits.size() == 2);
+    TEST_CHECK(rig.edits.back().preference() == luciole::BrowserPreferenceId::OpenAsArchive);
+    TEST_CHECK(rig.edits.back().value(P::OpenAsArchive) == std::optional(luciole::ArchiveContainerSet{}));
+    TEST_CHECK(!jar->checked() && !epub->checked());
+  }
 } // namespace
 
 int main() {
@@ -201,6 +226,7 @@ int main() {
     Rig rig(*capture);
     everyTypeHasASwitchUnderItsFamily(rig);
     aSwitchSavesTheWholeList(rig);
+    switchingEveryTypeOffOverridesANonEmptyBase(rig);
   }
   std::println("archive-settings: all checks passed");
   return 0;
