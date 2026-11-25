@@ -54,6 +54,12 @@ namespace {
       TEST_CHECK(luciole::isBrowsableArchive(location(name), ""));
       TEST_CHECK(luciole::opensAsArchive(location(name), "", {}));
     }
+    for (const auto* uri : {"sftp://host/libfoo.a", "sftp://host/libfoo.ar"}) {
+      const auto remote = luciole::Location::fromUri(uri);
+      TEST_CHECK(!remote.isNative());
+      TEST_CHECK(!luciole::isBrowsableArchive(remote, "application/x-archive"));
+      TEST_CHECK(!luciole::opensAsArchive(remote, "application/x-archive", {}));
+    }
     TEST_CHECK(luciole::archiveExtractFolderName(location("/tmp/libfoo.a")) == "libfoo");
     TEST_CHECK(luciole::archiveExtractFolderName(location("/tmp/libfoo.AR")) == "libfoo");
     TEST_CHECK(luciole::isBrowsableArchive(location("/tmp/opaque"), "application/x-archive"));

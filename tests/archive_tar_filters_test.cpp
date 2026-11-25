@@ -75,6 +75,13 @@ namespace {
       }
       // The content type alone decides for a file whose name says nothing.
       TEST_CHECK(luciole::isBrowsableArchive(location("/tmp/opaque"), std::string(kind.mime)) == kind.available);
+      // A remote location is never an archive, whatever its name or content type.
+      for (const auto suffix : kind.suffixes) {
+        const auto remote = luciole::Location::fromUri("sftp://host/logs" + std::string(suffix));
+        TEST_CHECK(!remote.isNative());
+        TEST_CHECK(!luciole::isBrowsableArchive(remote, std::string(kind.mime)));
+        TEST_CHECK(!luciole::opensAsArchive(remote, std::string(kind.mime), {}));
+      }
       // A single compressed file is not an archive, whatever its content type.
       const auto plain = location("/tmp/notes" + std::string(kind.plainSuffix));
       TEST_CHECK(!luciole::isBrowsableArchive(plain, ""));

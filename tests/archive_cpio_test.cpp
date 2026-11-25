@@ -75,6 +75,10 @@ namespace {
     TEST_CHECK(luciole::opensAsArchive(location("/tmp/INITRD.CPIO"), "", {}));
     TEST_CHECK(luciole::isBrowsableArchive(location("/tmp/opaque"), "application/x-cpio"));
     TEST_CHECK(luciole::archiveExtractFolderName(location("/tmp/initrd.cpio")) == "initrd");
+    const auto remote = luciole::Location::fromUri("sftp://host/initrd.cpio");
+    TEST_CHECK(!remote.isNative());
+    TEST_CHECK(!luciole::isBrowsableArchive(remote, "application/x-cpio"));
+    TEST_CHECK(!luciole::opensAsArchive(remote, "application/x-cpio", {}));
     // Compressed cpio names are not part of this support.
     TEST_CHECK(!luciole::isBrowsableArchive(location("/tmp/initrd.cpio.gz"), ""));
     TEST_CHECK(!luciole::isBrowsableArchive(location("/tmp/initrd.cpio.xz"), ""));
