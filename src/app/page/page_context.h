@@ -109,6 +109,8 @@ public:
   virtual const luciole::BrowserSettings& settings() const = 0;
   // Applies changed settings to the page; `force` reapplies fields that did not change.
   virtual void applySettings(const luciole::BrowserSettings& settings, bool force) = 0;
+  // Switches the page's browser and every Miller column between recursive search and current-folder filtering.
+  virtual void setSearchRecursive(bool recursive) = 0;
   // True while the page is the focused pane of its window.
   virtual bool active() const = 0;
   // True while Settings or the archive browser covers the page.

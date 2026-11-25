@@ -1328,7 +1328,11 @@ bool BrowserPage::windowKey(const KeyboardEvent& event) {
     return true;
   }
   if (luciole::shortcutMatches(Action::Search, event.sym, event.modifiers) && m_locationBar.hasFilterInput()) {
-    dispatchAction(Action::Search);
+    if (dispatcher().focusedArea() != m_locationBar.filterInput().inputArea()) {
+      dispatchAction(Action::Search);
+    } else if (!event.repeat) {
+      m_locationBar.toggleSearchScope();
+    }
     return true;
   }
   return false;
@@ -1916,6 +1920,13 @@ void BrowserPage::showLinkTarget(const luciole::Location& link) {
   );
 }
 
+void BrowserPage::setSearchRecursive(bool recursive) {
+  m_browser.setSearchRecursive(recursive);
+  for (const auto& column : m_miller.columns()) {
+    column->browser->setSearchRecursive(recursive);
+  }
+}
+
 void BrowserPage::applySettings(const luciole::BrowserSettings& settings, bool force) {
   m_terminal.setCommand(settings.terminalCommand);
   m_launcher.setTerminalCommand(settings.terminalCommand);
@@ -1978,10 +1989,7 @@ void BrowserPage::applySettings(const luciole::BrowserSettings& settings, bool f
     m_fileKeys.clearTypeahead();
     m_activationMode = settings.activationMode;
     m_fileKeys.setTypingMode(settings.typingMode);
-    m_browser.setSearchRecursive(settings.typingMode != luciole::TypingMode::Filter);
-    for (const auto& column : m_miller.columns()) {
-      column->browser->setSearchRecursive(settings.typingMode != luciole::TypingMode::Filter);
-    }
+    setSearchRecursive(settings.typingMode != luciole::TypingMode::Filter);
     for (auto* adapter : {&m_listAdapter, &m_gridAdapter}) {
       adapter->setActivationMode(m_activationMode);
     }

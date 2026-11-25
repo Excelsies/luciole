@@ -286,6 +286,7 @@ private:
   void showLinkTarget(const luciole::Location& link);
 
   void applySettings(const luciole::BrowserSettings& settings, bool force) override;
+  void setSearchRecursive(bool recursive) override;
 
   void
   showDialog(std::unique_ptr<Flex> root, DialogWidth width, PopupDismiss dismiss = PopupDismiss::Explicit) override;
