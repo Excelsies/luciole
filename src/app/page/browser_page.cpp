@@ -1397,10 +1397,10 @@ bool BrowserPage::shortcutKey(const KeyboardEvent& event) {
     return true;
   }
   // View chords cannot be plain text keys, so they switch the view even while typing in a field.
-  if (dispatchShortcut(event, {Action::Grid, Action::List, Action::Miller, Action::Workbench})) {
+  if (dispatchShortcut(event, {Action::Grid, Action::List, Action::Miller})) {
     return true;
   }
-  if (!editing && dispatchShortcut(event, {Action::ShowHidden})) {
+  if (!editing && dispatchShortcut(event, {Action::Workbench, Action::ShowHidden})) {
     return true;
   }
   if (m_list != nullptr
