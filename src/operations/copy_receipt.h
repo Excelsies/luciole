@@ -87,6 +87,8 @@ namespace luciole {
     static std::shared_ptr<const CopyReceipt> capture(
         const std::vector<std::shared_ptr<const CopyEffect>>& effects, TransferAction action, const CancelToken& token
     );
+    // Application history reverses incoming effects without retaining overwritten originals.
+    static std::shared_ptr<const CopyReceipt> withoutPredecessors(std::shared_ptr<const CopyReceipt> receipt);
     static std::vector<std::shared_ptr<const CopyEffect>> checkpoint(
         const std::vector<std::shared_ptr<const CopyEffect>>& effects, const Location& destination,
         TransferAction action, const CancelToken& token

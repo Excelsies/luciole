@@ -150,6 +150,16 @@ namespace luciole::transfer {
       );
     }
 
+    void
+    checkReplacementSource(const Source& source, TransferAction action, const std::optional<struct stat>& replace) {
+      if (action != TransferAction::Move
+          && replace
+          && S_ISDIR(replace->st_mode)
+          && (sameIdentity(source.metadata, *replace) || hasAncestor(source.parent.get(), *replace))) {
+        throwFileError(FileErrorKind::WouldRecurse, "Replacement would remove the transfer source.");
+      }
+    }
+
     TransferResult transferItem(Node& node, int destination, TransferAction action, Work& work) {
       auto& source = node.source;
       const auto& binding = *node.destination;
@@ -325,6 +335,7 @@ namespace luciole::transfer {
                   )
                 : nullptr;
             work.check();
+            checkReplacementSource(source, action, replace);
             if (::syscall(SYS_renameat2, stage.fd(), "item", destination, target.c_str(), flags) != 0) {
               if (errno == EEXIST || (replace && errno == ENOENT)) {
                 replace.reset();
