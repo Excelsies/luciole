@@ -73,7 +73,7 @@ namespace {
         if (!input.split()) {
           requireArchive(archive_read_support_format_tar(value.get()), value.get(), work);
           requireArchive(archive_read_support_format_7zip(value.get()), value.get(), work);
-          enableExtraFormats(value.get(), work);
+          enableExtraFormats(value.get(), input, work);
         }
       }
       requireArchive(archive_read_support_filter_none(value.get()), value.get(), work);

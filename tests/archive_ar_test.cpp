@@ -168,6 +168,75 @@ namespace {
     TEST_CHECK(found.error && found.error->kind == luciole::FileErrorKind::Unsupported);
   }
 
+  // A member header declaring `size` bytes of which none follow: libarchive allocates by the declared size.
+  std::string arHeaderOnly(std::string name, std::uint64_t size) {
+    auto head = arMember(std::move(name), "");
+    head.replace(48, 10, std::to_string(size).append(10 - std::to_string(size).size(), ' '));
+    return head.substr(0, 60);
+  }
+  // A plain ar file whose member declares `size` bytes, as a sparse file so the test itself holds no memory.
+  void writeSparseAr(const fs::path& path, const std::string& name, std::uint64_t size) {
+    write(path, kMagic + arHeaderOnly(name, size));
+    fs::resize_file(path, 8 + 60 + size);
+  }
+  constexpr std::size_t kCapHeadroom = 64U * 1024U * 1024U;
+  constexpr std::uint64_t kHugeTable = 96ULL * 1024 * 1024;
+
+  void oversizedNameTablesAreRefusedWithoutAllocating(const Folder& folder) {
+    // A plain file: libarchive holds the declared size of the "//" table in memory, twice over.
+    {
+      const auto path = folder.root / "huge-table.a";
+      writeSparseAr(path, "//", kHugeTable);
+      const AddressCap cap(kCapHeadroom);
+      const auto found = inspect(path);
+      TEST_CHECK(!found.catalog && found.error && found.error->kind == luciole::FileErrorKind::Unsupported);
+      TEST_CHECK(found.error->message.contains("long-name table"));
+      const auto out = folder.root / "huge-out";
+      const auto done = extract(path, out);
+      TEST_CHECK(done.error && done.error->message.contains("long-name table") && !fs::exists(out));
+    }
+    // A table behind other members is found by walking the headers.
+    write(
+        folder.root / "late-table.a",
+        kMagic + arMember("a.o/", "1") + arMember("b.o/", "22") + arHeaderOnly("//", kHugeTable)
+    );
+    fs::resize_file(folder.root / "late-table.a", fs::file_size(folder.root / "late-table.a") + kHugeTable);
+    {
+      const AddressCap cap(kCapHeadroom);
+      const auto late = inspect(folder.root / "late-table.a");
+      TEST_CHECK(late.error && late.error->message.contains("long-name table"));
+    }
+    // A table at the limit still opens.
+    luciole::ArchiveLimits limits;
+    limits.maxMetadataBytes = 4096;
+    write(folder.root / "fits.a", kMagic + arMember("//", std::string(4094, 'n') + "/\n") + arMember("a.o/", "1"));
+    const auto fits = inspect(folder.root / "fits.a", limits);
+    TEST_CHECK(!fits.error && hasEntry(fits, "a.o"));
+    write(folder.root / "over.a", kMagic + arMember("//", std::string(4096, 'n') + "/\n") + arMember("a.o/", "1"));
+    TEST_CHECK(inspect(folder.root / "over.a", limits).error.has_value());
+    TEST_CHECK(tmpIsEmpty(folder));
+  }
+
+  void compressedArchivesNeverReachTheArReader(const Folder& folder) {
+    // The decoded bytes of a gzip start like an ar archive, one with a huge "//" table and one that is fine.
+    const std::string normal = kMagic + arMember("//", "long_member_name_x.o/\n") + arMember("/0", "abc");
+    for (const auto* label : {"table", "normal"}) {
+      const auto path = folder.root / (std::string("wrapped-") + label + ".tar.gz");
+      {
+        const auto body = std::string(label) == "normal"
+            ? normal
+            : kMagic + arHeaderOnly("//", kHugeTable) + std::string(kHugeTable, '\0');
+        compressStream(path, ARCHIVE_FILTER_GZIP, body);
+      }
+      const AddressCap cap(kCapHeadroom);
+      const auto found = inspect(path);
+      TEST_CHECK(found.error && !found.catalog);
+      const auto out = folder.root / (std::string("wrapped-out-") + label);
+      TEST_CHECK(extract(path, out).error && !fs::exists(out));
+    }
+    TEST_CHECK(tmpIsEmpty(folder));
+  }
+
   void otherFormatsStillWin(const Folder& folder) {
     write(folder.root / "plain.a", "plain text, not an archive\n");
     TEST_CHECK(inspect(folder.root / "plain.a").error.has_value());
@@ -185,6 +254,8 @@ int main() {
   libraryWrittenByTheHostAr(folder);
   bsdLibrary(folder);
   unsafeAndBrokenLibrariesFail(folder);
+  oversizedNameTablesAreRefusedWithoutAllocating(folder);
+  compressedArchivesNeverReachTheArReader(folder);
   otherFormatsStillWin(folder);
   std::println("archive-ar: all checks passed");
   return 0;

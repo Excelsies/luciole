@@ -14,8 +14,9 @@ struct archive_entry;
 // libarchive never starts a helper program.
 namespace luciole::archive_work {
   void enableExtraFilters(struct archive* reader, Work& work);
-  // Registered after the TAR, ZIP and 7-Zip readers, which therefore win a tie of content bids.
-  void enableExtraFormats(struct archive* reader, Work& work);
+  // Registered after the TAR, ZIP and 7-Zip readers, which therefore win a tie of content bids. ar is registered only
+  // when the file itself starts as ar and its name tables fit the metadata limit; the input is left at its start.
+  void enableExtraFormats(struct archive* reader, Input& input, Work& work);
   // Whether a stream behind this filter can end its framing after the TAR does, so only a pass over all of it checks.
   bool extraFilterNeedsRawPass(int filterCode);
   // The next header; the symbol-table members of ar archives are consumed here and never reach the catalog.

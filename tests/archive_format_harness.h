@@ -20,6 +20,7 @@
 #include <poll.h>
 #include <string>
 #include <string_view>
+#include <sys/resource.h>
 #include <unistd.h>
 #include <vector>
 
@@ -36,6 +37,30 @@ namespace luciole::test::formats {
       ::setenv("TMPDIR", (root / "tmp").c_str(), 1);
     }
   };
+
+  // Caps the address space at what the process uses now plus `headroom`, so a decoder that allocated its declared
+  // dictionary would fail where the limit check must have refused it first.
+  class AddressCap {
+  public:
+    explicit AddressCap(std::size_t headroom) {
+      TEST_CHECK(::getrlimit(RLIMIT_AS, &m_before) == 0);
+      std::ifstream statm("/proc/self/statm");
+      std::size_t pages = 0;
+      statm >> pages;
+      TEST_CHECK(pages > 0);
+      rlimit capped = m_before;
+      capped.rlim_cur = pages * static_cast<std::size_t>(::sysconf(_SC_PAGESIZE)) + headroom;
+      TEST_CHECK(::setrlimit(RLIMIT_AS, &capped) == 0);
+    }
+    ~AddressCap() { ::setrlimit(RLIMIT_AS, &m_before); }
+    AddressCap(const AddressCap&) = delete;
+    AddressCap& operator=(const AddressCap&) = delete;
+
+  private:
+    rlimit m_before{};
+  };
+
+  inline bool tmpIsEmpty(const Folder& folder) { return fs::is_empty(folder.root / "tmp"); }
 
   inline void waitFor(ArchiveService& service) {
     using namespace std::chrono_literals;

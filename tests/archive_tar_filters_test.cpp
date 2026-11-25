@@ -8,7 +8,6 @@
 #include <lzma.h>
 #include <print>
 #include <string>
-#include <sys/resource.h>
 #include <vector>
 
 // The compressed TARs beyond gzip, bzip2, zstd and xz: lz4, lzma, lzip and compress. Recognition by name and content
@@ -107,7 +106,6 @@ namespace {
     compressStream(path, kind.filter, tarBytes);
     return path;
   }
-  bool tmpIsEmpty(const Folder& folder) { return fs::is_empty(folder.root / "tmp"); }
 
   void browsesAndUnpacks(const Folder& folder, const Kind& kind) {
     for (const auto suffix : kind.suffixes) {
@@ -176,28 +174,6 @@ namespace {
     TEST_CHECK(done.error && done.error->message.contains("decoded-container") && !fs::exists(out));
     TEST_CHECK(tmpIsEmpty(folder));
   }
-
-  // Caps the address space at what the process uses now plus `headroom`, so a decoder that allocated its declared
-  // dictionary would fail where the limit check must have refused it first.
-  class AddressCap {
-  public:
-    explicit AddressCap(std::size_t headroom) {
-      TEST_CHECK(::getrlimit(RLIMIT_AS, &m_before) == 0);
-      std::ifstream statm("/proc/self/statm");
-      std::size_t pages = 0;
-      statm >> pages;
-      TEST_CHECK(pages > 0);
-      rlimit capped = m_before;
-      capped.rlim_cur = pages * static_cast<std::size_t>(::sysconf(_SC_PAGESIZE)) + headroom;
-      TEST_CHECK(::setrlimit(RLIMIT_AS, &capped) == 0);
-    }
-    ~AddressCap() { ::setrlimit(RLIMIT_AS, &m_before); }
-    AddressCap(const AddressCap&) = delete;
-    AddressCap& operator=(const AddressCap&) = delete;
-
-  private:
-    rlimit m_before{};
-  };
 
   // The header field that sets the decoder's dictionary: bytes 1 to 4 of LZMA-alone, byte 5 of lzip.
   std::string withDictionary(std::string bytes, const Kind& kind, unsigned log2) {
