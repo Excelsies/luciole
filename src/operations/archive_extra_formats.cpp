@@ -126,9 +126,12 @@ void luciole::archive_work::requireArchiveEnd(struct archive* reader, Input& inp
 }
 
 void luciole::archive_work::requireHardlinkData(
-    struct archive_entry* header, const std::string& target, const std::vector<ArchiveEntry>& entries,
-    const std::map<std::string, std::size_t>& known
+    struct archive* reader, struct archive_entry* header, const std::string& target,
+    const std::vector<ArchiveEntry>& entries, const std::map<std::string, std::size_t>& known
 ) {
+  if ((archive_format(reader) & ARCHIVE_FORMAT_BASE_MASK) != ARCHIVE_FORMAT_CPIO) {
+    return;
+  }
   const auto size = archive_entry_size_is_set(header) ? archive_entry_size(header) : 0;
   if (size <= 0) {
     return;

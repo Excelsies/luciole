@@ -229,6 +229,65 @@ namespace {
     TEST_CHECK(!extract(first, firstOut).error && read(firstOut / "a") == "shared" && read(firstOut / "b") == "shared");
   }
 
+  // One 512-byte ustar header.
+  std::string tarHeader(const std::string& name, char type, const std::string& linkName, std::size_t size) {
+    std::string block(512, '\0');
+    const auto put = [&](std::size_t at, const std::string& text) { block.replace(at, text.size(), text); };
+    const auto octal = [](std::size_t value, std::size_t width) {
+      std::string digits;
+      for (; value != 0; value /= 8) {
+        digits.insert(digits.begin(), static_cast<char>('0' + value % 8));
+      }
+      return std::string(width - 1 - digits.size(), '0') + digits;
+    };
+    put(0, name);
+    put(100, octal(0644, 8));
+    put(108, octal(0, 8));
+    put(116, octal(0, 8));
+    put(124, octal(size, 12));
+    put(136, octal(0, 12));
+    put(148, "        ");
+    block[156] = type;
+    put(157, linkName);
+    put(257,
+        std::string(
+            "ustar\0"
+            "00",
+            8
+        ));
+    std::size_t sum = 0;
+    for (const unsigned char byte : block) {
+      sum += byte;
+    }
+    put(148, octal(sum, 7));
+    block[155] = ' ';
+    return block;
+  }
+  std::string padded(std::string bytes) { return bytes.append((512 - bytes.size() % 512) % 512, '\0'); }
+
+  // A pax TAR hard link whose "size" record gives it data of its own is a TAR matter, not cpio's: it links to its
+  // target even when that holds other data, and the data it carries is skipped.
+  void paxHardLinkWithDataStillLinks(const Folder& folder) {
+    const std::string record = "9 size=7\n";
+    const auto bytes = tarHeader("target", '0', {}, 5)
+        + padded("hello")
+        + tarHeader("PaxHeader/link", 'x', {}, record.size())
+        + padded(record)
+        + tarHeader("link", '1', "target", 0)
+        + padded("goodbye")
+        + std::string(1024, '\0');
+    write(folder.root / "pax-link.tar", bytes);
+    const auto found = inspect(folder.root / "pax-link.tar");
+    TEST_CHECK(!found.error && hasEntry(found, "target") && hasEntry(found, "link"));
+    for (const auto& entry : found.catalog->entries) {
+      TEST_CHECK(entry.path != "link" || (entry.kind == luciole::ArchiveEntryKind::Hardlink && entry.link == "target"));
+    }
+    const auto out = folder.root / "pax-link-out";
+    TEST_CHECK(!extract(folder.root / "pax-link.tar", out).error);
+    TEST_CHECK(read(out / "target") == "hello" && read(out / "link") == "hello");
+    TEST_CHECK(fs::equivalent(out / "target", out / "link"));
+  }
+
   void brokenAndForeignFiles(const Folder& folder) {
     const auto path = folder.root / "cut.cpio";
     writeCpio(path, Flavor::Newc, {{"big", std::string(5000, 'x')}, {"after", "y"}});
@@ -252,6 +311,7 @@ int main() {
   specialFilesFollowTheTarRule(folder);
   odcHardLinksCarryTheirDataEverywhere(folder);
   newcHardLinksWithDataAreRefused(folder);
+  paxHardLinkWithDataStillLinks(folder);
   brokenAndForeignFiles(folder);
   std::println("archive-cpio: all checks passed");
   return 0;
