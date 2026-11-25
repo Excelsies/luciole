@@ -127,6 +127,8 @@ std::vector<ContextMenuControlEntry> MenuController::folderMenuEntries(const luc
   add(Action::SelectPattern);
   addSeparator(entries);
   add(Action::SortMenu);
+  entries.back().label = "Sort";
+  entries.back().hasSubmenu = true;
   add(Action::Refresh);
   if (request.folder && !request.folder->isTrash()) {
     add(m_pins.contains(*request.folder) ? Action::UnpinCurrent : Action::PinCurrent);
@@ -274,10 +276,8 @@ void MenuController::openFileMenu(std::optional<luciole::EntryId> id, float x, f
   }
   showContextMenu(
       std::move(entries),
-      [this, request, x, y](int action) {
-        if (action == luciole::ActionRegistry::menuId(Action::SortMenu)) {
-          openSortMenu(LayoutRect{x, y, 1, 1}, false);
-        } else if (action == ClosePane) {
+      [this, request](int action) {
+        if (action == ClosePane) {
           m_page.requestWorkspace(WorkspaceCommand::ClosePane, std::nullopt, std::nullopt);
         } else if (action == PasteInto) {
           if (m_page.requestCurrent(request, luciole::ActionScope::Targets) && !m_page.operationsBusy()) {
@@ -313,6 +313,18 @@ void MenuController::openFileMenu(std::optional<luciole::EntryId> id, float x, f
     } else if (entryId == CopyLocation) {
       m_submenus.attach(row, entryId, [this, request, targets = id.has_value()] {
         showCopyLocationMenu(request, targets);
+      });
+    } else if (entryId == luciole::ActionRegistry::menuId(Action::SortMenu)) {
+      m_submenus.attach(row, entryId, [this, request] {
+        m_submenus.show(
+            sortEntries(request),
+            [this, request](int id) {
+              if (const auto action = luciole::ActionRegistry::fromMenuId(id)) {
+                m_page.dispatchAction(*action, request);
+              }
+            },
+            264.0F
+        );
       });
     }
   }
@@ -800,28 +812,33 @@ void MenuController::openColumnsMenu(const LayoutRect& anchor, std::optional<luc
   );
 }
 
-void MenuController::showActionMenu(
-    std::initializer_list<std::optional<Action>> actions, bool radio, bool back, std::optional<LayoutRect> anchor,
-    bool alignLeft
-) {
-  const auto request = m_page.actionRequest(false);
+std::vector<ContextMenuControlEntry> MenuController::sortEntries(const luciole::ActionRequest& request) const {
   std::vector<ContextMenuControlEntry> entries;
-  if (back) {
-    entries.push_back(actionEntry(Action::MenuBack, request));
-    entries.push_back({.label = "", .separator = true});
+  const auto add = [&](Action action, bool radio) { entries.push_back(actionEntry(action, request, radio)); };
+  for (const auto action :
+       {Action::SortName, Action::SortType, Action::SortSize, Action::SortModified, Action::SortAccessed,
+        Action::SortCreated, Action::SortOwner, Action::SortGroup, Action::SortPermissions, Action::SortLocation}) {
+    add(action, true);
   }
-  for (const auto action : actions) {
-    if (action) {
-      entries.push_back(actionEntry(
-          *action, request,
-          radio
-              && *action != Action::FoldersFirst
-              && *action != Action::HiddenLast
-              && *action != Action::ResetFolderView
-      ));
-    } else {
-      entries.push_back({.label = "", .separator = true});
-    }
+  addSeparator(entries);
+  add(Action::Ascending, true);
+  add(Action::Descending, true);
+  addSeparator(entries);
+  add(Action::FoldersFirst, false);
+  add(Action::HiddenLast, false);
+  if (m_page.browser().folderView()) {
+    addSeparator(entries);
+    add(Action::ResetFolderView, false);
+  }
+  return entries;
+}
+
+void MenuController::showActionMenu(
+    std::vector<ContextMenuControlEntry> entries, const luciole::ActionRequest& request, bool back,
+    std::optional<LayoutRect> anchor
+) {
+  if (back) {
+    entries.insert(entries.begin(), {actionEntry(Action::MenuBack, request), {.label = "", .separator = true}});
   }
   showContextMenu(
       std::move(entries),
@@ -837,33 +854,23 @@ void MenuController::showActionMenu(
           m_page.focusFileList();
         }
       },
-      anchor.value_or(m_page.menuAnchor()), alignLeft
+      anchor.value_or(m_page.menuAnchor()), true
   );
 }
 
-void MenuController::openSortMenu(std::optional<LayoutRect> anchor, bool alignLeft) {
-  if (m_page.browser().folderView()) {
-    showActionMenu(
-        {Action::SortName, Action::SortType, Action::SortSize, Action::SortModified, Action::SortAccessed,
-         Action::SortCreated, Action::SortOwner, Action::SortGroup, Action::SortPermissions, Action::SortLocation,
-         std::nullopt, Action::Ascending, Action::Descending, std::nullopt, Action::FoldersFirst, Action::HiddenLast,
-         std::nullopt, Action::ResetFolderView},
-        true, !anchor.has_value(), anchor, alignLeft
-    );
-    return;
-  }
-  showActionMenu(
-      {Action::SortName, Action::SortType, Action::SortSize, Action::SortModified, Action::SortAccessed,
-       Action::SortCreated, Action::SortOwner, Action::SortGroup, Action::SortPermissions, Action::SortLocation,
-       std::nullopt, Action::Ascending, Action::Descending, std::nullopt, Action::FoldersFirst, Action::HiddenLast},
-      true, !anchor.has_value(), anchor, alignLeft
-  );
+void MenuController::openSortMenu(std::optional<LayoutRect> anchor) {
+  const auto request = m_page.actionRequest(false);
+  showActionMenu(sortEntries(request), request, !anchor.has_value(), anchor);
 }
 
 void MenuController::openSelectionMenu() {
-  showActionMenu(
-      {Action::SelectAll, Action::InvertSelection, Action::SelectPattern, Action::ClearSelection}, false, true
-  );
+  const auto request = m_page.actionRequest(false);
+  std::vector<ContextMenuControlEntry> entries;
+  for (const auto action :
+       {Action::SelectAll, Action::InvertSelection, Action::SelectPattern, Action::ClearSelection}) {
+    entries.push_back(actionEntry(action, request));
+  }
+  showActionMenu(std::move(entries), request, true);
 }
 
 void MenuController::openMenu() {
