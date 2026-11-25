@@ -14,6 +14,42 @@ File monitors follow canonical files, existing path components and resolved decl
 
 Explicit sort changes from menus, list headings and the open Settings dialog share BrowserPage's sort application path. They preserve model selection IDs and request the beginning of the new order. Layout consumes that request after preference notifications and view switches, clearing any intervening captured scroll anchor or pending history viewport before arranging the virtualized cells. Ordinary reloads and unrelated preference changes retain their existing viewport behavior.
 
+## Palette sources
+
+[choosePalette](../../src/ui/palette_source.h) picks the palette; [PaletteWatcher](../../src/app/palette_watcher.h) applies it and again after every change. With `color_scheme = "auto"`: `colors.toml` when it exists (an invalid file is logged and leaves the current palette), else the desktop's GTK 4 colors when [desktopPalette](../../src/ui/desktop_palette.h) finds them usable, else the built-in palette. `"dark"` and `"light"` never read GTK files. The log gets one line each time the source changes.
+
+[readGtkColors](../../src/ui/gtk_colors.h) reads `$XDG_CONFIG_HOME/gtk-4.0/gtk.css`. It follows `@import url("x");`, `@import url(x);` and `@import "x";` for relative paths (to the importing file), absolute paths and `file:///` URLs (percent-decoded); other schemes are ignored. It collects `@define-color NAME VALUE;` and `--name: VALUE;` in any block into one table in document order, an import being read at its position and a later definition winning; `--accent-bg-color` and `accent_bg_color` are one name. Values are `#rgb`, `#rrggbb`, `#rrggbbaa`, `@name` and `var(--name)`; a name with any other value is undefined. Unknown constructs are skipped without a message. A missing or unreadable root means no desktop colors.
+
+Bounds: import depth 4, 16 files, 1 MiB per file (a larger file is skipped whole), reference chains 8 deep. A path is read once, so import cycles end; only regular files are read (links to them are followed).
+
+| Palette role | GTK name |
+| --- | --- |
+| `primary`, `on_primary` | `accent_bg_color`, `accent_fg_color` |
+| `surface`, `on_surface` | `window_bg_color`, `window_fg_color` |
+| `surface_container` | first of `card_bg_color`, `popover_bg_color`, `sidebar_bg_color`, `headerbar_bg_color` |
+| `outline_variant` | `border_color`, else `sidebar_border_color` when it differs from the surface |
+| `hover`, `on_hover` | `active_toggle_bg_color`, `active_toggle_fg_color` |
+| `error`, `on_error` | `error_bg_color`, `error_fg_color`, else `destructive_bg_color`, `destructive_fg_color` |
+
+The colors are usable only when `window_bg_color`, `window_fg_color` and `accent_bg_color` are defined. A color the theme gives is never changed. The other roles are derived from it, with S the surface, T the text color and `mix` a mix in Oklab, so equal steps look equal in every hue and brightness. The palette is dark when the surface is darker than the text. Contrast figures are WCAG ratios.
+
+| Role | Derivation |
+| --- | --- |
+| `secondary`, `tertiary` | the primary color with its hue turned by 30 and 60 degrees and its chroma scaled by 0.85 and 0.9, moved toward T until 3:1 on S |
+| `error` without an error color | the built-in error color of the dark or light variant |
+| `*_container` of primary, secondary, tertiary, error | `mix(S, color, 0.30)` |
+| `on_*_container` | the color moved toward T until 4.5:1 on its container, else black or white |
+| `on_secondary`, `on_tertiary`, `on_error` and `on_primary`, `on_hover` when not given | whichever of T and S reads better on the fill, else black or white when that is under 4.5:1 |
+| `surface_container` without a given one | `mix(S, T, 0.07)` |
+| `surface_container_low`, `_high`, `_highest` | `mix(S, C, 0.5)`, `mix(S, C, 1.5)`, `mix(S, C, 2.0)` for the container C (a container within 0.01 of S uses the 0.07 step), shortened where T would read under 4.5:1 |
+| `on_surface_variant` | `mix(S, T, t)` from t = 0.55 in steps of 0.05 until 3:1 on S and on the highest container |
+| `outline_variant` without a given one | `mix(S, T, t)` from t = 0.16 in steps of 0.02 until 1.25:1 on S and on the container; a quiet line stays visible without outweighing the 7% container step |
+| `hover` without a given one | `mix(S, T, 0.12)` |
+| `shadow` | dark: `mix(S, black, 0.5)`; light: T |
+| `scrim` | black |
+
+[GtkColorWatch](../../src/app/gtk_color_watch.h) watches the folder of the root `gtk.css` (the closest existing ancestor until it exists) and the folder of every file read, at most 8 folders, only while the desktop colors are in use. A change to a file read, or to the root's folder, goes through PaletteWatcher's 100 ms debounce and reload; after each reload the watched folders follow what was read. Creating or removing `colors.toml` is seen by the existing watch of the Luciole config folder.
+
 ## Settings layout
 
 [SettingsController](../../src/app/page/settings_controller.cpp) retains the preferred 880-pixel dialog width independently of the opening window size. The common popup layout in [BrowserPage](../../src/app/page/browser_page.cpp) calls `layoutDialog()` before measuring Settings on each requested layout. It reapplies the parent-constrained height up to 640 pixels and the compact navigation breakpoint. Parent configuration already requests popup layout and recenters the dialog. Resize the existing view so its category, scroll state, focus and drafts survive; dismiss an open select dropdown when its anchor geometry changes. Do not persist the temporarily constrained popup dimensions as its preferred size.

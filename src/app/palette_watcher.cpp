@@ -2,6 +2,7 @@
 
 #include "core/log.h"
 #include "fs/directory_watch.h"
+#include "ui/gtk_colors.h"
 #include "ui/palette_file.h"
 
 #include <glib.h>
@@ -10,7 +11,8 @@ namespace {
   constexpr auto kLog = Logger("palette");
 }
 
-luciole::PaletteWatcher::PaletteWatcher(ColorScheme scheme) : m_path(palettePath()), m_scheme(scheme) {
+luciole::PaletteWatcher::PaletteWatcher(ColorScheme scheme)
+    : m_path(palettePath()), m_gtkCss(gtkCssPath()), m_scheme(scheme), m_gtk([this] { scheduleReload(); }) {
   watch();
   reload();
 }
@@ -31,12 +33,18 @@ void luciole::PaletteWatcher::setScheme(ColorScheme scheme) {
 }
 
 void luciole::PaletteWatcher::reload() {
-  auto palette = loadPalette(m_path, m_scheme);
-  if (!palette) {
-    kLog.warn("{}", palette.error());
+  const auto chosen = choosePalette(m_path, m_gtkCss, m_scheme);
+  if (!chosen) {
+    m_gtk.follow({}, {});
+    kLog.warn("{}", chosen.error());
     return;
   }
-  setPalette(*palette);
+  m_gtk.follow(chosen->readsDesktopColors ? m_gtkCss : std::filesystem::path{}, chosen->gtkFiles);
+  if (m_source != chosen->source) {
+    m_source = chosen->source;
+    kLog.info("colors from {}", paletteSourceName(chosen->source));
+  }
+  setPalette(chosen->palette);
 }
 
 void luciole::PaletteWatcher::scheduleReload() {

@@ -178,7 +178,7 @@ SettingsDialog::SettingsDialog(
       {{"Automatic", luciole::ColorScheme::Auto},
        {"Dark", luciole::ColorScheme::Dark},
        {"Light", luciole::ColorScheme::Light}},
-      "Automatic follows Noctalia's theme mode"
+      "Automatic follows the colors from Noctalia or the desktop theme"
   );
   addFraction(P::BackgroundOpacity, "Background Opacity", 1.0, 0.01);
   addFraction(P::CornerRadiusScale, "Corner Roundness", 2.0, 0.05, {}, [](double value) {

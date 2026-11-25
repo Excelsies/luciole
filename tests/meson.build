@@ -458,6 +458,10 @@ test_table = [
     'sources': files('animation_files.cpp', 'scene_capture.cpp', 'png_writer.cpp'), 'timeout': 90,
     'env': gio_env + ['LUCIOLE_LIBRARY_ASSETS_DIR=' + (meson.project_source_root() / 'lib/assets')]},
   {'name': 'palette-file', 'deps': [ui_dep]},
+  {'name': 'gtk-colors', 'deps': [ui_dep]},
+  {'name': 'desktop-palette', 'deps': [ui_dep]},
+  {'name': 'palette-source', 'deps': [ui_dep]},
+  {'name': 'palette-watcher', 'deps': [app_palette_dep, event_loop_dep], 'timeout': 60, 'env': gio_env},
 ]
 # The media tests play clips with GStreamer, so they exist where playback is built.
 if media_playback

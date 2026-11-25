@@ -4,7 +4,7 @@ The [user guide](../user/index.md) explains how to use and configure Luciole. Th
 
 - [Architecture and ownership](architecture.md): modules, windows, pages and asynchronous work.
 - [Rendering and images](rendering-images.md): shared-library boundary, UI phases, thumbnails and texture residency.
-- [Configuration and persistence](configuration.md): precedence, reload, typed edits and atomic writes.
+- [Configuration and persistence](configuration.md): precedence, reload, palette sources, typed edits and atomic writes.
 - [File jobs and desktop boundaries](file-jobs.md): job ownership, conflicts, provider operations and launching.
 
 [CONTRIBUTING.md](../../CONTRIBUTING.md) defines development conventions and [PACKAGING.md](../../PACKAGING.md) owns dependency and install requirements.
