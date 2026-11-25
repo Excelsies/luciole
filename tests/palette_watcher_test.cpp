@@ -30,8 +30,8 @@ namespace {
   }
 
   // Runs the main loop until the check holds; a check that never holds fails after ten seconds.
-  void waitFor(const std::function<bool()>& holds, std::string_view what) {
-    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+  void waitFor(const std::function<bool()>& holds, std::string_view what, int limitMs = 10000) {
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(limitMs);
     while (!holds()) {
       if (std::chrono::steady_clock::now() > deadline) {
         std::println(stderr, "timed out waiting for {}", what);
@@ -151,6 +151,73 @@ namespace {
     waitFor([&] { return ::palette.surface == hex("#445566"); }, "edit of a link's target");
   }
 
+  // A folder replaced by another at the same path, in less time than the debounce: a later change in the new
+  // folder shows without waiting for the provider to find the folder again.
+  void testReplacedFolders() {
+    const luciole::test::TempFolder folder("palette-watcher-replaced");
+    const auto config = folder.path() / "config";
+    fs::create_directories(config);
+    TEST_CHECK(::setenv("XDG_CONFIG_HOME", config.c_str(), 1) == 0);
+    const auto gtk = config / "gtk-4.0";
+    write(gtk / "gtk.css", gtkCss("#112233", "#ff8800"));
+    luciole::PaletteWatcher watcher(ColorScheme::Auto);
+    TEST_CHECK(::palette.surface == hex("#112233"));
+
+    // The old folder stays until the new one exists, so the two never share an inode number.
+    fs::rename(gtk, config / "gtk-old");
+    write(gtk / "gtk.css", gtkCss("#223344", "#00aa55"));
+    fs::remove_all(config / "gtk-old");
+    waitFor([&] { return ::palette.surface == hex("#223344"); }, "replaced folder");
+    write(gtk / "gtk.css", gtkCss("#334455", "#00aa55"));
+    waitFor([&] { return ::palette.surface == hex("#334455"); }, "rewrite in the replaced folder", 2500);
+  }
+
+  // gtk-4.0 is a link that a dotfile manager repoints; the next reload watches the new target.
+  void testRepointedLink() {
+    const luciole::test::TempFolder folder("palette-watcher-repointed");
+    const auto config = folder.path() / "config";
+    fs::create_directories(config);
+    TEST_CHECK(::setenv("XDG_CONFIG_HOME", config.c_str(), 1) == 0);
+    const auto first = folder.path() / "dots-a";
+    const auto second = folder.path() / "dots-b";
+    write(first / "gtk.css", gtkCss("#445566", "#00aa55"));
+    write(second / "gtk.css", gtkCss("#556677", "#00aa55"));
+    fs::create_directory_symlink(first, config / "gtk-4.0");
+    luciole::PaletteWatcher watcher(ColorScheme::Auto);
+    TEST_CHECK(::palette.surface == hex("#445566"));
+
+    fs::remove(config / "gtk-4.0");
+    fs::create_directory_symlink(second, config / "gtk-4.0");
+    watcher.setScheme(ColorScheme::Light);
+    watcher.setScheme(ColorScheme::Auto);
+    TEST_CHECK(::palette.surface == hex("#556677"));
+    write(second / "gtk.css", gtkCss("#667788", "#00aa55"));
+    waitFor([&] { return ::palette.surface == hex("#667788"); }, "rewrite behind the repointed link", 2500);
+  }
+
+  // A folder reached through a linked parent is one folder.
+  void testLinkedParentIsWatchedOnce() {
+    const luciole::test::TempFolder folder("gtk-color-watch-linked");
+    const auto real = folder.path() / "real";
+    const auto link = folder.path() / "link";
+    write(real / "gtk-4.0" / "gtk.css", "");
+    fs::create_directory_symlink(real, link);
+    const auto root = link / "gtk-4.0" / "gtk.css";
+    luciole::GtkColorWatch watch([] {});
+    watch.follow(root, {root});
+    TEST_CHECK((watch.folders() == std::vector<fs::path>{link / "gtk-4.0"}));
+  }
+
+  // Asking again for the same folders is no change.
+  void testStableFoldersReportNoChange() {
+    const luciole::test::TempFolder folder("gtk-color-watch-stable");
+    const auto root = folder.path() / "gtk.css";
+    write(root, "");
+    luciole::GtkColorWatch watch([] {});
+    TEST_CHECK(watch.follow(root, {root}));
+    TEST_CHECK(!watch.follow(root, {root}));
+  }
+
   void testWatchedFolders() {
     const luciole::test::TempFolder folder("gtk-color-watch");
     int changes = 0;
@@ -190,6 +257,10 @@ namespace {
 int main() {
   testImportsThatAppearLater();
   testWatchedFolders();
+  testLinkedParentIsWatchedOnce();
+  testStableFoldersReportNoChange();
+  testReplacedFolders();
+  testRepointedLink();
   testFollowsDesktopColorsAndColorFile();
   std::println("palette watcher checks passed");
   return 0;

@@ -36,14 +36,14 @@ void luciole::PaletteWatcher::reload() {
   // A write that lands between a read and the watches it started is not seen by them: when the watched folders
   // changed, read once more. The second read starts no further pass, so this is at most two reads.
   if (apply()) {
-    apply();
+    (void)apply();
   }
 }
 
 bool luciole::PaletteWatcher::apply() {
   const auto chosen = choosePalette(m_path, m_gtkCss, m_scheme);
   if (!chosen) {
-    m_gtk.follow({}, {});
+    (void)m_gtk.follow({}, {});
     kLog.warn("{}", chosen.error());
     return false;
   }

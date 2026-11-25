@@ -4,6 +4,8 @@
 #include "fs/directory_watch.h"
 
 #include <algorithm>
+#include <optional>
+#include <sys/stat.h>
 #include <system_error>
 #include <utility>
 
@@ -18,6 +20,15 @@ namespace {
       folder = folder.parent_path();
     }
     return folder;
+  }
+
+  // Which directory a path names right now; a replaced or repointed folder has another identity.
+  std::optional<std::pair<dev_t, ino_t>> identify(const fs::path& folder) {
+    struct stat info{};
+    if (::stat(folder.c_str(), &info) != 0) {
+      return std::nullopt;
+    }
+    return std::pair{info.st_dev, info.st_ino};
   }
 } // namespace
 
@@ -51,7 +62,11 @@ bool luciole::GtkColorWatch::follow(const fs::path& root, const std::vector<fs::
       const auto target = fs::weakly_canonical(path, error);
       if (!error && target != path) {
         m_known.push_back(target);
-        folders.push_back(target.parent_path());
+        // The same folder under another name (a linked parent) is watched once.
+        std::error_code same;
+        if (!fs::equivalent(target.parent_path(), path.parent_path(), same)) {
+          folders.push_back(target.parent_path());
+        }
       }
     }
     for (const auto& folder : folders) {
@@ -68,26 +83,37 @@ bool luciole::GtkColorWatch::follow(const fs::path& root, const std::vector<fs::
     wanted.resize(std::min(wanted.size(), kMostFolders));
   }
   std::vector<Folder> next;
-  bool changed = wanted.size() != m_folders.size();
+  std::vector<fs::path> failed;
+  bool changed = wanted != m_wanted;
   for (const auto& path : wanted) {
+    const auto identity = identify(path);
     const auto kept = std::ranges::find(m_folders, path, &Folder::path);
-    if (kept != m_folders.end()) {
+    if (kept != m_folders.end() && identity && *identity == kept->identity) {
       next.push_back(std::move(*kept));
       continue;
     }
-    changed = true;
-    auto monitor = DirectoryWatch::start(path, [this](const fs::path& where) {
-      if (relevant(where)) {
-        m_changed();
-      }
-    });
+    // A new folder, or one replaced since its monitor started, which that monitor no longer sees.
+    changed = changed || kept != m_folders.end();
+    std::unique_ptr<DirectoryWatch> monitor;
+    if (identity) {
+      monitor = DirectoryWatch::start(path, [this](const fs::path& where) {
+        if (relevant(where)) {
+          m_changed();
+        }
+      });
+    }
     if (!monitor) {
-      kLog.warn("cannot watch {} for color changes", path.string());
+      if (std::ranges::find(m_failed, path) == m_failed.end()) {
+        kLog.warn("cannot watch {} for color changes", path.string());
+      }
+      failed.push_back(path);
       continue;
     }
-    next.push_back({.path = path, .monitor = std::move(monitor)});
+    next.push_back({.path = path, .identity = *identity, .monitor = std::move(monitor)});
   }
   m_folders = std::move(next);
+  m_failed = std::move(failed);
+  m_wanted = std::move(wanted);
   return changed;
 }
 

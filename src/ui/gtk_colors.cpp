@@ -292,7 +292,7 @@ namespace {
 std::optional<std::string> luciole::readGtkFile(const fs::path& path) {
   // Opened without blocking and checked on the descriptor, so a path that is swapped for a pipe cannot hold the
   // caller and the size checked is the size read.
-  const Fd fd(::open(path.c_str(), O_RDONLY | O_NONBLOCK | O_CLOEXEC));
+  const Fd fd(::open(path.c_str(), O_RDONLY | O_NOCTTY | O_NONBLOCK | O_CLOEXEC));
   struct stat info{};
   if (!fd.valid()
       || ::fstat(fd.get(), &info) != 0

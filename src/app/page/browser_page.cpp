@@ -1396,7 +1396,7 @@ bool BrowserPage::shortcutKey(const KeyboardEvent& event) {
   if (!editing && (m_detailsHeader.menuKey(event) || m_fileKeys.commandKey(event))) {
     return true;
   }
-  // View chords cannot be plain text keys, so they switch the view even while typing in a field.
+  // Grid, List and Columns chords switch the view even while typing in a field.
   if (dispatchShortcut(event, {Action::Grid, Action::List, Action::Miller})) {
     return true;
   }
