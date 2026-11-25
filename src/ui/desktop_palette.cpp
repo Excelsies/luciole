@@ -124,14 +124,15 @@ namespace {
     return {.low = flat ? centre : at(0.5F), .base = centre, .high = at(high), .highest = at(highest)};
   }
 
-  // Secondary text: from the surface toward the text color, from 55% on, until it reads at 3:1 on the surface and
-  // on the highest container.
-  Color variantText(const Base& base, const Color& highest) {
+  // Secondary text: from the surface toward the text color, from 55% on, until it reads at 3:1 on the surface and on
+  // every fill it is drawn on: the highest container and the selected-row fill.
+  Color variantText(const Base& base, const Color& highest, const Color& selected) {
     for (int step = 0; step < kStrideSteps; ++step) {
       const float t = std::min(1.0F, kVariantStart + (kVariantStride * static_cast<float>(step)));
       const Color candidate = mixOklab(base.surface, base.onSurface, t);
       if (contrastRatio(candidate, base.surface) >= kVariantRatio
-          && contrastRatio(candidate, highest) >= kVariantRatio) {
+          && contrastRatio(candidate, highest) >= kVariantRatio
+          && contrastRatio(candidate, selected) >= kVariantRatio) {
         return candidate;
       }
     }
@@ -208,7 +209,7 @@ std::optional<Palette> luciole::desktopPalette(const GtkColorTable& names) {
       .onErrorContainer = error.onContainer,
       .surface = base.surface,
       .onSurface = base.onSurface,
-      .onSurfaceVariant = variantText(base, surfaces.highest),
+      .onSurfaceVariant = variantText(base, surfaces.highest, primaryAccent.container),
       .surfaceContainerLow = surfaces.low,
       .surfaceContainer = surfaces.base,
       .surfaceContainerHigh = surfaces.high,

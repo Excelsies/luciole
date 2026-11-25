@@ -203,6 +203,28 @@ namespace {
          ),
          false}
     );
+    // Measured in a real window: the accent is far from the surface, so its container pulls secondary text down.
+    all.push_back(
+        {"measured dark",
+         fromCss(
+             "@define-color window_bg_color #0f0c14;\n@define-color window_fg_color #e8e2d6;\n"
+             "@define-color accent_bg_color #e3c078;\n@define-color accent_fg_color #1a1420;\n"
+             "@define-color card_bg_color #1b1624;\n@define-color border_color #6b5c77;\n"
+             "@define-color active_toggle_bg_color #7fd6c2;\n@define-color active_toggle_fg_color #0f0c14;\n"
+             "@define-color error_bg_color #ff6b7d;\n"
+         ),
+         true}
+    );
+    all.push_back(
+        {"measured light",
+         fromCss(
+             "@define-color window_bg_color #f6f1e7;\n@define-color window_fg_color #2a2230;\n"
+             "@define-color accent_bg_color #7a3fb0;\n@define-color card_bg_color #e8e0d2;\n"
+             "@define-color border_color #9c8fa8;\n@define-color active_toggle_bg_color #2f9e8b;\n"
+             "@define-color error_bg_color #c0263f;\n"
+         ),
+         false}
+    );
     return all;
   }
 
@@ -232,6 +254,8 @@ namespace {
         {"on_surface_variant/surface", p.onSurfaceVariant, p.surface, 3.0},
         {"on_surface_variant/surface_container", p.onSurfaceVariant, p.surfaceContainer, 3.0},
         {"on_surface_variant/surface_container_highest", p.onSurfaceVariant, p.surfaceContainerHighest, 3.0},
+        {"on_surface_variant/primary_container", p.onSurfaceVariant, p.primaryContainer, 3.0},
+        {"on_surface_variant/surface_container_high", p.onSurfaceVariant, p.surfaceContainerHigh, 3.0},
         {"secondary/surface", p.secondary, p.surface, 3.0},
         {"tertiary/surface", p.tertiary, p.surface, 3.0},
         {"outline_variant/surface", p.outlineVariant, p.surface, 1.25},
@@ -250,6 +274,11 @@ namespace {
         }
         TEST_CHECK(got >= pair.minimum);
       }
+      const auto& p = fixture.palette;
+      std::println(
+          "  on_surface {:.2f}, on_surface_variant {:.2f} on the surface", ratio(p.onSurface, p.surface),
+          ratio(p.onSurfaceVariant, p.surface)
+      );
     }
   }
 

@@ -42,7 +42,7 @@ The colors are usable only when `window_bg_color`, `window_fg_color` and `accent
 | `on_secondary`, `on_tertiary`, `on_error` and `on_primary`, `on_hover` when not given | whichever of T and S reads better on the fill, else black or white when that is under 4.5:1 |
 | `surface_container` without a given one | `mix(S, T, 0.07)` |
 | `surface_container_low`, `_high`, `_highest` | `mix(S, C, 0.5)`, `mix(S, C, 1.5)`, `mix(S, C, 2.0)` for the container C (a container within 0.01 of S uses the 0.07 step), shortened where T would read under 4.5:1 |
-| `on_surface_variant` | `mix(S, T, t)` from t = 0.55 in steps of 0.05 until 3:1 on S and on the highest container |
+| `on_surface_variant` | `mix(S, T, t)` from t = 0.55 in steps of 0.05 until 3:1 on S, on the highest container and on `primary_container`, the fill of a selected row |
 | `outline_variant` without a given one | `mix(S, T, t)` from t = 0.16 in steps of 0.02 until 1.25:1 on S and on the container; a quiet line stays visible without outweighing the 7% container step |
 | `hover` without a given one | `mix(S, T, 0.12)` |
 | `shadow` | dark: `mix(S, black, 0.5)`; light: T |
