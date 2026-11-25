@@ -223,6 +223,92 @@ namespace {
     TEST_CHECK(tmpIsEmpty(folder));
   }
 
+  // A header with its fields exactly as given, each padded with spaces to its width.
+  std::string rawHeader(const std::string& name, const std::string& size, const std::string& end = "`\n") {
+    const auto field = [](std::string text, std::size_t width) {
+      TEST_CHECK(text.size() <= width);
+      return text.append(width - text.size(), ' ');
+    };
+    return field(name, 16)
+        + field("0", 12)
+        + field("0", 6)
+        + field("0", 6)
+        + field("100644", 8)
+        + field(size, 10)
+        + end;
+  }
+  // `head` (headers and small members) followed by a sparse hole that makes the file as long as its last header says.
+  void writeSparseAfter(const fs::path& path, const std::string& head, std::uint64_t hole) {
+    write(path, kMagic + head);
+    fs::resize_file(path, fs::file_size(path) + hole);
+  }
+  std::string refusalOf(const fs::path& path) {
+    const AddressCap cap(kCapHeadroom);
+    const auto found = inspect(path);
+    TEST_CHECK(!found.catalog && found.error);
+    return found.error ? found.error->message : std::string();
+  }
+
+  // libarchive accepts size fields and names that are not what ar writes; the walk must not be more lenient than it.
+  void disguisedTablesAreRefusedWithoutAllocating(const Folder& folder) {
+    const auto big = std::to_string(kHugeTable);
+    const std::string leadingMember = "x\n";
+    struct Variant {
+      std::string label, head, expected;
+    };
+    const std::string table = "long-name table", malformed = "malformed member header";
+    const std::vector<Variant> variants{
+        {"first-lead-space", rawHeader("a.o/", " 1") + leadingMember + rawHeader("//", big), malformed},
+        {"first-five-spaces", rawHeader("a.o/", "     1") + leadingMember + rawHeader("//", big), malformed},
+        {"first-nul", rawHeader("a.o/", std::string("1\0", 2)) + leadingMember + rawHeader("//", big), malformed},
+        {"first-letter", rawHeader("a.o/", "1x") + leadingMember + rawHeader("//", big), malformed},
+        {"name-nul", rawHeader(std::string("//\0", 3), big), table},
+        {"name-three-slashes", rawHeader("///", big), table},
+        {"name-letter", rawHeader("//x", big), table},
+        {"size-lead-space", rawHeader("//", " " + big), malformed},
+        {"size-nul", rawHeader("//", big + std::string(1, '\0')), malformed},
+        {"size-letter", rawHeader("//", big + "x"), malformed},
+        {"size-plus", rawHeader("//", "+" + big), malformed},
+        {"size-leading-zero", rawHeader("//", "0" + big), table},
+        {"bad-end", rawHeader("a.o/", "1", "XX") + leadingMember, malformed},
+    };
+    for (const auto& variant : variants) {
+      const auto path = folder.root / ("disguised-" + variant.label + ".a");
+      writeSparseAfter(path, variant.head, variant.head.contains("//") ? kHugeTable : 0);
+      TEST_CHECK(refusalOf(path).contains(variant.expected));
+    }
+    TEST_CHECK(tmpIsEmpty(folder));
+  }
+
+  // Random damage to the name and size fields of a table header: every file is refused or opens within bounds.
+  void damagedTableHeadersNeverAllocateTheTable(const Folder& folder) {
+    constexpr std::string_view alphabet = " \0/x\t+09";
+    std::uint32_t state = 20240607;
+    const auto pick = [&](std::size_t bound) {
+      state = state * 1664525U + 1013904223U;
+      return static_cast<std::size_t>(state >> 8) % bound;
+    };
+    for (int round = 0; round < 60; ++round) {
+      std::string name(16, ' '), size = std::to_string(kHugeTable);
+      name.replace(0, 2, "//");
+      size.resize(10, ' ');
+      for (int hits = 0; hits < 3; ++hits) {
+        auto& field = pick(2) == 0 ? name : size;
+        field[pick(field.size() < 6 ? field.size() : 6)] = alphabet[pick(alphabet.size())];
+      }
+      const auto path = folder.root / "damaged.a";
+      writeSparseAfter(path, rawHeader(name, size), kHugeTable);
+      const AddressCap cap(kCapHeadroom);
+      const auto found = inspect(path);
+      // An allocation that fails under the cap would surface as an error that is neither of ours nor libarchive's.
+      TEST_CHECK(found.error || found.catalog);
+      if (found.error) {
+        const auto& message = found.error->message;
+        TEST_CHECK(!message.contains("memory") && !message.contains("allocate") && !message.contains("Can't"));
+      }
+    }
+  }
+
   void compressedArchivesNeverReachTheArReader(const Folder& folder) {
     // The decoded bytes of a gzip start like an ar archive, one with a huge "//" table and one that is fine.
     const std::string normal = kMagic + arMember("//", "long_member_name_x.o/\n") + arMember("/0", "abc");
@@ -261,6 +347,8 @@ int main() {
   bsdLibrary(folder);
   unsafeAndBrokenLibrariesFail(folder);
   oversizedNameTablesAreRefusedWithoutAllocating(folder);
+  disguisedTablesAreRefusedWithoutAllocating(folder);
+  damagedTableHeadersNeverAllocateTheTable(folder);
   compressedArchivesNeverReachTheArReader(folder);
   otherFormatsStillWin(folder);
   std::println("archive-ar: all checks passed");

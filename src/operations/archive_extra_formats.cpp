@@ -37,15 +37,33 @@ namespace {
     return count == head.size() && std::string_view(head.data(), count) == kArMagic;
   }
 
-  // A GNU "//" long-name table is the one member libarchive reads whole, with no limit of its own. A BSD "#1/N" name is
-  // capped by libarchive itself at about 1 MiB, and a second table is refused by it.
-  bool isNameTable(std::string_view header) {
-    const auto name = header.substr(0, 16);
-    return name.starts_with("//") && name.find_first_not_of(' ', 2) == std::string_view::npos;
+  // Every member whose name starts with "//" may be the GNU long-name table, the one member libarchive reads whole
+  // with no limit of its own. A BSD "#1/N" name is capped by libarchive at about 1 MiB, and it refuses a second table.
+  bool maybeNameTable(std::string_view header) { return header.starts_with("//"); }
+
+  [[noreturn]] void malformedHeader() {
+    throwFileError(FileErrorKind::InvalidArgument, "The ar archive has a malformed member header.");
+  }
+
+  // The size field as ar writes it: decimal digits, then spaces. libarchive also accepts leading spaces, NUL and
+  // trailing letters; the walk refuses all of them so that it never reads the file differently from libarchive.
+  std::uint64_t memberSize(std::string_view header) {
+    auto field = header.substr(kArSizeAt, kArSizeWidth);
+    const auto digits = field.substr(0, field.find(' '));
+    std::uint64_t size = 0;
+    const auto parsed = std::from_chars(digits.data(), digits.data() + digits.size(), size);
+    if (digits.empty()
+        || parsed.ec != std::errc{}
+        || parsed.ptr != digits.data() + digits.size()
+        || field.substr(digits.size()).find_first_not_of(' ') != std::string_view::npos) {
+      malformedHeader();
+    }
+    return size;
   }
 
   // Walks the member headers of a plain ar file and refuses a name table that libarchive would hold beyond the
-  // metadata limit. A header that does not parse ends the walk: libarchive reports it.
+  // metadata limit. A complete header that is not well formed is refused: a walk that merely stopped there could
+  // miss a table that libarchive still finds.
   void requireBoundedTables(Input& input, const Work& work) {
     const auto fileSize = static_cast<std::uint64_t>(input.seek(0, SEEK_END));
     std::uint64_t position = kArMagic.size();
@@ -57,17 +75,14 @@ namespace {
       std::array<char, kArHeaderBytes> header{};
       input.seek(static_cast<std::int64_t>(position), SEEK_SET);
       if (input.read(header) != header.size()) {
-        break;
+        malformedHeader();
       }
       const std::string_view view(header.data(), header.size());
-      auto field = view.substr(kArSizeAt, kArSizeWidth);
-      field = field.substr(0, field.find(' '));
-      std::uint64_t size = 0;
-      const auto parsed = std::from_chars(field.data(), field.data() + field.size(), size);
-      if (field.empty() || parsed.ec != std::errc{} || parsed.ptr != field.data() + field.size()) {
-        break;
+      if (view.substr(kArHeaderBytes - 2) != "`\n") {
+        malformedHeader();
       }
-      if (isNameTable(view) && size > work.limits.maxMetadataBytes) {
+      const auto size = memberSize(view);
+      if (maybeNameTable(view) && size > work.limits.maxMetadataBytes) {
         throwFileError(
             FileErrorKind::Unsupported, "The ar archive's long-name table is larger than the metadata limit."
         );
