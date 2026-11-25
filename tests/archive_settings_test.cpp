@@ -151,12 +151,22 @@ namespace {
           != nullptr
       );
     }
-    TEST_CHECK(
-        labelWithText(
-            *rig.dialog, "A type that is switched on opens in the archive browser instead of its default application."
-        )
-        != nullptr
+    // The caption describes every card, so it sits above the first card's heading.
+    auto* caption = labelWithText(
+        *rig.dialog, "A type that is switched on opens in the archive browser instead of its default application."
     );
+    auto* first = labelWithText(*rig.dialog, luciole::archiveFamilyLabel(static_cast<luciole::ArchiveFamily>(0)));
+    TEST_CHECK(caption != nullptr && first != nullptr);
+    if (caption != nullptr && first != nullptr) {
+      rig.reveal(*caption);
+      float captionX = 0;
+      float captionY = 0;
+      float firstX = 0;
+      float firstY = 0;
+      Node::absolutePosition(caption, captionX, captionY);
+      Node::absolutePosition(first, firstX, firstY);
+      TEST_CHECK(captionY + caption->height() <= firstY);
+    }
     for (const auto& type : luciole::kArchiveContainerTypes) {
       auto* toggle = rowToggle(*rig.dialog, type.label);
       TEST_CHECK(toggle != nullptr && !toggle->checked());
