@@ -23,7 +23,7 @@
 | `src/ui/` | Luciole-specific views and compositions of actual Noctalia controls |
 | `src/app/`, `src/event_loop/` | Application ownership, page orchestration, platform polling and GLib integration |
 
-The application uses direct Wayland and OpenGL ES with Pango/Cairo. GdkPixbuf/Glycin supplies image decoding, not a widget layer. Builds consume the checked-in mirror; a sibling checkout and the Noctalia shell are not runtime/build requirements. Generic library changes go upstream before reviewed updates are copied back into Luciole.
+The application uses direct Wayland and OpenGL ES with Pango/Cairo. GdkPixbuf/Glycin supplies image decoding, not a widget layer. Builds consume the checked-in mirror; a sibling checkout and the Noctalia shell are not runtime/build requirements. Generic library changes go upstream before reviewed updates are copied back into Luciole. The copy is ahead of noctalia-shell in one place: Select grabs its dropdown with the serial of the press that opens it, which GNOME requires.
 
 ## Network discovery
 
