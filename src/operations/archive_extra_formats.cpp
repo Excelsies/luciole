@@ -36,6 +36,7 @@ void luciole::archive_work::enableExtraFilters(struct archive* reader, Work& wor
 
 void luciole::archive_work::enableExtraFormats(struct archive* reader, Work& work) {
   requireArchive(archive_read_support_format_ar(reader), reader, work);
+  requireArchive(archive_read_support_format_cpio(reader), reader, work);
 }
 
 bool luciole::archive_work::extraFilterNeedsRawPass(int filterCode) {
@@ -61,5 +62,24 @@ void luciole::archive_work::requireArchiveEnd(struct archive* reader, Input& inp
   }
   if (archive_filter_bytes(reader, -1) != input.seek(0, SEEK_END)) {
     throwFileError(FileErrorKind::InvalidArgument, "The ar archive has a truncated trailing header.");
+  }
+}
+
+void luciole::archive_work::requireHardlinkData(
+    struct archive_entry* header, const std::string& target, const std::vector<ArchiveEntry>& entries,
+    const std::map<std::string, std::size_t>& known
+) {
+  const auto size = archive_entry_size_is_set(header) ? archive_entry_size(header) : 0;
+  if (size <= 0) {
+    return;
+  }
+  const auto found = known.find(target);
+  const bool same = found != known.end()
+      && entries[found->second].kind == ArchiveEntryKind::File
+      && entries[found->second].size == static_cast<std::uint64_t>(size);
+  if (!same) {
+    throwFileError(
+        FileErrorKind::Unsupported, "Archive hard link carries data that its target does not hold; not supported."
+    );
   }
 }

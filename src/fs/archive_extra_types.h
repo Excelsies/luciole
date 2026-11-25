@@ -34,6 +34,7 @@ namespace luciole {
       {"taz", "application/x-tarz", ArchiveExtraNeed::Compress},
       {"a", "application/x-archive", ArchiveExtraNeed::None},
       {"ar", "application/x-archive", ArchiveExtraNeed::None},
+      {"cpio", "application/x-cpio", ArchiveExtraNeed::None},
   });
 
   // Whether this build can read what `need` names.

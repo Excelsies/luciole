@@ -51,6 +51,7 @@ test_table = [
   {'name': 'archive-container-service', 'deps': [operations_dep, event_loop_dep], 'timeout': 90, 'env': gio_env},
   {'name': 'archive-tar-filters', 'deps': [operations_dep, event_loop_dep], 'timeout': 120, 'env': gio_env},
   {'name': 'archive-ar', 'deps': [operations_dep, event_loop_dep], 'timeout': 90, 'env': gio_env},
+  {'name': 'archive-cpio', 'deps': [operations_dep, event_loop_dep], 'timeout': 90, 'env': gio_env},
   {'name': 'browser-actions', 'deps': [browser_dep, ui_dep, config_dep], 'env': gio_env},
   {'name': 'empty-trash-service', 'deps': [operations_dep, event_loop_dep], 'env': gio_env},
   {'name': 'restore-service', 'deps': [operations_dep, event_loop_dep], 'env': gio_env},

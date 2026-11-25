@@ -316,6 +316,7 @@ namespace {
         if (entry.link.empty()) {
           throwFileError(FileErrorKind::InvalidArgument, "Archive has an invalid hard-link target.");
         }
+        requireHardlinkData(header, entry.link, result->entries, known);
       } else if (type == AE_IFREG) {
         entry.kind = ArchiveEntryKind::File;
       } else if (type == AE_IFDIR) {
