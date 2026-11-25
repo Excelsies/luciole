@@ -262,6 +262,7 @@ template luciole::WorkbenchColor& luciole::preferenceValue(BrowserSettings&, Pre
 template luciole::AudioVisualKind& luciole::preferenceValue(BrowserSettings&, PreferenceKey<AudioVisualKind>);
 template luciole::WorkbenchPreviewPlace&
 luciole::preferenceValue(BrowserSettings&, PreferenceKey<WorkbenchPreviewPlace>);
+template luciole::ColorScheme& luciole::preferenceValue(BrowserSettings&, PreferenceKey<ColorScheme>);
 template const bool& luciole::preferenceValue(const BrowserSettings&, PreferenceKey<bool>);
 template const int& luciole::preferenceValue(const BrowserSettings&, PreferenceKey<int>);
 template const double& luciole::preferenceValue(const BrowserSettings&, PreferenceKey<double>);
@@ -290,6 +291,7 @@ template const luciole::AudioVisualKind&
 luciole::preferenceValue(const BrowserSettings&, PreferenceKey<AudioVisualKind>);
 template const luciole::WorkbenchPreviewPlace&
 luciole::preferenceValue(const BrowserSettings&, PreferenceKey<WorkbenchPreviewPlace>);
+template const luciole::ColorScheme& luciole::preferenceValue(const BrowserSettings&, PreferenceKey<ColorScheme>);
 
 std::string_view luciole::sortFieldName(SortField field) {
   const auto* found = std::ranges::find(kSortFields, field, &Named<SortField>::value);

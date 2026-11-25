@@ -76,11 +76,17 @@ When the server requests login, use the username, domain and password fields, or
 
 Network protocols require their installed GVfs backends and a session D-Bus connection. See [packaging requirements](../../PACKAGING.md#gvfs-and-trash). A separate connect-to-server form and process-blocked mount questions are still planned.
 
+### Network share automounts
+
+Open an NFS or SMB share from the sidebar or enter its local mount path. Systemd mounts it using your fstab entry or native automount unit, even without `user` in fstab. The share stays in the sidebar while idle. If the automount is stopped or the NAS is unreachable, Luciole shows an error.
+
+Use **Refresh** to see folder changes.
+
 ## Views and selection
 
 [Undo/redo](file-operations.md#undo-and-redo) affects the most recent supported creation, rename or native copy/link/move in the running application, independently of the current folder or selection. When a text input is focused, its text-editing undo takes precedence.
 
-Use the toolbar or main menu to choose Grid (Ctrl+1), List (Ctrl+2), Columns (Ctrl+3) or Workbench (Ctrl+4). File picker windows offer Grid and List only. In every view, Ctrl+wheel (or Ctrl with a touchpad scroll), Ctrl+Plus and Ctrl+Minus change the icon size, and Ctrl+0 resets it. Each view keeps its own size, except Workbench, which resizes its rows with List view's size: the wheel works over the list, a column ahead or Jump Ahead. View, zoom, sort and hidden-file choices are saved as defaults for new browsing pages. Existing tabs and panes keep their own browsing state. In Grid and List, entries fade in the first time they scroll into view in a folder; Settings → Appearance → Reduce Animations turns this and other transitions off.
+Use the toolbar or main menu to choose Grid (Ctrl+1), List (Ctrl+2), Columns (Ctrl+3) or Workbench (Ctrl+4). These shortcuts also work while typing in the search field or location bar. File picker windows offer Grid and List only. In every view, Ctrl+wheel (or Ctrl with a touchpad scroll), Ctrl+Plus and Ctrl+Minus change the icon size, and Ctrl+0 resets it. Each view keeps its own size, except Workbench, which resizes its rows with List view's size: the wheel works over the list, a column ahead or Jump Ahead. View, zoom, sort and hidden-file choices are saved as defaults for new browsing pages. Existing tabs and panes keep their own browsing state. In Grid and List, entries fade in the first time they scroll into view in a folder; Settings → Appearance → Reduce Animations turns this and other transitions off.
 
 Folders show custom icons set by other file managers: GNOME Files' (`gio set FOLDER metadata::custom-icon-name NAME`, or `metadata::custom-icon` with an image's `file://` URI) and Dolphin's or PCManFM-Qt's (`Icon=` in the folder's `.directory`, a themed icon name or an absolute image path). Links show their target's icon with a link emblem: a custom icon set on the link or on its target folder, the folder icon, or the target file's type icon. A dangling link keeps the link icon. Changes to custom icons show the next time the folder is listed, for example after Refresh (F5). Network filesystems keep the plain icons, so listing them reads nothing extra.
 

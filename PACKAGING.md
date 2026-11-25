@@ -17,10 +17,12 @@ The package metadata in [nix/package.nix](nix/package.nix) uses:
 | Package / binary | `luciole` |
 | Display name | Luciole |
 | Application ID | `dev.noctalia.luciole` |
+| File chooser application ID | `dev.noctalia.luciole-chooser` |
 | Homepage | <https://github.com/noctalia-dev/luciole> |
 | Version | [VERSION](VERSION), read by Meson |
 | License | MIT ([LICENSE](LICENSE)); also ship the Tabler font notice |
 | Desktop entry | `dev.noctalia.luciole.desktop` |
+| File chooser desktop entry | `dev.noctalia.luciole-chooser.desktop` (hidden, reuses the application icon) |
 | Application icon | `dev.noctalia.luciole.svg` |
 
 ## Platforms and toolchain
@@ -139,11 +141,11 @@ With relative `datadir=share`, Meson installs:
 <prefix>/share/luciole/assets/fonts/noctalia-tabler.ttf
 <prefix>/share/luciole/assets/fonts/tabler.json
 <prefix>/share/luciole/assets/fonts/tabler-icons-license.txt
-<prefix>/share/luciole/templates/colors.toml
 <prefix>/share/dbus-1/services/dev.noctalia.luciole.FileManager1.service
 <prefix>/share/dbus-1/services/org.freedesktop.impl.portal.desktop.luciole.service
 <prefix>/share/xdg-desktop-portal/portals/luciole.portal
 <prefix>/share/applications/dev.noctalia.luciole.desktop
+<prefix>/share/applications/dev.noctalia.luciole-chooser.desktop
 <prefix>/share/icons/hicolor/scalable/apps/dev.noctalia.luciole.svg
 <prefix>/share/bash-completion/completions/luciole
 <prefix>/share/zsh/site-functions/_luciole
@@ -152,7 +154,7 @@ With relative `datadir=share`, Meson installs:
 <prefix>/share/licenses/luciole/third-party-notices.md
 ```
 
-Ship the fonts directory and its license together. Ship [docs/third-party-notices.md](docs/third-party-notices.md) beside `LICENSE`, since it carries the MIT notice of the program the sound visuals derive from. The palette template is an integration resource, not per-user configuration. No AppStream/metainfo file, manual page or systemd unit is currently installed.
+Ship the fonts directory and its license together. Ship [docs/third-party-notices.md](docs/third-party-notices.md) beside `LICENSE`, since it carries the MIT notice of the program the sound visuals derive from. No AppStream/metainfo file, manual page or systemd unit is currently installed.
 
 ### Asset lookup and staging
 
@@ -174,7 +176,7 @@ Installing Luciole does not select it as the `inode/directory` MIME default. The
 
 ### FileChooser portal backend
 
-Ship `luciole.portal` and its generated session service together. They register `org.freedesktop.impl.portal.FileChooser` on `org.freedesktop.impl.portal.desktop.luciole`; activation runs `<bindir>/luciole --file-chooser-service`.
+Ship `luciole.portal` and its generated session service together. They register `org.freedesktop.impl.portal.FileChooser` on `org.freedesktop.impl.portal.desktop.luciole`; activation runs `<bindir>/luciole --file-chooser-service`. Chooser windows use the Wayland app ID `dev.noctalia.luciole-chooser`; install its NoDisplay desktop entry so shells resolve the chooser's name and icon from the same Luciole artwork.
 
 The portal file has no `UseIn` key. Session integration must select it in `portals.conf`, for example:
 

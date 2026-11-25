@@ -74,8 +74,9 @@ WorkspaceApplication::WorkspaceApplication(
     luciole::WaylandTextClipboard& clipboard, luciole::BrowserSettings settings
 )
     : m_connection(connection), m_renderer(renderer), m_input(input), m_clipboard(clipboard),
-      m_defaults(std::move(settings)), m_preferences(luciole::ConfigPaths::fromEnvironment()),
-      m_pins(luciole::StateStore::pathFromEnvironment()), m_visits(luciole::VisitStore::pathFromEnvironment()),
+      m_defaults(std::move(settings)), m_palette(m_defaults.colorScheme),
+      m_preferences(luciole::ConfigPaths::fromEnvironment()), m_pins(luciole::StateStore::pathFromEnvironment()),
+      m_visits(luciole::VisitStore::pathFromEnvironment()),
       m_folderViews(luciole::FolderViewStore::pathFromEnvironment(), m_defaults.rememberFolderViews) {
   m_visits.setEnabled(m_defaults.recordVisits);
   m_hub.setDriveLeaveGate([this](const luciole::Location& root, auto action, auto abandoned) {
@@ -94,6 +95,7 @@ WorkspaceApplication::WorkspaceApplication(
       Style::setCornerRadiusScale(static_cast<float>(m_defaults.cornerRadiusScale));
       Style::setCloseButtonsEnabled(m_defaults.showCloseButtons);
       MotionService::instance().setEnabled(!m_defaults.reduceAnimations);
+      m_palette.setScheme(m_defaults.colorScheme);
       m_folderViews.setEnabled(m_defaults.rememberFolderViews);
     }
     m_visits.setEnabled(m_defaults.recordVisits);
@@ -1039,7 +1041,7 @@ luciole::WindowId WorkspaceApplication::newWindow(std::unique_ptr<FileChooserSes
            .minWidth = 620,
            .minHeight = 400,
            .title = choosing ? host->chooser->windowTitle() : "Luciole",
-           .appId = "dev.noctalia.luciole"}
+           .appId = choosing ? "dev.noctalia.luciole-chooser" : "dev.noctalia.luciole"}
       )) {
     throw std::runtime_error("Cannot initialize a Luciole window.");
   }

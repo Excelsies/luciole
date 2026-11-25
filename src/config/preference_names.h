@@ -48,6 +48,11 @@ namespace luciole::preference_schema {
   inline constexpr auto kChooserStartFolders = std::to_array<Named<luciole::ChooserStartFolder>>(
       {{luciole::ChooserStartFolder::Home, "home"}, {luciole::ChooserStartFolder::Last, "last"}}
   );
+  inline constexpr auto kColorSchemes = std::to_array<Named<luciole::ColorScheme>>(
+      {{luciole::ColorScheme::Auto, "auto"},
+       {luciole::ColorScheme::Dark, "dark"},
+       {luciole::ColorScheme::Light, "light"}}
+  );
   inline constexpr auto kDensities = std::to_array<Named<luciole::ViewDensity>>(
       {{luciole::ViewDensity::Compact, "compact"}, {luciole::ViewDensity::Comfortable, "comfortable"}}
   );

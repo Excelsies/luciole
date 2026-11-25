@@ -5,14 +5,12 @@
 #include "temp_folder.h"
 #include "test_check.h"
 
-#include <chrono>
 #include <filesystem>
 #include <format>
 #include <fstream>
 #include <poll.h>
 #include <print>
 #include <string>
-#include <thread>
 
 // A cancelled listing or file read goes on until its worker notices, with the folder or file still open. The
 // registry says so, so the removal of a drive waits for it: whenever a descriptor under the folder is held, the
@@ -78,9 +76,9 @@ namespace {
       columns.follow(
           {.target = luciole::WorkbenchEntry{.location = Location::fromPath((drive / "big").native()), .folder = true}}
       );
-      // The worker opens the folder a moment after the request.
+      // The listing starts from the main loop, and its worker opens the folder a moment later.
       for (int round = 0; round < 5000 && held(drive) == 0; ++round) {
-        std::this_thread::sleep_for(std::chrono::microseconds(200));
+        pump(source);
       }
       columns.releaseLocation(root);
       // From the release until the descriptor is gone, a held folder is always reported.

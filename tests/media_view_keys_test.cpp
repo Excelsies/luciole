@@ -315,7 +315,7 @@ int main() {
   KeybindMatcher::setMatcher(KeybindAction::Validate, [](std::uint32_t key, std::uint32_t modifiers) {
     return modifiers == 0 && KeySymbol::isEnterOrSpace(key);
   });
-  setPalette(luciole::defaultPalette()); // hover and pressed take different colors
+  setPalette(luciole::defaultPalette(luciole::ColorScheme::Dark)); // hover and pressed take different colors
   Scratch scratch;
   if (const auto missing = missingElements(
           {"videotestsrc", "audiotestsrc", "avimux", "filesink", "capsfilter", "avidemux", "wavparse", "playbin",
