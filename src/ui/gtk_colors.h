@@ -24,18 +24,18 @@ namespace luciole {
     GtkColorTable colors;
     // The files whose text was read, the root first.
     std::vector<std::filesystem::path> files;
+    // Every file tried, read or not, the root first, at most kGtkMaxFiles: what a change could make readable.
+    std::vector<std::filesystem::path> tried;
   };
 
   // The text of a regular file of at most kGtkMaxFileBytes; nullopt for anything else.
   std::optional<std::string> readGtkFile(const std::filesystem::path& path);
 
-  using GtkFileReader = std::function<std::optional<std::string>(const std::filesystem::path&)>;
-
   // Reads the colors a GTK 4 stylesheet defines: `@define-color NAME VALUE;` and `--name: VALUE;`, in document
   // order with later definitions winning, following `@import` of local files. A value is `#rgb`, `#rrggbb`,
   // `#rrggbbaa`, `@name` or `var(--name)`; a name with any other value is left out. Unknown constructs are
-  // skipped, never reported. Reading a path that `read` refuses yields no colors for it.
-  GtkColors readGtkColors(const std::filesystem::path& root, const GtkFileReader& read);
+  // skipped, never reported. A path that is not a regular file of at most kGtkMaxFileBytes yields no colors.
+  GtkColors readGtkColors(const std::filesystem::path& root);
 
   // $XDG_CONFIG_HOME/gtk-4.0/gtk.css
   std::filesystem::path gtkCssPath();

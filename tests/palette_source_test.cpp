@@ -34,7 +34,7 @@ namespace {
     TEST_CHECK(chosen.has_value());
     TEST_CHECK(chosen->source == PaletteSource::DesktopColors && chosen->readsDesktopColors);
     TEST_CHECK(chosen->palette.surface == hex("#112233") && chosen->palette.primary == hex("#ff8800"));
-    TEST_CHECK(chosen->gtkFiles.size() == 1 && chosen->gtkFiles[0] == folder.path() / "gtk.css");
+    TEST_CHECK(chosen->gtkPaths.size() == 1 && chosen->gtkPaths[0] == folder.path() / "gtk.css");
   }
 
   void testBuiltInWhenDesktopColorsAreUnusable() {
@@ -42,11 +42,11 @@ namespace {
     const auto builtIn = luciole::defaultPalette(ColorScheme::Auto);
     const auto none = choosePalette(folder.path() / "colors.toml", folder.path() / "gtk.css", ColorScheme::Auto);
     TEST_CHECK(none && none->source == PaletteSource::BuiltIn && none->palette == builtIn);
-    TEST_CHECK(none->readsDesktopColors && none->gtkFiles.empty());
+    TEST_CHECK(none->readsDesktopColors && none->gtkPaths.size() == 1); // the root, though missing
     write(folder.path() / "gtk.css", kUnusableCss);
     const auto partial = choosePalette(folder.path() / "colors.toml", folder.path() / "gtk.css", ColorScheme::Auto);
     TEST_CHECK(partial && partial->source == PaletteSource::BuiltIn && partial->palette == builtIn);
-    TEST_CHECK(partial->gtkFiles.size() == 1);
+    TEST_CHECK(partial->gtkPaths.size() == 1);
   }
 
   void testColorFileWins() {
@@ -55,7 +55,7 @@ namespace {
     write(folder.path() / "colors.toml", kColors);
     const auto chosen = choosePalette(folder.path() / "colors.toml", folder.path() / "gtk.css", ColorScheme::Auto);
     TEST_CHECK(chosen && chosen->source == PaletteSource::ColorFile && !chosen->readsDesktopColors);
-    TEST_CHECK(chosen->palette.surface == hex("#010101") && chosen->gtkFiles.empty());
+    TEST_CHECK(chosen->palette.surface == hex("#010101") && chosen->gtkPaths.empty());
   }
 
   void testInvalidColorFileIsAnError() {
@@ -73,7 +73,7 @@ namespace {
     for (const auto scheme : {ColorScheme::Dark, ColorScheme::Light}) {
       const auto bare = choosePalette(folder.path() / "colors.toml", folder.path() / "gtk.css", scheme);
       TEST_CHECK(bare && bare->source == PaletteSource::BuiltIn && bare->palette == luciole::defaultPalette(scheme));
-      TEST_CHECK(!bare->readsDesktopColors && bare->gtkFiles.empty());
+      TEST_CHECK(!bare->readsDesktopColors && bare->gtkPaths.empty());
     }
     write(folder.path() / "colors.toml", kColors);
     const auto dark = choosePalette(folder.path() / "colors.toml", folder.path() / "gtk.css", ColorScheme::Dark);

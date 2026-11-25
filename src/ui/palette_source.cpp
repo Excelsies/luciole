@@ -24,13 +24,13 @@ std::expected<luciole::ChosenPalette, std::string> luciole::choosePalette(
   std::error_code error;
   const bool absent = !std::filesystem::exists(colorFile, error) && !error;
   if (scheme == ColorScheme::Auto && absent) {
-    auto desktop = readGtkColors(gtkCss, readGtkFile);
+    auto desktop = readGtkColors(gtkCss);
     auto palette = desktopPalette(desktop.colors);
     return ChosenPalette{
         .palette = palette ? *palette : defaultPalette(scheme),
         .source = palette ? PaletteSource::DesktopColors : PaletteSource::BuiltIn,
         .readsDesktopColors = true,
-        .gtkFiles = std::move(desktop.files),
+        .gtkPaths = std::move(desktop.tried),
     };
   }
   auto palette = loadPalette(colorFile, scheme);
@@ -41,6 +41,6 @@ std::expected<luciole::ChosenPalette, std::string> luciole::choosePalette(
       .palette = *palette,
       .source = absent ? PaletteSource::BuiltIn : PaletteSource::ColorFile,
       .readsDesktopColors = false,
-      .gtkFiles = {},
+      .gtkPaths = {},
   };
 }

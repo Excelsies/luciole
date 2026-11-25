@@ -27,7 +27,7 @@ namespace {
 
   GtkColors readRoot(const luciole::test::TempFolder& folder, std::string_view css) {
     write(folder.path() / "gtk.css", css);
-    return readGtkColors(folder.path() / "gtk.css", readGtkFile);
+    return readGtkColors(folder.path() / "gtk.css");
   }
 
   bool is(const GtkColors& read, std::string_view name, std::string_view color) {
@@ -144,7 +144,7 @@ namespace {
             folder.path().string()
         )
     );
-    const auto read = readGtkColors(root / "gtk.css", readGtkFile);
+    const auto read = readGtkColors(root / "gtk.css");
     for (const auto& [name, color] :
          {std::pair{"one", "#010101"},
           {"two", "#020202"},
@@ -158,7 +158,7 @@ namespace {
     TEST_CHECK(read.files.size() == 7 && read.files[0] == root / "gtk.css");
 
     write(root / "abs.css", std::format("@import url({}/one.css);\n", root.string()));
-    const auto absolute = readGtkColors(root / "abs.css", readGtkFile);
+    const auto absolute = readGtkColors(root / "abs.css");
     TEST_CHECK(is(absolute, "one", "#010101"));
   }
 
@@ -177,7 +177,7 @@ namespace {
     write(folder.path() / "a/b/mid.css", "@import \"leaf.css\";\n");
     write(folder.path() / "a/b/leaf.css", "@define-color leaf #0f0f0f;\n");
     write(folder.path() / "a/leaf.css", "@define-color leaf #f0f0f0;\n");
-    const auto read = readGtkColors(folder.path() / "a/gtk.css", readGtkFile);
+    const auto read = readGtkColors(folder.path() / "a/gtk.css");
     TEST_CHECK(is(read, "leaf", "#0f0f0f"));
   }
 
@@ -189,7 +189,7 @@ namespace {
           std::format("@define-color d{} #0{}0000;\n@import url(\"f{}.css\");\n", i, i, i + 1)
       );
     }
-    const auto read = readGtkColors(folder.path() / "f0.css", readGtkFile);
+    const auto read = readGtkColors(folder.path() / "f0.css");
     TEST_CHECK(has(read, "d4"));  // four imports below the root
     TEST_CHECK(!has(read, "d5")); // the fifth is not followed
     TEST_CHECK(read.files.size() == 5);
@@ -208,11 +208,11 @@ namespace {
 
     write(folder.path() / "x.css", "@import \"y.css\";\n@import \"x.css\";\n@define-color x #111111;\n");
     write(folder.path() / "y.css", "@import \"x.css\";\n@import \"y.css\";\n@define-color y #222222;\n");
-    const auto loop = readGtkColors(folder.path() / "x.css", readGtkFile);
+    const auto loop = readGtkColors(folder.path() / "x.css");
     TEST_CHECK(loop.files.size() == 2 && is(loop, "x", "#111111") && is(loop, "y", "#222222"));
 
     write(folder.path() / "twice.css", "@import \"m0.css\";\n@import \"m0.css\";\n@import \"./m0.css\";\n");
-    TEST_CHECK(readGtkColors(folder.path() / "twice.css", readGtkFile).files.size() == 2);
+    TEST_CHECK(readGtkColors(folder.path() / "twice.css").files.size() == 2);
   }
 
   void testFileSizeAndKind() {
@@ -220,10 +220,10 @@ namespace {
     const std::string filler(luciole::kGtkMaxFileBytes - 64, ' ');
     write(folder.path() / "exact.css", filler + "@define-color fits #010203;\n");
     TEST_CHECK(fs::file_size(folder.path() / "exact.css") <= luciole::kGtkMaxFileBytes);
-    TEST_CHECK(is(readGtkColors(folder.path() / "exact.css", readGtkFile), "fits", "#010203"));
+    TEST_CHECK(is(readGtkColors(folder.path() / "exact.css"), "fits", "#010203"));
     write(folder.path() / "big.css", filler + std::string(128, ' ') + "@define-color big #010203;\n");
     TEST_CHECK(fs::file_size(folder.path() / "big.css") > luciole::kGtkMaxFileBytes);
-    const auto big = readGtkColors(folder.path() / "big.css", readGtkFile);
+    const auto big = readGtkColors(folder.path() / "big.css");
     TEST_CHECK(big.colors.empty() && big.files.empty());
 
     fs::create_directories(folder.path() / "dir.css");
@@ -232,17 +232,46 @@ namespace {
     fs::create_symlink(folder.path() / "target.css", folder.path() / "link.css");
     TEST_CHECK(::mkfifo((folder.path() / "pipe.css").c_str(), 0600) == 0);
     write(folder.path() / "root2.css", "@import \"pipe.css\";\n@define-color r2 #0d0d0d;\n");
-    const auto read = readGtkColors(folder.path() / "root.css", readGtkFile);
-    TEST_CHECK(is(read, "linked", "#0c0c0c") && is(read, "r", "#0b0b0b")); // a link to a regular file is read
-    TEST_CHECK(read.files.size() == 2);                                    // the directory is not
-    TEST_CHECK(is(readGtkColors(folder.path() / "root2.css", readGtkFile), "r2", "#0d0d0d")); // a pipe is not opened
+    const auto read = readGtkColors(folder.path() / "root.css");
+    TEST_CHECK(is(read, "linked", "#0c0c0c") && is(read, "r", "#0b0b0b"));       // a link to a regular file is read
+    TEST_CHECK(read.files.size() == 2);                                          // the directory is not
+    TEST_CHECK(read.tried.size() == 3);                                          // but it was tried
+    TEST_CHECK(is(readGtkColors(folder.path() / "root2.css"), "r2", "#0d0d0d")); // a pipe is not opened
+    // A link to a pipe is refused without waiting on it.
+    fs::create_symlink(folder.path() / "pipe.css", folder.path() / "pipe-link.css");
+    TEST_CHECK(!readGtkFile(folder.path() / "pipe-link.css"));
     TEST_CHECK(!readGtkFile(folder.path() / "pipe.css") && !readGtkFile(folder.path() / "missing.css"));
+  }
+
+  void testImportant() {
+    const luciole::test::TempFolder folder("gtk-colors-important");
+    const auto read = readRoot(
+        folder,
+        "@define-color a #111111 !important;\n:root { --b: #222222 ! important; --c: #333333 !IMPORTANT }\n"
+        "@define-color d @a !important;\n"
+    );
+    TEST_CHECK(is(read, "a", "#111111") && is(read, "b", "#222222") && is(read, "c", "#333333"));
+    TEST_CHECK(is(read, "d", "#111111"));
+  }
+
+  void testDefinitionsInsideStrings() {
+    const luciole::test::TempFolder folder("gtk-colors-strings");
+    const auto read = readRoot(
+        folder,
+        ".x { content: \"--c: #333333; @define-color d #444444;\"; }\n"
+        ".y { background: url(\"data:x;--e: #555555;\"); }\n"
+        ".z { background: url(x--f: #666666); }\n"
+        ".w { content: '@define-color g #777777;'; }\n"
+        "@define-color ok #010203;\n"
+    );
+    TEST_CHECK(read.colors.size() == 1 && is(read, "ok", "#010203"));
   }
 
   void testMissingRoot() {
     const luciole::test::TempFolder folder("gtk-colors-missing");
-    const auto read = readGtkColors(folder.path() / "gtk.css", readGtkFile);
+    const auto read = readGtkColors(folder.path() / "gtk.css");
     TEST_CHECK(read.colors.empty() && read.files.empty());
+    TEST_CHECK(read.tried.size() == 1 && read.tried[0] == folder.path() / "gtk.css");
   }
 
   void testCssPath() {
@@ -265,6 +294,8 @@ int main() {
   testImportDepth();
   testFileCountAndCycles();
   testFileSizeAndKind();
+  testImportant();
+  testDefinitionsInsideStrings();
   testMissingRoot();
   testCssPath();
   std::println("gtk colors checks passed");

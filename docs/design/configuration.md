@@ -18,7 +18,7 @@ Explicit sort changes from menus, list headings and the open Settings dialog sha
 
 [choosePalette](../../src/ui/palette_source.h) picks the palette; [PaletteWatcher](../../src/app/palette_watcher.h) applies it and again after every change. With `color_scheme = "auto"`: `colors.toml` when it exists (an invalid file is logged and leaves the current palette), else the desktop's GTK 4 colors when [desktopPalette](../../src/ui/desktop_palette.h) finds them usable, else the built-in palette. `"dark"` and `"light"` never read GTK files. The log gets one line each time the source changes.
 
-[readGtkColors](../../src/ui/gtk_colors.h) reads `$XDG_CONFIG_HOME/gtk-4.0/gtk.css`. It follows `@import url("x");`, `@import url(x);` and `@import "x";` for relative paths (to the importing file), absolute paths and `file:///` URLs (percent-decoded); other schemes are ignored. It collects `@define-color NAME VALUE;` and `--name: VALUE;` in any block into one table in document order, an import being read at its position and a later definition winning; `--accent-bg-color` and `accent_bg_color` are one name. Values are `#rgb`, `#rrggbb`, `#rrggbbaa`, `@name` and `var(--name)`; a name with any other value is undefined. Unknown constructs are skipped without a message. A missing or unreadable root means no desktop colors.
+[readGtkColors](../../src/ui/gtk_colors.h) reads `$XDG_CONFIG_HOME/gtk-4.0/gtk.css`. It follows `@import url("x");`, `@import url(x);` and `@import "x";` for relative paths (to the importing file), absolute paths and `file:///` URLs (percent-decoded); other schemes are ignored. It collects `@define-color NAME VALUE;` and `--name: VALUE;` in any block into one table in document order, an import being read at its position and a later definition winning; `--accent-bg-color` and `accent_bg_color` are one name. Values are `#rgb`, `#rrggbb`, `#rrggbbaa`, `@name` and `var(--name)`, with a trailing `!important` ignored; a name with any other value is undefined. Strings and `url(...)` contents are skipped, so a definition written inside one is not read. Unknown constructs are skipped without a message. A missing or unreadable root means no desktop colors.
 
 Bounds: import depth 4, 16 files, 1 MiB per file (a larger file is skipped whole), reference chains 8 deep. A path is read once, so import cycles end; only regular files are read (links to them are followed).
 
@@ -31,7 +31,7 @@ Bounds: import depth 4, 16 files, 1 MiB per file (a larger file is skipped whole
 | `hover`, `on_hover` | `active_toggle_bg_color`, `active_toggle_fg_color` |
 | `error`, `on_error` | `error_bg_color`, `error_fg_color`, else `destructive_bg_color`, `destructive_fg_color` |
 
-The colors are usable only when `window_bg_color`, `window_fg_color` and `accent_bg_color` are defined. A color the theme gives is never changed. The other roles are derived from it, with S the surface, T the text color and `mix` a mix in Oklab, so equal steps look equal in every hue and brightness. The palette is dark when the surface is darker than the text. Contrast figures are WCAG ratios.
+The colors are usable only when `window_bg_color`, `window_fg_color` and `accent_bg_color` are defined and the first two are opaque; a translucent window color is not a surface the derivations can reason about, so the built-in palette applies. A color the theme gives is never changed. The other roles are derived from it, with S the surface, T the text color and `mix` a mix in Oklab, so equal steps look equal in every hue and brightness. The palette is dark when the surface is darker than the text. Contrast figures are WCAG ratios.
 
 | Role | Derivation |
 | --- | --- |
@@ -48,7 +48,7 @@ The colors are usable only when `window_bg_color`, `window_fg_color` and `accent
 | `shadow` | dark: `mix(S, black, 0.5)`; light: T |
 | `scrim` | black |
 
-[GtkColorWatch](../../src/app/gtk_color_watch.h) watches the folder of the root `gtk.css` (the closest existing ancestor until it exists) and the folder of every file read, at most 8 folders, only while the desktop colors are in use. A change to a file read, or to the root's folder, goes through PaletteWatcher's 100 ms debounce and reload; after each reload the watched folders follow what was read. Creating or removing `colors.toml` is seen by the existing watch of the Luciole config folder.
+[GtkColorWatch](../../src/app/gtk_color_watch.h) watches, only while the desktop colors are in use, the folder of the root `gtk.css` and the folder of every file the reading tried, read or not, so a stylesheet written after `gtk.css`, or in a folder created later, is seen. A folder that does not exist is stood in for by its closest existing ancestor. For a path that is a link, or sits under one, the folder of its resolved target is watched too, so an edit in place of the target is seen. At most 8 folders are watched, the root's first; one log line says when more were wanted. A change to a path tried, to the root's folder or to an ancestor of a missing folder goes through PaletteWatcher's 100 ms debounce and reload. When a reload changes the set of watched folders it reads once more, so a write that landed between the first read and the new watches is not lost; that second read starts no third. Creating or removing `colors.toml` is seen by the existing watch of the Luciole config folder.
 
 ## Settings layout
 

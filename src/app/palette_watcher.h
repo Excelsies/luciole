@@ -27,6 +27,8 @@ namespace luciole {
 
   private:
     void reload();
+    // One read and apply; true when it changed the folders being watched.
+    bool apply();
     void scheduleReload();
     // Watches the config folder, or its parent until the folder exists.
     void watch();

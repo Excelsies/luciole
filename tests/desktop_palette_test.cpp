@@ -26,10 +26,20 @@ namespace {
     TEST_CHECK(file.good());
   }
 
-  // WCAG 2 contrast, written out here rather than taken from the code under test.
+  // WCAG 2 relative luminance and contrast, written out here rather than taken from the code under test. The
+  // library linearizes with a 0.03928 threshold, the standard's current text says 0.04045.
+  double linear(float channel) {
+    const double c = channel;
+    return c <= 0.04045 ? c / 12.92 : std::pow((c + 0.055) / 1.055, 2.4);
+  }
+
+  double luminance(const Color& color) {
+    return (0.2126 * linear(color.r)) + (0.7152 * linear(color.g)) + (0.0722 * linear(color.b));
+  }
+
   double ratio(const Color& a, const Color& b) {
-    const double la = relativeLuminance(a);
-    const double lb = relativeLuminance(b);
+    const double la = luminance(a);
+    const double lb = luminance(b);
     return (std::max(la, lb) + 0.05) / (std::min(la, lb) + 0.05);
   }
 
@@ -148,9 +158,7 @@ namespace {
     );
   }
 
-  GtkColorTable table(const fs::path& config) {
-    return luciole::readGtkColors(config / "gtk.css", luciole::readGtkFile).colors;
-  }
+  GtkColorTable table(const fs::path& config) { return luciole::readGtkColors(config / "gtk.css").colors; }
 
   Palette derive(const GtkColorTable& names) {
     const auto result = luciole::desktopPalette(names);
@@ -247,7 +255,7 @@ namespace {
 
   double distanceFromSurface(const Palette& p, const Color& color) {
     // Lightness distance is enough to order tints of one surface: they differ mostly in lightness.
-    return std::abs(relativeLuminance(color) - relativeLuminance(p.surface));
+    return std::abs(luminance(color) - luminance(p.surface));
   }
 
   void testContainersAreOrdered() {
@@ -264,7 +272,7 @@ namespace {
   void testVariantFollowsTheColors() {
     for (const auto& fixture : fixtures()) {
       const auto& p = fixture.palette;
-      TEST_CHECK((relativeLuminance(p.surface) < relativeLuminance(p.onSurface)) == fixture.dark);
+      TEST_CHECK((luminance(p.surface) < luminance(p.onSurface)) == fixture.dark);
       // A role with nothing to derive from takes the built-in value of the variant found.
       const auto builtIn =
           luciole::defaultPalette(fixture.dark ? luciole::ColorScheme::Dark : luciole::ColorScheme::Light);
@@ -369,6 +377,66 @@ namespace {
     TEST_CHECK(ratio(p.onSecondary, p.secondary) >= 4.5 && ratio(p.onTertiary, p.tertiary) >= 4.5);
   }
 
+  void testTranslucentWindowColorsAreNotUsable() {
+    auto names = base();
+    names["window_bg_color"] = hex("#10182080");
+    TEST_CHECK(!luciole::desktopPalette(names).has_value());
+    names = base();
+    names["window_fg_color"] = hex("#e8eef4cc");
+    TEST_CHECK(!luciole::desktopPalette(names).has_value());
+    names = base();
+    names["accent_bg_color"] = hex("#5599dd80");
+    TEST_CHECK(luciole::desktopPalette(names).has_value()); // only the two window colors must be opaque
+    names = base();
+    names["window_bg_color"] = hex("#101820ff");
+    TEST_CHECK(luciole::desktopPalette(names).has_value());
+  }
+
+  bool blackOrWhite(const Color& c) { return (c == hex("#000000")) || (c == hex("#ffffff")); }
+
+  // The derived text pairs read at their floors, or are black or white. The theme's own text color is not derived,
+  // so its pairs are left out.
+  void checkDerivedTextPairs(const Palette& p) {
+    const std::vector<Pair> derived{
+        {"on_secondary/secondary", p.onSecondary, p.secondary, 4.5},
+        {"on_tertiary/tertiary", p.onTertiary, p.tertiary, 4.5},
+        {"on_error/error", p.onError, p.error, 4.5},
+        {"on_hover/hover", p.onHover, p.hover, 4.5},
+        {"on_primary_container", p.onPrimaryContainer, p.primaryContainer, 4.5},
+        {"on_secondary_container", p.onSecondaryContainer, p.secondaryContainer, 4.5},
+        {"on_tertiary_container", p.onTertiaryContainer, p.tertiaryContainer, 4.5},
+        {"on_error_container", p.onErrorContainer, p.errorContainer, 4.5},
+        {"on_surface_variant/surface", p.onSurfaceVariant, p.surface, 3.0},
+        {"secondary/surface", p.secondary, p.surface, 3.0},
+        {"tertiary/surface", p.tertiary, p.surface, 3.0},
+        {"outline_variant/surface", p.outlineVariant, p.surface, 1.25},
+    };
+    for (const auto& pair : derived) {
+      const bool holds = ratio(pair.text, pair.fill) >= pair.minimum || blackOrWhite(pair.text);
+      if (!holds) {
+        std::println("degenerate input: {} is {:.2f}", pair.name, ratio(pair.text, pair.fill));
+      }
+      TEST_CHECK(holds);
+    }
+  }
+
+  void testDegenerateColors() {
+    for (const auto& [surface, text] :
+         {std::pair{"#808080", "#808080"},
+          {"#808080", "#818181"},
+          {"#000000", "#010101"},
+          {"#ffffff", "#fefefe"},
+          {"#000000", "#000000"},
+          {"#ffffff", "#ffffff"}}) {
+      auto names = base();
+      names["window_bg_color"] = hex(surface);
+      names["window_fg_color"] = hex(text);
+      const auto p = derive(names);
+      TEST_CHECK(p.surface == hex(surface) && p.onSurface == hex(text)); // the theme's colors stay
+      checkDerivedTextPairs(p);
+    }
+  }
+
   void testDerivationIsDeterministicAndCoherent() {
     const auto a = derive(base());
     const auto b = derive(base());
@@ -393,6 +461,8 @@ int main() {
   testPreferenceOrder();
   testOutlineSources();
   testThemeColorsAreNeverAltered();
+  testTranslucentWindowColorsAreNotUsable();
+  testDegenerateColors();
   testDerivationIsDeterministicAndCoherent();
   std::println("desktop palette checks passed");
   return 0;

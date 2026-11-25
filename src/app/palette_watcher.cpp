@@ -33,18 +33,27 @@ void luciole::PaletteWatcher::setScheme(ColorScheme scheme) {
 }
 
 void luciole::PaletteWatcher::reload() {
+  // A write that lands between a read and the watches it started is not seen by them: when the watched folders
+  // changed, read once more. The second read starts no further pass, so this is at most two reads.
+  if (apply()) {
+    apply();
+  }
+}
+
+bool luciole::PaletteWatcher::apply() {
   const auto chosen = choosePalette(m_path, m_gtkCss, m_scheme);
   if (!chosen) {
     m_gtk.follow({}, {});
     kLog.warn("{}", chosen.error());
-    return;
+    return false;
   }
-  m_gtk.follow(chosen->readsDesktopColors ? m_gtkCss : std::filesystem::path{}, chosen->gtkFiles);
+  const bool watching = m_gtk.follow(chosen->readsDesktopColors ? m_gtkCss : std::filesystem::path{}, chosen->gtkPaths);
   if (m_source != chosen->source) {
     m_source = chosen->source;
     kLog.info("colors from {}", paletteSourceName(chosen->source));
   }
   setPalette(chosen->palette);
+  return watching;
 }
 
 void luciole::PaletteWatcher::scheduleReload() {

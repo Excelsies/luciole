@@ -29,42 +29,55 @@ bool luciole::GtkColorWatch::relevant(const fs::path& path) const {
   if (std::ranges::find(m_known, path) != m_known.end()) {
     return true;
   }
-  // An ancestor of the root's folder appearing means the folder may now exist.
-  const auto& root = m_rootFolder.native();
+  // A folder that does not exist yet appears as one of its ancestors' children.
   const auto& name = path.native();
-  return !name.empty() && root.starts_with(name) && root.size() > name.size() && root[name.size()] == '/';
+  return !name.empty() && std::ranges::any_of(m_known, [&name](const fs::path& known) {
+    const auto& full = known.native();
+    return full.size() > name.size() && full.starts_with(name) && full[name.size()] == '/';
+  });
 }
 
-void luciole::GtkColorWatch::follow(const fs::path& root, const std::vector<fs::path>& files) {
+bool luciole::GtkColorWatch::follow(const fs::path& root, const std::vector<fs::path>& paths) {
   std::vector<fs::path> wanted;
   m_known.clear();
-  m_rootFolder.clear();
   if (!root.empty()) {
-    m_rootFolder = root.parent_path();
-    m_known = files;
     m_known.push_back(root);
-    m_known.push_back(m_rootFolder);
-    wanted.push_back(nearestExisting(m_rootFolder));
-    for (const auto& file : files) {
-      wanted.push_back(file.parent_path());
-    }
-    std::vector<fs::path> unique;
-    for (auto& folder : wanted) {
-      if (unique.size() < kMostFolders && std::ranges::find(unique, folder) == unique.end()) {
-        unique.push_back(std::move(folder));
+    std::vector<fs::path> folders{root.parent_path()};
+    for (const auto& path : paths) {
+      m_known.push_back(path);
+      folders.push_back(path.parent_path());
+      // A link is edited through its target, which may be anywhere.
+      std::error_code error;
+      const auto target = fs::weakly_canonical(path, error);
+      if (!error && target != path) {
+        m_known.push_back(target);
+        folders.push_back(target.parent_path());
       }
     }
-    wanted = std::move(unique);
+    for (const auto& folder : folders) {
+      auto existing = nearestExisting(folder);
+      if (std::ranges::find(wanted, existing) == wanted.end()) {
+        wanted.push_back(std::move(existing));
+      }
+    }
+    const bool cut = wanted.size() > kMostFolders;
+    if (cut && !m_cutLogged) {
+      kLog.warn("watching {} of {} folders that hold desktop color files", kMostFolders, wanted.size());
+    }
+    m_cutLogged = cut;
+    wanted.resize(std::min(wanted.size(), kMostFolders));
   }
   std::vector<Folder> next;
+  bool changed = wanted.size() != m_folders.size();
   for (const auto& path : wanted) {
     const auto kept = std::ranges::find(m_folders, path, &Folder::path);
     if (kept != m_folders.end()) {
       next.push_back(std::move(*kept));
       continue;
     }
-    auto monitor = DirectoryWatch::start(path, [this](const fs::path& changed) {
-      if (relevant(changed)) {
+    changed = true;
+    auto monitor = DirectoryWatch::start(path, [this](const fs::path& where) {
+      if (relevant(where)) {
         m_changed();
       }
     });
@@ -75,6 +88,7 @@ void luciole::GtkColorWatch::follow(const fs::path& root, const std::vector<fs::
     next.push_back({.path = path, .monitor = std::move(monitor)});
   }
   m_folders = std::move(next);
+  return changed;
 }
 
 std::vector<fs::path> luciole::GtkColorWatch::folders() const {

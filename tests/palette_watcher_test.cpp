@@ -117,6 +117,40 @@ namespace {
     waitFor([&] { return ::palette == builtIn; }, "gtk.css removed");
   }
 
+  // A tool writes gtk.css, then its own sheet, in a folder that exists, in one made later, and through a link whose
+  // target is rewritten in place. The palette follows each.
+  void testImportsThatAppearLater() {
+    const luciole::test::TempFolder folder("palette-watcher-late");
+    const auto config = folder.path() / "config";
+    fs::create_directories(config);
+    TEST_CHECK(::setenv("XDG_CONFIG_HOME", config.c_str(), 1) == 0);
+    const auto gtk = config / "gtk-4.0";
+    luciole::PaletteWatcher watcher(ColorScheme::Auto);
+    const auto builtIn = luciole::defaultPalette(ColorScheme::Auto);
+
+    write(gtk / "gtk.css", "@import url(\"noctalia.css\");\n");
+    settle();
+    TEST_CHECK(::palette == builtIn);
+    write(gtk / "noctalia.css", gtkCss("#112233", "#ff8800"));
+    waitFor([&] { return ::palette.surface == hex("#112233"); }, "sheet written after gtk.css");
+
+    write(gtk / "gtk.css", "@import url(\"../themes/later.css\");\n");
+    waitFor([&] { return ::palette == builtIn; }, "import of a missing folder");
+    settle();
+    fs::create_directories(config / "themes");
+    settle();
+    write(config / "themes" / "later.css", gtkCss("#223344", "#00aa55"));
+    waitFor([&] { return ::palette.surface == hex("#223344"); }, "sheet in a folder made later");
+
+    const auto dots = folder.path() / "dots";
+    write(dots / "real.css", gtkCss("#334455", "#aa0055"));
+    fs::create_symlink(dots / "real.css", gtk / "linked.css");
+    write(gtk / "gtk.css", "@import url(\"linked.css\");\n");
+    waitFor([&] { return ::palette.surface == hex("#334455"); }, "linked sheet");
+    write(dots / "real.css", gtkCss("#445566", "#aa0055"));
+    waitFor([&] { return ::palette.surface == hex("#445566"); }, "edit of a link's target");
+  }
+
   void testWatchedFolders() {
     const luciole::test::TempFolder folder("gtk-color-watch");
     int changes = 0;
@@ -154,6 +188,7 @@ namespace {
 } // namespace
 
 int main() {
+  testImportsThatAppearLater();
   testWatchedFolders();
   testFollowsDesktopColorsAndColorFile();
   std::println("palette watcher checks passed");

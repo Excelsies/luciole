@@ -135,7 +135,7 @@ namespace {
         return candidate;
       }
     }
-    return base.onSurface;
+    return readableTextColorForBackground(base.surface);
   }
 
   // A quiet line: from 16% of the way to the text color, in steps, until it shows on the surface and the container.
@@ -148,11 +148,12 @@ namespace {
         return candidate;
       }
     }
-    return base.onSurface;
+    return readableTextColorForBackground(base.surface);
   }
 
   Color accentHue(const Color& primary, float turns, float chroma, const Base& base) {
-    return reach(luciole::rotateHue(primary, turns, chroma), base.surface, base.onSurface, kAccentRatio);
+    const Color color = reach(luciole::rotateHue(primary, turns, chroma), base.surface, base.onSurface, kAccentRatio);
+    return contrastRatio(color, base.surface) >= kAccentRatio ? color : readableTextColorForBackground(base.surface);
   }
 } // namespace
 
@@ -160,7 +161,8 @@ std::optional<Palette> luciole::desktopPalette(const GtkColorTable& names) {
   const auto surface = find(names, "window_bg_color");
   const auto onSurface = find(names, "window_fg_color");
   const auto primary = find(names, "accent_bg_color");
-  if (!surface || !onSurface || !primary) {
+  // A translucent window color is not a surface the derivations can reason about.
+  if (!surface || !onSurface || !primary || surface->a < 1.0F || onSurface->a < 1.0F) {
     return std::nullopt;
   }
   const Base base{

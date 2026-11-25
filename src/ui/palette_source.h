@@ -19,8 +19,8 @@ namespace luciole {
     PaletteSource source;
     // True when the desktop's GTK colors were consulted, so their files matter to the caller.
     bool readsDesktopColors = false;
-    // The GTK files read, the root first; empty unless readsDesktopColors.
-    std::vector<std::filesystem::path> gtkFiles;
+    // Every GTK file tried, read or not, the root first; empty unless readsDesktopColors.
+    std::vector<std::filesystem::path> gtkPaths;
   };
 
   // Auto: colorFile when it exists, else the desktop's colors from gtkCss when usable, else the built-in palette.
