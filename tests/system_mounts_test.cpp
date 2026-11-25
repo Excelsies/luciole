@@ -61,6 +61,10 @@ namespace {
     TEST_CHECK(luciole::sameMountSource("nas:/", "nas://"));
     TEST_CHECK(luciole::sameMountSource("//nas/share/", "//nas/share"));
     TEST_CHECK(!luciole::sameMountSource("nas:/", "nas:/export"));
+    TEST_CHECK(luciole::bindMount("/Desktop", "rw,relatime"));
+    TEST_CHECK(luciole::bindMount("/@home/kasey/Desktop", "rw,subvol=/@home"));
+    TEST_CHECK(!luciole::bindMount("/@games", "rw,subvolid=257,subvol=/@games"));
+    TEST_CHECK(!luciole::bindMount("/", "rw,relatime"));
     const std::vector<MountConfiguration> trailingList{trailing};
     const std::vector<MountConfiguration> native{
         {.path = "/media/test/NFS share", .source = "nas:/export", .type = "nfs4", .options = "rw", .automount = true}

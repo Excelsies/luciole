@@ -48,6 +48,8 @@ namespace luciole {
   // Share types read from fstab and from native systemd units: NFS and SMB, plus legacy smbfs and ncpfs entries.
   bool networkMountType(std::string_view type);
   bool sameMountSource(std::string_view left, std::string_view right);
+  // A bind mount exposes a directory already reachable elsewhere; a btrfs subvolume mount also has a non-root root.
+  bool bindMount(std::string_view root, std::string_view options);
   std::vector<MountConfiguration> readFstabMounts();
   std::vector<MountConfiguration>
   mergeMountConfiguration(std::vector<MountConfiguration> result, std::span<const MountConfiguration> native);

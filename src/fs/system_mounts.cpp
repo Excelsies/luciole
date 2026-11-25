@@ -357,6 +357,10 @@ bool luciole::sameMountSource(std::string_view left, std::string_view right) {
   return normalizeMountSource(left) == normalizeMountSource(right);
 }
 
+bool luciole::bindMount(std::string_view root, std::string_view options) {
+  return normalizeMountPath(root) != "/" && option(options, "subvol") != normalizeMountPath(root);
+}
+
 std::vector<luciole::MountConfiguration> luciole::readFstabMounts() {
   std::vector<MountConfiguration> result;
   GList* points = g_unix_mount_points_get(nullptr);
