@@ -6,8 +6,9 @@
 #include "app/page/page_context.h"
 #include "browser/browser_controller.h"
 #include "browser/location_presentation.h"
+#include "config/settings.h"
 #include "core/ui_phase.h"
-#include "fs/archive_type.h"
+#include "fs/archive_container.h"
 #include "fs/filename.h"
 #include "fs/gio_ptr.h"
 #include "operations/archive_service.h"
@@ -274,7 +275,7 @@ void TransferController::extractedDrop(
       || !destination.isNative()
       || !options.canCopy
       || !options.select
-      || !luciole::isSupportedArchive(payload.locations.front(), "")) {
+      || !luciole::opensAsArchive(payload.locations.front(), "", m_page.settings().openAsArchive)) {
     finish(false);
     return;
   }
@@ -548,7 +549,7 @@ void TransferController::chooseDrop(
   const bool canExtract = pending->payload.locations.size() == 1
       && destination.isNative()
       && pending->options.canCopy
-      && luciole::isSupportedArchive(pending->payload.locations.front(), "");
+      && luciole::opensAsArchive(pending->payload.locations.front(), "", m_page.settings().openAsArchive);
   const bool canNewFolder = pending->options.canMove && destination.isNative();
   std::vector<ContextMenuControlEntry> entries;
   entries.push_back({.id = kDropCopy, .label = "Copy Here", .enabled = pending->options.canCopy, .shortcut = "Ctrl"});

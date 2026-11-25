@@ -26,6 +26,8 @@ namespace {
       files.write("sub/inner.zip", kEmptyZip);
       files.write("late.zip", kEmptyZip);
       files.write("pack.tar", "tar bytes");
+      files.write("tool.jar", kEmptyZip);
+      files.write("phone.apk", kEmptyZip);
       files.write("secret.zip", kEmptyZip, 0000);
       fs::create_symlink("pack.zip", files.folder / "link.zip");
     }
@@ -37,6 +39,7 @@ namespace {
     std::vector<std::string> launched;
     std::vector<std::string> browsed;
     bool refuse = false; // the archive browser is refused, as while a file job runs
+    luciole::ArchiveContainerSet openAsArchive;
 
     luciole::WorkbenchOpenHooks hooks() {
       return {
@@ -46,7 +49,8 @@ namespace {
               [this](const ArchiveFacts& archive) {
                 browsed.push_back(*archive.location.basename());
                 return !refuse;
-              }
+              },
+          .openAsArchive = openAsArchive
       };
     }
   };
@@ -119,6 +123,27 @@ namespace {
     }
   }
 
+  // An archive container goes to its program unless its type is switched on; the others are untouched.
+  void aContainerFollowsItsSetting(::test::SceneCapture& capture) {
+    const Folder folder;
+    Rig rig(folder.files, capture, folder.files.folder);
+    Opened opened;
+    open(rig, folder, "tool.jar", false, opened);
+    TEST_CHECK(opened.launched == std::vector<std::string>{"tool.jar"} && opened.browsed.empty());
+    opened.openAsArchive.set(*luciole::archiveContainerByName("jar"));
+    open(rig, folder, "tool.jar", false, opened);
+    open(rig, folder, "phone.apk", false, opened); // another type stays with its program
+    open(rig, folder, "pack.zip", false, opened);
+    TEST_CHECK(opened.browsed == (std::vector<std::string>{"tool.jar", "pack.zip"}));
+    TEST_CHECK(opened.launched == (std::vector<std::string>{"tool.jar", "phone.apk"}));
+    open(rig, folder, "tool.jar", true, opened); // a file chooser browses nothing
+    TEST_CHECK(opened.browsed.size() == 2 && opened.launched.size() == 3);
+    // The menu and the refusal still take every container.
+    const auto facts = luciole::archiveFactsFor(folder.at("phone.apk"), {});
+    TEST_CHECK(luciole::ActionRegistry::browsableFile(facts));
+    TEST_CHECK(luciole::ActionRegistry::browseArchiveState(false, facts).enabled);
+  }
+
   // A refused or failed archive browser records no visit; a launch does.
   void aRefusedOpenIsNoVisit(::test::SceneCapture& capture) {
     const Folder folder;
@@ -164,6 +189,7 @@ int main() {
   otherFilesAreLaunched(*capture);
   aColumnAheadAndAShapeOpenTheSameWay(*capture);
   aTarBrowsesAndOddFilesAreLaunched(*capture);
+  aContainerFollowsItsSetting(*capture);
   aRefusedOpenIsNoVisit(*capture);
   aMissingFileIsLaunched(*capture);
   runningJobsRefuseTheBrowser();

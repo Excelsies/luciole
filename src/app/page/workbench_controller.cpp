@@ -115,6 +115,7 @@ void WorkbenchController::onFrame() {
   m_columnPreview->setPreviewSize(luciole::workbenchPreviewSize(m_settings.workbench));
   m_columnPreview->setAudioVisual(luciole::audioVisualChoice(m_settings.workbench));
   m_columnPreview->setMediaLoop(m_settings.workbench.mediaLoop);
+  m_columnPreview->setOpenAsArchive(m_settings.openAsArchive);
   m_columnPreview->update();
   m_sizes.refresh();
   restAt();
@@ -471,7 +472,8 @@ void WorkbenchController::openFile(const luciole::Location& location) {
       location, models, m_page.choosing(),
       {.visited = [this](const luciole::Location& visited) { recordVisit(visited); },
        .launch = m_hooks.launch,
-       .browseArchive = m_hooks.browseArchive}
+       .browseArchive = m_hooks.browseArchive,
+       .openAsArchive = m_settings.openAsArchive}
   );
 }
 

@@ -56,7 +56,7 @@ namespace luciole {
       throw std::invalid_argument("Opening a Workbench file needs every hook.");
     }
     const auto facts = archiveFactsFor(location, models);
-    if (!chooser && ActionRegistry::browsableFile(facts)) {
+    if (!chooser && ActionRegistry::opensAsArchive(facts, hooks.openAsArchive)) {
       if (hooks.browseArchive(facts)) {
         hooks.visited(location);
       }

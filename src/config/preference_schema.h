@@ -1,5 +1,6 @@
 #pragma once
 
+#include "config/preference_archive_rule.h"
 #include "config/preference_keybind_rule.h"
 #include "config/preference_names.h"
 #include "config/settings.h"
@@ -466,6 +467,7 @@ namespace luciole::preference_schema {
           P::WorkbenchPreviewPlace, "workbench_preview_place", [](S& s) -> auto& { return s.workbench.previewPlace; },
           {kWorkbenchPreviewPlaces}
       ),
+      describe(P::OpenAsArchive, "open_as_archive", [](S& s) -> auto& { return s.openAsArchive; }),
       describe(P::Keybinds, "keybinds", [](S& s) -> auto& { return s.keybinds; }),
   };
   inline constexpr std::size_t kPreferenceCount = std::tuple_size_v<decltype(kPreferences)>;

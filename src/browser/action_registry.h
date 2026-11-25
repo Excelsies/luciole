@@ -2,6 +2,7 @@
 
 #include "browser/directory_model.h"
 #include "config/keybinds.h"
+#include "fs/archive_container_types.h"
 
 #include <array>
 #include <cstddef>
@@ -134,6 +135,8 @@ namespace luciole {
     bool singleSelection = false;
     // Per-folder views are on, and the current folder has its own sort or view mode.
     bool folderViews = false, folderViewCustomized = false;
+    // The archive container types that Open shows in the archive browser.
+    ArchiveContainerSet openAsArchive = {}; // NOLINT(readability-redundant-member-init): callers omit it
   };
   // Actions a file chooser window offers: browsing, selection and New Folder. Everything else would act on files or
   // leave the chooser.
@@ -187,12 +190,14 @@ namespace luciole {
     static ActionRequest capture(const ActionContext& context);
     static bool current(const ActionContext& context, const ActionRequest& request, ActionScope scope);
     static ActionState state(BrowserAction action, const ActionContext& context, const ActionRequest& request);
-    // The action Open performs: Browse Archive for one browsable archive, otherwise Open. Running jobs do not change
+    // The action Open performs: Browse Archive for one archive Open browses, otherwise Open. Running jobs do not change
     // the choice; state() still refuses Browse Archive meanwhile.
     static BrowserAction openAction(const ActionContext& context, const ActionRequest& request);
     static ArchiveFacts archiveFacts(const DirectoryEntry& entry);
-    // One readable native regular file that Browse Archive and Extract accept: the rule openAction() applies to a row.
+    // One readable native regular file that Browse Archive and Extract accept: an archive or an archive container.
     static bool browsableFile(const ArchiveFacts& file);
+    // The same file when Open shows it in the archive browser: an archive container only if `openAsArchive` has it.
+    static bool opensAsArchive(const ArchiveFacts& file, const ArchiveContainerSet& openAsArchive);
     // What Browse Archive says of one file: running jobs and an unreadable or unsupported file refuse it, with the
     // reason the action gives for a row.
     static ActionState browseArchiveState(bool operationsBusy, const ArchiveFacts& file);

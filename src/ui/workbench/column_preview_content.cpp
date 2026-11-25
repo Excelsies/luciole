@@ -1,7 +1,7 @@
 #include "ui/workbench/column_preview_content.h"
 
 #include "formats/file_kind.h"
-#include "fs/archive_type.h"
+#include "fs/archive_container.h"
 #include "fs/gio_ptr.h"
 #include "model/private_key.h"
 #include "operations/archive_service.h"
@@ -99,7 +99,10 @@ namespace luciole {
     }
   } // namespace
 
-  ColumnPreviewKind columnPreviewKind(const Location& file, std::string_view contentType, bool regular, bool playback) {
+  ColumnPreviewKind columnPreviewKind(
+      const Location& file, std::string_view contentType, bool regular, bool playback,
+      const ArchiveContainerSet& openAsArchive
+  ) {
     const auto name = file.basename();
     if (!regular || !name || !file.nativePath()) {
       return ColumnPreviewKind::Still;
@@ -110,7 +113,7 @@ namespace luciole {
     if (meshFormat(*name)) {
       return ColumnPreviewKind::Mesh;
     }
-    if (isSupportedArchive(file, contentType)) {
+    if (opensAsArchive(file, contentType, openAsArchive)) {
       return ColumnPreviewKind::Archive;
     }
     if (listed(kAnimatedTypes, contentType)) {

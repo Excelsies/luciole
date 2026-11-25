@@ -1,6 +1,6 @@
 #include "browser/action_registry.h"
 
-#include "fs/archive_type.h"
+#include "fs/archive_container.h"
 #include "fs/entry_access.h"
 #include "fs/transfer_types.h"
 
@@ -654,12 +654,21 @@ luciole::ArchiveFacts luciole::ActionRegistry::archiveFacts(const DirectoryEntry
   };
 }
 
+namespace {
+  bool readableRegularFile(const luciole::ArchiveFacts& file) {
+    return file.type == luciole::FileType::Regular
+        && !file.symlink
+        && file.location.nativePath().has_value()
+        && file.readable.value_or(true);
+  }
+} // namespace
+
 bool luciole::ActionRegistry::browsableFile(const ArchiveFacts& file) {
-  return file.type == FileType::Regular
-      && !file.symlink
-      && file.location.nativePath().has_value()
-      && file.readable.value_or(true)
-      && isSupportedArchive(file.location, file.mime);
+  return readableRegularFile(file) && isBrowsableArchive(file.location, file.mime);
+}
+
+bool luciole::ActionRegistry::opensAsArchive(const ArchiveFacts& file, const ArchiveContainerSet& openAsArchive) {
+  return readableRegularFile(file) && luciole::opensAsArchive(file.location, file.mime, openAsArchive);
 }
 
 luciole::ActionState luciole::ActionRegistry::browseArchiveState(bool operationsBusy, const ArchiveFacts& file) {
@@ -673,7 +682,13 @@ luciole::ActionState luciole::ActionRegistry::browseArchiveState(bool operations
 }
 
 luciole::BrowserAction luciole::ActionRegistry::openAction(const ActionContext& context, const ActionRequest& request) {
-  return !context.chooser && current(context, request, ActionScope::Targets) && browsableArchive(context, request)
+  return !context.chooser
+          && current(context, request, ActionScope::Targets)
+          && single(request)
+          && all(
+              context, request,
+              [&](const DirectoryEntry& entry) { return opensAsArchive(archiveFacts(entry), context.openAsArchive); }
+          )
       ? A::BrowseArchive
       : A::Open;
 }

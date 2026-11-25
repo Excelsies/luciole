@@ -15,6 +15,8 @@ namespace luciole {
     std::function<void(const Location&)> visited;
     std::function<void(const Location&)> launch;
     std::function<bool(const ArchiveFacts&)> browseArchive;
+    // The archive container types that open in the archive browser; none by default.
+    ArchiveContainerSet openAsArchive = {}; // NOLINT(readability-redundant-member-init): callers omit it
   };
 
   // The facts Open decides on for `location`: from the row of the first of `models` that lists it, the page's listing

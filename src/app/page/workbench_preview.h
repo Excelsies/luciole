@@ -96,6 +96,8 @@ namespace luciole {
     void setAudioVisual(const AudioVisualChoice& choice);
     // Whether video and sound files play again from the start when they end, applied at once to one that plays.
     void setMediaLoop(bool loop);
+    // The archive container types listed as archives; applies to the next file shown.
+    void setOpenAsArchive(const ArchiveContainerSet& openAsArchive) { m_openAsArchive = openAsArchive; }
     // Ctrl with the wheel at scene point x, y, with the axis and values the compositor sent: a vertical turn over the
     // slot's content steps the size once per whole notch, down smaller, and the owner is told. True when taken.
     bool wheelSize(float x, float y, std::uint32_t axis, std::int32_t value120, std::int32_t discrete, double value);
@@ -149,6 +151,7 @@ namespace luciole {
     int m_previewSize;
     AudioVisualChoice m_audioVisual;
     bool m_mediaLoop = false;
+    ArchiveContainerSet m_openAsArchive;
     float m_overlayTop = 0;      // the header's height the overlay was last placed below
     float m_overlayTextSize = 0; // the text size the overlay was last given
     bool m_shown = false;

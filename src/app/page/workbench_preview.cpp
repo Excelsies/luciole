@@ -157,7 +157,7 @@ namespace luciole {
     m_still = false;
     const auto& entry = target->previewed.entry;
     m_kind = columnPreviewKind(
-        entry.location(), entry.contentType.value_or(""), entry.type == FileType::Regular, m_playback
+        entry.location(), entry.contentType.value_or(""), entry.type == FileType::Regular, m_playback, m_openAsArchive
     );
     m_view.setFile(entry.displayName(), target->previewed.typeLabel);
     m_shownFacts = facts();

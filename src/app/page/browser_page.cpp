@@ -1510,7 +1510,8 @@ luciole::ActionContext BrowserPage::actionContext() const {
       .chooser = choosing(),
       .singleSelection = browser().model().singleSelection(),
       .folderViews = m_folderView.enabled(),
-      .folderViewCustomized = m_folderView.customized()
+      .folderViewCustomized = m_folderView.customized(),
+      .openAsArchive = settings().openAsArchive
   };
 }
 

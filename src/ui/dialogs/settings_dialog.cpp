@@ -326,6 +326,8 @@ SettingsDialog::SettingsDialog(
           )
       )
   );
+  section("Archive-Like Files", "file-zip");
+  addArchiveContainers();
   section("Keybinds", "keyboard");
   addKeybinds();
   selectPage(0);

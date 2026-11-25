@@ -20,7 +20,7 @@
 #include "config/settings.h"
 #include "config/view_preference_writer.h"
 #include "core/deferred_call.h"
-#include "fs/archive_type.h"
+#include "fs/archive_container.h"
 #include "fs/entry_access.h"
 #include "platform/desktop_integration.h"
 #include "platform/terminal_launcher.h"
@@ -198,7 +198,7 @@ std::vector<ContextMenuControlEntry> MenuController::itemMenuEntries(const lucio
   entries.push_back({.id = CopyLocation, .label = "Copy Location", .hasSubmenu = true});
   addSeparator(entries);
   if (single != nullptr) {
-    if (luciole::isSupportedArchive(*singleLocation, single->contentType.value_or(""))) {
+    if (luciole::isBrowsableArchive(*singleLocation, single->contentType.value_or(""))) {
       add(Action::BrowseArchive);
       add(Action::ExtractHere);
       add(Action::ExtractTo);

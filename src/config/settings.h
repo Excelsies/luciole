@@ -2,6 +2,7 @@
 
 #include "config/diagnostic.h"
 #include "config/keybinds.h"
+#include "fs/archive_container_types.h"
 #include "fs/atomic_file.h"
 #include "model/audio_visual_kind.h"
 #include "model/directory_options.h"
@@ -101,6 +102,7 @@ namespace luciole {
     std::string terminalCommand;
     bool recordVisits = true; // count folder entries and file opens for the visits measure
     WorkbenchSettings workbench;
+    ArchiveContainerSet openAsArchive; // container types that open in the archive browser, not their application
     KeybindConfig keybinds;
     bool operator==(const BrowserSettings&) const = default;
   };
@@ -223,6 +225,7 @@ namespace luciole {
     WorkbenchAudioVisual,
     WorkbenchMediaLoop,
     WorkbenchPreviewPlace,
+    OpenAsArchive,
     Keybinds,
     Count
   };
@@ -349,6 +352,7 @@ namespace luciole {
     static constexpr PreferenceKey<luciole::AudioVisualKind> WorkbenchAudioVisual{Id::WorkbenchAudioVisual};
     static constexpr PreferenceKey<bool> WorkbenchMediaLoop{Id::WorkbenchMediaLoop};
     static constexpr PreferenceKey<luciole::WorkbenchPreviewPlace> WorkbenchPreviewPlace{Id::WorkbenchPreviewPlace};
+    static constexpr PreferenceKey<luciole::ArchiveContainerSet> OpenAsArchive{Id::OpenAsArchive};
     static constexpr PreferenceKey<luciole::KeybindConfig> Keybinds{Id::Keybinds};
   };
 
@@ -377,7 +381,7 @@ namespace luciole {
         std::monostate, bool, int, double, SortField, ViewMode, ViewDensity, FilenameTruncation, DetailsColumnOrder,
         ActivationMode, TypingMode, DropAction, ThumbnailPolicy, ChooserStartFolder, WorkbenchInstrument,
         WorkbenchRibbon, WorkbenchMeasure, WorkbenchColor, AudioVisualKind, WorkbenchPreviewPlace, ColorScheme,
-        std::string, KeybindConfig>
+        std::string, ArchiveContainerSet, KeybindConfig>
         m_value;
   };
 

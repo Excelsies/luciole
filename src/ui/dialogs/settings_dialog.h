@@ -39,6 +39,8 @@ private:
   void addTerminal();
   // The Workbench card on the Views page: its choices, the sound visualizer, Record Visits and Clear Visit History.
   void addWorkbenchCard(std::function<void()> clearVisits);
+  // The Archive-Like Files page: one switch per archive container type, in a card per family, saved as one list.
+  void addArchiveContainers();
   void addKeybinds();
   void syncKeybinds();
   void selectKeybindScope(std::size_t selected);

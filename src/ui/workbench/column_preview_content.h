@@ -1,6 +1,7 @@
 #pragma once
 
 #include "formats/table_grid.h"
+#include "fs/archive_container_types.h"
 #include "fs/file_error.h"
 #include "fs/location.h"
 
@@ -30,11 +31,15 @@ namespace luciole {
   // The kind for `file`, a regular file when `regular`, of content type `contentType` (empty when unknown).
   // `playback` says the build plays video and audio. First match: anything but a local regular file is Still; a
   // CSV, TSV, XLSX or ODS by type or name is Table; an STL, OBJ, PLY, glTF or GLB name is Mesh; an archive the
-  // archive reader opens is Archive; GIF, PNG, APNG and WebP are Animation; video and audio, by type or by name
-  // when the type is unknown, are Media with playback and Still without; other images are Picture; text by type or
-  // by name is Text; an unknown or empty type is Binary; anything else is Still. Where the type is not enough the
-  // loaders check the bytes: an image whose frames do not move, and private key material, which is never shown.
-  ColumnPreviewKind columnPreviewKind(const Location& file, std::string_view contentType, bool regular, bool playback);
+  // archive reader opens, or an archive container `openAsArchive` has, is Archive; GIF, PNG, APNG and WebP are
+  // Animation; video and audio, by type or by name when the type is unknown, are Media with playback and Still without;
+  // other images are Picture; text by type or by name is Text; an unknown or empty type is Binary; anything else is
+  // Still. Where the type is not enough the loaders check the bytes: an image whose frames do not move, and private key
+  // material, which is never shown.
+  ColumnPreviewKind columnPreviewKind(
+      const Location& file, std::string_view contentType, bool regular, bool playback,
+      const ArchiveContainerSet& openAsArchive = {}
+  );
 
   // What a column preview knows of its file; a fact is left out while unknown.
   struct ColumnPreviewFacts {

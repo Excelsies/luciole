@@ -266,6 +266,7 @@ libarchive = dependency('libarchive')
 liblzma = dependency('liblzma')
 fs_lib = static_library('luciole-fs',
   files(
+    'src/fs/archive_container.cpp',
     'src/fs/archive_type.cpp',
     'src/fs/atomic_file.cpp',
     'src/fs/background_job.cpp',
@@ -637,6 +638,7 @@ ui_lib = static_library('luciole-ui',
     'src/ui/dialogs/name_dialog.cpp',
     'src/ui/dialogs/mount_dialog.cpp',
     'src/ui/dialogs/settings_dialog.cpp',
+    'src/ui/dialogs/settings_dialog_archives.cpp',
     'src/ui/dialogs/settings_dialog_workbench.cpp',
     'src/ui/color_mix.cpp',
     'src/ui/desktop_palette.cpp',

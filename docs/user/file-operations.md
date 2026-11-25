@@ -120,6 +120,25 @@ To move top-level items out of Trash to another local folder, drag them onto a f
 
 Compress creates ZIP, TAR and 7z archives for native selections. Supported compressed TAR variants depend on the installed libarchive build and include gzip, bzip2, XZ and Zstandard. Browse Archive opens a read-only archive page. Opening a supported local archive (double-click, Enter or Open) browses it the same way; while another file operation is still finishing, Luciole reports that instead. Extract Here and Extract To publish extracted contents through the normal transfer/conflict flow. Archive browsing can extract selected members or open an individual file through its associated application.
 
+### Archive-like files
+
+Many file types are real archives under another name and are normally opened by an application: a `.jar` is a ZIP file, an `.epub` is a ZIP file, a `.cbr` is a RAR file and a `.crate` is a gzip-compressed TAR file. Luciole calls them archive containers. Its context menu always offers Browse Archive, Extract Here and Extract To for them, exactly as for a `.zip`, and the same validation and resource limits apply. Browsing a container never runs it or hands it to another program.
+
+Open (double-click, Enter or Open) uses the file's default application. Settings → Archive-Like Files has one switch per type; a type that is switched on opens in the archive browser instead, as a `.zip` does, and its entries are listed in the Workbench preview and its drops offer Extract Here. The setting is the `open_as_archive` list in [configuration](configuration.md#browser-preferences). A type is recognized by its suffix, in any letter case, and, where the system names a type of its own for it, by that type. A file of a type whose reader this build lacks, such as a `.crate` without gzip support, is not an archive container.
+
+The types, by the families the Settings page groups them in:
+
+- Java: Java Archive (.jar), Web Application Archive (.war), Enterprise Archive (.ear), Android Library (.aar)
+- Android: Android Package (.apk), Android App Bundle (.aab), Android Package Set (.apks), Extended Android Package (.xapk)
+- Office Open XML: Word Document (.docx), Word Macro Document (.docm), Word Template (.dotx), Word Macro Template (.dotm), Excel Workbook (.xlsx), Excel Macro Workbook (.xlsm), Excel Template (.xltx), Excel Macro Template (.xltm), PowerPoint Presentation (.pptx), PowerPoint Macro Presentation (.pptm), PowerPoint Template (.potx), PowerPoint Macro Template (.potm), PowerPoint Slide Show (.ppsx)
+- OpenDocument: OpenDocument Text (.odt), OpenDocument Text Template (.ott), OpenDocument Spreadsheet (.ods), OpenDocument Spreadsheet Template (.ots), OpenDocument Presentation (.odp), OpenDocument Presentation Template (.otp), OpenDocument Drawing (.odg), OpenDocument Drawing Template (.otg), OpenDocument Formula (.odf), OpenDocument Database (.odb)
+- Books and Comics: EPUB Book (.epub), Comic Book, ZIP (.cbz), Comic Book, RAR (.cbr), Comic Book, 7z (.cb7), Comic Book, TAR (.cbt)
+- Extensions and Packages: Firefox Extension (.xpi), Visual Studio Code Extension (.vsix), NuGet Package (.nupkg), Python Wheel (.whl), Python Egg (.egg), OpenOffice Extension (.oxt), iOS App (.ipa), Windows App Package (.appx), Windows MSIX Package (.msix), Rust Crate (.crate), Ruby Gem (.gem)
+- Graphics, Maps, and 3D: Google Earth Placemarks (.kmz), 3D Manufacturing Model (.3mf), Universal Scene Description (.usdz), OpenRaster Image (.ora), Krita Document (.kra)
+- Games and Projects: Minecraft Pack (.mcpack), Minecraft World (.mcworld), Minecraft Add-On (.mcaddon), Minecraft World Template (.mctemplate), Modrinth Modpack (.mrpack), Quake III Package (.pk3), Doom 3 Package (.pk4), LÖVE Game (.love), Scratch Project (.sb3)
+
+A Workbench preview shows a spreadsheet as a table, not as a listing, whatever the setting.
+
 Compression stores symbolic links with their original target text and does not copy the target's contents. Absolute, outside-folder, missing and cyclic link targets can therefore be archived. Luciole still refuses to browse or extract archives containing escaping or cyclic links, including archives it created itself; creation does not mark an archive as trusted.
 
 ZIP/TAR/7z/RAR input depends on available archive capabilities. Encrypted 7z input additionally uses a system 7-Zip executable. Passwords are requested when needed and are not stored in settings. Encrypted RAR is not supported. Numbered byte-split ZIP sets use `name.zip.001`, `.002` and so on; select `.001`, with all contiguous parts beside it. Spanned `.z01` sets and split-archive creation are not supported.
