@@ -263,10 +263,11 @@ event_loop_dep = declare_dependency(link_with: event_loop_lib, include_directori
 )
 
 libarchive = dependency('libarchive')
-liblzma = dependency('liblzma')
+liblzma = dependency('liblzma', version: '>=5.4.0')
 fs_lib = static_library('luciole-fs',
   files(
     'src/fs/archive_container.cpp',
+    'src/fs/archive_extra_types.cpp',
     'src/fs/archive_type.cpp',
     'src/fs/atomic_file.cpp',
     'src/fs/background_job.cpp',
@@ -384,6 +385,8 @@ operations_lib = static_library('luciole-operations',
     'src/operations/archive_provider_process.cpp',
     'src/operations/archive_rar_input.cpp',
     'src/operations/archive_sevenzip.cpp',
+    'src/operations/archive_extra_formats.cpp',
+    'src/operations/archive_lzma_header.cpp',
     'src/operations/archive_xz_input.cpp',
     'src/operations/archive_service.cpp',
     'src/operations/archive_reader.cpp',

@@ -1,5 +1,6 @@
 #include "fs/archive_container.h"
 
+#include "fs/archive_extra_types.h"
 #include "fs/archive_type.h"
 #include "fs/filename.h"
 #include "fs/gio_ptr.h"
@@ -47,7 +48,9 @@ bool luciole::isArchiveContainer(const Location& location, std::string_view mime
 }
 
 bool luciole::isBrowsableArchive(const Location& location, std::string_view mime) {
-  return isSupportedArchive(location, mime) || isArchiveContainer(location, mime);
+  return isSupportedArchive(location, mime)
+      || isArchiveContainer(location, mime)
+      || archiveExtraType(location, mime).has_value();
 }
 
 bool luciole::opensAsArchive(
@@ -56,10 +59,13 @@ bool luciole::opensAsArchive(
   if (const auto type = archiveContainerType(location, mime)) {
     return openAsArchive.test(*type);
   }
-  return isSupportedArchive(location, mime);
+  return isSupportedArchive(location, mime) || archiveExtraType(location, mime).has_value();
 }
 
 std::string luciole::archiveExtractFolderName(const Location& location) {
+  if (auto name = archiveExtraFolderName(location); !name.empty()) {
+    return name;
+  }
   const auto type = archiveContainerType(location, "");
   const auto name = location.basename();
   if (!type || !name) {

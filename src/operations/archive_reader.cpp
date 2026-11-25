@@ -1,4 +1,5 @@
 #include "fs/filename.h"
+#include "operations/archive_extra_formats.h"
 #include "operations/archive_rar_input.h"
 #include "operations/archive_sevenzip.h"
 #include "operations/archive_support.h"
@@ -85,6 +86,7 @@ namespace {
         if (archiveCompressionAvailable(ArchiveCompression::Zstd)) {
           requireArchive(archive_read_support_filter_zstd(value.get()), value.get(), work);
         }
+        enableExtraFilters(value.get(), work);
       }
       if (passwords) {
         for (const auto& password : passwords->values) {
@@ -213,7 +215,10 @@ namespace {
     bool needsValidation = false;
     for (int i = 0; i < archive_filter_count(archive.value.get()); ++i) {
       const auto code = archive_filter_code(archive.value.get(), i);
-      needsValidation = needsValidation || code == ARCHIVE_FILTER_BZIP2 || code == ARCHIVE_FILTER_ZSTD;
+      needsValidation = needsValidation
+          || code == ARCHIVE_FILTER_BZIP2
+          || code == ARCHIVE_FILTER_ZSTD
+          || extraFilterNeedsRawPass(code);
     }
     if (!needsValidation) {
       return;
