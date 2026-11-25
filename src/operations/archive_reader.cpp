@@ -73,6 +73,7 @@ namespace {
         if (!input.split()) {
           requireArchive(archive_read_support_format_tar(value.get()), value.get(), work);
           requireArchive(archive_read_support_format_7zip(value.get()), value.get(), work);
+          enableExtraFormats(value.get(), work);
         }
       }
       requireArchive(archive_read_support_filter_none(value.get()), value.get(), work);
@@ -171,7 +172,7 @@ namespace {
         return true;
       }
       const auto before = archive_filter_bytes(value.get(), -1);
-      const auto status = archive_read_next_header(value.get(), &entry);
+      const auto status = nextHeader(value.get(), &entry, work);
       const auto format = archive_format(value.get()) & ARCHIVE_FORMAT_BASE_MASK;
       if (archive_read_has_encrypted_entries(value.get()) > 0) {
         if (format == ARCHIVE_FORMAT_7ZIP) {
@@ -196,6 +197,7 @@ namespace {
             && input.seek(0, SEEK_END) != before) {
           throwFileError(FileErrorKind::InvalidArgument, "RAR archive has a truncated trailing header.");
         }
+        requireArchiveEnd(value.get(), input);
         return false;
       }
       requireArchive(status, value.get(), work);

@@ -32,6 +32,8 @@ namespace luciole {
       {"tar.lz", "application/x-lzip-compressed-tar", ArchiveExtraNeed::Lzip},
       {"tar.z", "application/x-tarz", ArchiveExtraNeed::Compress},
       {"taz", "application/x-tarz", ArchiveExtraNeed::Compress},
+      {"a", "application/x-archive", ArchiveExtraNeed::None},
+      {"ar", "application/x-archive", ArchiveExtraNeed::None},
   });
 
   // Whether this build can read what `need` names.
