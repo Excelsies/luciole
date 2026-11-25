@@ -2,8 +2,10 @@
 #include "archive_sevenzip_fixtures.h"
 #include "event_loop/glib_poll_source.h"
 #include "fs/archive_container.h"
+#include "fs/archive_type.h"
 #include "fs/file_error.h"
 #include "fs/gio_ptr.h"
+#include "fs/native_listing.h"
 #include "operations/archive_service.h"
 #include "temp_folder.h"
 #include "test_check.h"
@@ -12,8 +14,10 @@
 #include <archive.h>
 #include <archive_entry.h>
 #include <chrono>
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <map>
 #include <memory>
 #include <poll.h>
 #include <print>
@@ -159,15 +163,23 @@ namespace {
     TEST_CHECK(luciole::isBrowsableArchive(location(source), std::string(type.mime)));
   }
 
+  std::string decoded(std::string_view base64) {
+    gsize size = 0;
+    const std::unique_ptr<guchar, decltype(&g_free)> bytes(g_base64_decode(base64.data(), &size), &g_free);
+    TEST_CHECK(bytes && size > 32);
+    return bytes ? std::string(reinterpret_cast<const char*>(bytes.get()), size) : std::string();
+  }
   // The 7-Zip and RAR files come from the fixtures the archive service test uses.
-  void sevenZipContainer(const Folder& folder) {
+  std::string sevenZipBytes() {
     const auto* fixture = std::ranges::find(sevenzip_fixtures::archives, "lzma2", &sevenzip_fixtures::Fixture::name);
     TEST_CHECK(fixture != sevenzip_fixtures::archives.end());
-    gsize size = 0;
-    const std::unique_ptr<guchar, decltype(&g_free)> bytes(g_base64_decode(fixture->base64.data(), &size), &g_free);
-    TEST_CHECK(bytes && size > 32);
+    return fixture != sevenzip_fixtures::archives.end() ? decoded(fixture->base64) : std::string();
+  }
+  std::string rarBytes() { return decoded(rar_fixtures::archives.front().base64); }
+
+  void sevenZipContainer(const Folder& folder) {
     const auto source = folder.root / "sample.cb7";
-    write(source, {reinterpret_cast<const char*>(bytes.get()), size});
+    write(source, sevenZipBytes());
     luciole::ArchiveService service;
     TEST_CHECK(service.inspect(location(source)));
     waitFor(service);
@@ -184,11 +196,8 @@ namespace {
   }
   void rarContainer(const Folder& folder) {
     const auto& reference = rar_fixtures::archives.front();
-    gsize size = 0;
-    const std::unique_ptr<guchar, decltype(&g_free)> bytes(g_base64_decode(reference.base64.data(), &size), &g_free);
-    TEST_CHECK(bytes && size > 32);
     const auto source = folder.root / "sample.cbr";
-    write(source, {reinterpret_cast<const char*>(bytes.get()), size});
+    write(source, rarBytes());
     luciole::ArchiveService service;
     TEST_CHECK(service.inspect(location(source)));
     waitFor(service);
@@ -212,6 +221,61 @@ namespace {
     waitFor(service);
     TEST_CHECK(!service.error() && read(folder.root / "app" / "payload.txt") == kPayload);
     TEST_CHECK(fs::is_regular_file(source));
+  }
+
+  // The content type the listing reports for a local file: the name's guess, and GIO's own answer where the name does
+  // not decide.
+  std::map<std::string, std::string> reportedTypes(const fs::path& directory) {
+    const auto listing = luciole::listNativeFolder(directory.string(), 1000, nullptr);
+    TEST_CHECK(!listing.unsupported && !listing.limited);
+    std::map<std::string, std::string> types;
+    for (std::size_t index = 0; index < listing.entries.size(); ++index) {
+      const auto& entry = listing.entries[index];
+      std::string type = entry.contentType ? entry.contentType->c_str() : "";
+      if (std::ranges::contains(listing.uncertain, static_cast<std::uint32_t>(index))) {
+        type = luciole::sniffContentType((directory / entry.name).string()).value_or("");
+      }
+      types[entry.name] = type;
+    }
+    return types;
+  }
+
+  // browsesByDefault is the table's own claim, so the system's answer cannot change it. A type that has a content type
+  // of its own is never on by default. Where the system reports a plain archive for a type, the table must say it
+  // browses; any other report is a different MIME database, printed and not failed.
+  void theDefaultMatchesWhatTheSystemReports(const Folder& folder) {
+    const auto directory = folder.root / "reported";
+    fs::create_directory(directory);
+    for (const auto& type : luciole::kArchiveContainerTypes) {
+      const auto path = directory / ("sample." + std::string(type.name));
+      if (type.format == ArchiveContainerFormat::SevenZip) {
+        write(path, sevenZipBytes());
+      } else if (type.format == ArchiveContainerFormat::Rar) {
+        write(path, rarBytes());
+      } else {
+        generate(path, type);
+      }
+    }
+    const auto reported = reportedTypes(directory);
+    TEST_CHECK(reported.size() == luciole::kArchiveContainerCount);
+    for (const auto& type : luciole::kArchiveContainerTypes) {
+      TEST_CHECK(!type.browsesByDefault || type.mime.empty());
+      const auto name = "sample." + std::string(type.name);
+      const auto found = reported.find(name);
+      TEST_CHECK(found != reported.end());
+      if (found == reported.end()) {
+        continue;
+      }
+      const bool plain = luciole::isSupportedArchive(location(directory / name), found->second);
+      if (plain == type.browsesByDefault) {
+        continue;
+      }
+      std::println(
+          stderr, "{}: this system reports '{}', so Open {} it; the table says browsesByDefault = {}", type.name,
+          found->second, plain ? "browses" : "does not browse", type.browsesByDefault
+      );
+      TEST_CHECK(!plain);
+    }
   }
 
   // A container name on a file that is no archive fails like a broken .zip: an error, no catalog, nothing written.
@@ -248,6 +312,7 @@ int main() {
     }
   }
   extractHereBesideTheFile(folder);
+  theDefaultMatchesWhatTheSystemReports(folder);
   const std::string elf = std::string("\x7f") + "ELF" + std::string(60, '\x01');
   for (const auto* suffix : {"jar", "cbt", "crate"}) {
     for (const auto& body : {std::string(), std::string("plain text, not an archive\n"), elf}) {

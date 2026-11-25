@@ -169,26 +169,35 @@ namespace {
     }
     for (const auto& type : luciole::kArchiveContainerTypes) {
       auto* toggle = rowToggle(*rig.dialog, type.label);
-      TEST_CHECK(toggle != nullptr && !toggle->checked());
+      TEST_CHECK(toggle != nullptr && toggle->checked() == type.browsesByDefault);
     }
+  }
+
+  luciole::ArchiveContainerSet withType(luciole::ArchiveContainerSet set, std::string_view name, bool on) {
+    set.set(*luciole::archiveContainerByName(name), on);
+    return set;
   }
 
   void aSwitchSavesTheWholeList(Rig& rig) {
     luciole::BrowserSettings settings;
+    const auto defaults = settings.openAsArchive;
     rig.dialog->sync(settings, settings, false, "");
     auto* jar = rowToggle(*rig.dialog, "Java Archive (.jar)");
     auto* epub = rowToggle(*rig.dialog, "EPUB Book (.epub)");
-    TEST_CHECK(jar != nullptr && epub != nullptr);
+    auto* whl = rowToggle(*rig.dialog, "Python Wheel (.whl)");
+    TEST_CHECK(jar != nullptr && epub != nullptr && whl != nullptr);
+    TEST_CHECK(!jar->checked() && !epub->checked() && whl->checked());
     rig.reveal(*jar);
     test::audio::keepIfAsked(rig.frame(), "settings-archive-like-files.png");
     rig.click(*jar);
     TEST_CHECK(rig.edits.size() == 1);
-    TEST_CHECK(rig.edits.back().value(P::OpenAsArchive) == std::optional(setOf({"jar"})));
+    TEST_CHECK(rig.edits.back().value(P::OpenAsArchive) == std::optional(withType(defaults, "jar", true)));
     TEST_CHECK(jar->checked() && !epub->checked());
     rig.reveal(*epub);
     rig.click(*epub);
-    TEST_CHECK(rig.edits.back().value(P::OpenAsArchive) == std::optional(setOf({"jar", "epub"})));
-    // Switching the last one off restores the inherited value, which removes the override.
+    const auto both = withType(withType(defaults, "jar", true), "epub", true);
+    TEST_CHECK(rig.edits.back().value(P::OpenAsArchive) == std::optional(both));
+    // Switching the last two off restores the inherited value, which removes the override.
     rig.reveal(*jar);
     rig.click(*jar);
     rig.reveal(*epub);
@@ -197,7 +206,14 @@ namespace {
         rig.edits.back().preference() == luciole::BrowserPreferenceId::OpenAsArchive
         && !rig.edits.back().value(P::OpenAsArchive).has_value()
     );
-    TEST_CHECK(!jar->checked() && !epub->checked());
+    TEST_CHECK(!jar->checked() && !epub->checked() && whl->checked());
+    // A default type switched off is an override of the rest of the list.
+    rig.reveal(*whl);
+    rig.click(*whl);
+    TEST_CHECK(rig.edits.back().value(P::OpenAsArchive) == std::optional(withType(defaults, "whl", false)));
+    TEST_CHECK(!whl->checked());
+    rig.click(*whl);
+    TEST_CHECK(!rig.edits.back().value(P::OpenAsArchive).has_value() && whl->checked());
     // A change made elsewhere shows in the switches.
     settings.openAsArchive = setOf({"apk"});
     rig.dialog->sync(settings, luciole::BrowserSettings{}, false, "");

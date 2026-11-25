@@ -123,6 +123,16 @@ namespace {
       const auto label = luciole::archiveFamilyLabel(static_cast<luciole::ArchiveFamily>(family));
       TEST_CHECK(docs.contains("- " + std::string(label) + ": "));
     }
+    // The paragraph on Open names every type that browses by default.
+    const auto start = docs.find("Open (double-click, Enter or Open) uses");
+    TEST_CHECK(start != std::string::npos);
+    const auto paragraph = docs.substr(start, docs.find('\n', start) - start);
+    const auto config = read(fs::path(source) / "docs/user/configuration.md");
+    for (const auto& type : luciole::kArchiveContainerTypes) {
+      const auto suffix = "`." + std::string(type.name) + "`";
+      TEST_CHECK(paragraph.contains(suffix) == type.browsesByDefault);
+      TEST_CHECK(config.contains("`" + std::string(type.name) + "`") || !type.browsesByDefault);
+    }
   }
 
   void recognitionBySuffix() {
@@ -321,12 +331,61 @@ namespace {
     return {std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>()};
   }
 
-  void theSettingDefaultsToNone() {
+  // What the settings say Open does with a file the system reports as a plain archive.
+  bool opens(const luciole::ConfigService& service, std::string_view name, std::string_view mime) {
+    return luciole::opensAsArchive(file(name), mime, service.settings().browser.openAsArchive);
+  }
+
+  void theSettingDefaultsToTheTypesThatBrowsedBefore() {
     Fixture fixture;
     luciole::ConfigService service(fixture.paths());
-    TEST_CHECK(service.reload() && service.settings().browser.openAsArchive.none());
+    TEST_CHECK(service.reload());
+    TEST_CHECK(opens(service, "lib.whl", "application/zip") && opens(service, "gem.gem", "application/x-tar"));
+    TEST_CHECK(!opens(service, "app.jar", "application/java-archive") && !opens(service, "a.docx", ""));
+    TEST_CHECK(opens(service, "a.zip", "application/zip"));
+    // The default is exactly the table's marked types.
+    for (std::size_t index = 0; index < luciole::kArchiveContainerCount; ++index) {
+      TEST_CHECK(
+          service.settings().browser.openAsArchive.test(index)
+          == luciole::kArchiveContainerTypes[index].browsesByDefault
+      );
+    }
+    // A base file without the key keeps the default.
+    fixture.write("config.toml", "[browser]\nshow_hidden = true\n");
+    TEST_CHECK(service.reload() && opens(service, "lib.whl", "application/zip"));
+  }
+
+  void anExplicitListReplacesTheDefault() {
+    Fixture fixture;
+    luciole::ConfigService service(fixture.paths());
     fixture.write("config.toml", "[browser]\nopen_as_archive = []\n");
     TEST_CHECK(service.reload() && service.settings().browser.openAsArchive.none());
+    TEST_CHECK(!opens(service, "lib.whl", "application/zip") && !opens(service, "gem.gem", "application/x-tar"));
+    TEST_CHECK(!opens(service, "app.jar", ""));
+    fixture.write("config.toml", "[browser]\nopen_as_archive = [\"jar\"]\n");
+    TEST_CHECK(service.reload());
+    TEST_CHECK(opens(service, "app.jar", ""));
+    TEST_CHECK(!opens(service, "lib.whl", "application/zip") && !opens(service, "gem.gem", "application/x-tar"));
+    TEST_CHECK(!opens(service, "a.docx", ""));
+  }
+
+  // Choosing the default stores no override; choosing none stores [] so the default no longer applies.
+  void theDefaultNeedsNoOverride() {
+    Fixture fixture;
+    luciole::ConfigService service(fixture.paths());
+    TEST_CHECK(service.reload());
+    const auto defaults = service.settings().browser.openAsArchive;
+    TEST_CHECK(defaults.any());
+    const std::array none{luciole::OverrideEdit{luciole::BrowserPreference::OpenAsArchive, ArchiveContainerSet{}}};
+    TEST_CHECK(service.saveOverrides(none) == luciole::AtomicWriteState::Durable);
+    TEST_CHECK(read(fixture.paths().overrides).contains("open_as_archive = []"));
+    luciole::ConfigService emptied(fixture.paths());
+    TEST_CHECK(emptied.reload() && emptied.settings().browser.openAsArchive.none());
+    const std::array inherit{luciole::OverrideEdit{luciole::BrowserPreference::OpenAsArchive, std::nullopt}};
+    TEST_CHECK(emptied.saveOverrides(inherit) == luciole::AtomicWriteState::Durable);
+    luciole::ConfigService again(fixture.paths());
+    TEST_CHECK(again.reload() && again.settings().browser.openAsArchive == defaults);
+    TEST_CHECK(!read(fixture.paths().overrides).contains("open_as_archive"));
   }
 
   void theSettingReadsTypeNames() {
@@ -402,7 +461,9 @@ int main() {
   theMenuAlwaysBrowsesAContainer();
   openFollowsTheSetting();
   thePreviewListsASwitchedOnContainer();
-  theSettingDefaultsToNone();
+  theSettingDefaultsToTheTypesThatBrowsedBefore();
+  anExplicitListReplacesTheDefault();
+  theDefaultNeedsNoOverride();
   theSettingReadsTypeNames();
   theSettingRejectsWhatItDoesNotKnow();
   theSettingSavesAndInherits();

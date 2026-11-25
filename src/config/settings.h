@@ -102,7 +102,8 @@ namespace luciole {
     std::string terminalCommand;
     bool recordVisits = true; // count folder entries and file opens for the visits measure
     WorkbenchSettings workbench;
-    ArchiveContainerSet openAsArchive; // container types that open in the archive browser, not their application
+    // container types that open in the archive browser, not their application
+    ArchiveContainerSet openAsArchive = archiveContainersBrowsingByDefault();
     KeybindConfig keybinds;
     bool operator==(const BrowserSettings&) const = default;
   };

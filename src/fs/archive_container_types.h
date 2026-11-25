@@ -31,6 +31,8 @@ namespace luciole {
     ArchiveFamily family;
     ArchiveContainerFormat format;
     std::string_view mime; // the type of its own the system reports for it; empty when the suffix alone names it
+    // The system reports it as a plain archive, so it opens in the archive browser until switched off.
+    bool browsesByDefault = false;
   };
 
   namespace archive_container_table {
@@ -39,12 +41,12 @@ namespace luciole {
     inline constexpr auto kArchiveContainerTypes = std::to_array<ArchiveContainerType>({
         {"jar", "Java Archive (.jar)", Java, Zip, "application/java-archive"},
         {"war", "Web Application Archive (.war)", Java, Zip, ""},
-        {"ear", "Enterprise Archive (.ear)", Java, Zip, ""},
-        {"aar", "Android Library (.aar)", Java, Zip, ""},
+        {"ear", "Enterprise Archive (.ear)", Java, Zip, "", true},
+        {"aar", "Android Library (.aar)", Java, Zip, "", true},
         {"apk", "Android Package (.apk)", Android, Zip, "application/vnd.android.package-archive"},
         {"aab", "Android App Bundle (.aab)", Android, Zip, "application/vnd.android.app-bundle"},
-        {"apks", "Android Package Set (.apks)", Android, Zip, ""},
-        {"xapk", "Extended Android Package (.xapk)", Android, Zip, ""},
+        {"apks", "Android Package Set (.apks)", Android, Zip, "", true},
+        {"xapk", "Extended Android Package (.xapk)", Android, Zip, "", true},
         {"docx", "Word Document (.docx)", OfficeOpenXml, Zip,
          "application/vnd.openxmlformats-officedocument.wordprocessingml.document"},
         {"docm", "Word Macro Document (.docm)", OfficeOpenXml, Zip, "application/vnd.ms-word.document.macroEnabled.12"},
@@ -89,30 +91,30 @@ namespace luciole {
         {"cb7", "Comic Book, 7z (.cb7)", Books, SevenZip, "application/x-cb7"},
         {"cbt", "Comic Book, TAR (.cbt)", Books, Tar, "application/x-cbt"},
         {"xpi", "Firefox Extension (.xpi)", Packages, Zip, "application/x-xpinstall"},
-        {"vsix", "Visual Studio Code Extension (.vsix)", Packages, Zip, ""},
-        {"nupkg", "NuGet Package (.nupkg)", Packages, Zip, ""},
-        {"whl", "Python Wheel (.whl)", Packages, Zip, ""},
-        {"egg", "Python Egg (.egg)", Packages, Zip, ""},
+        {"vsix", "Visual Studio Code Extension (.vsix)", Packages, Zip, "", true},
+        {"nupkg", "NuGet Package (.nupkg)", Packages, Zip, "", true},
+        {"whl", "Python Wheel (.whl)", Packages, Zip, "", true},
+        {"egg", "Python Egg (.egg)", Packages, Zip, "", true},
         {"oxt", "OpenOffice Extension (.oxt)", Packages, Zip, "application/vnd.openofficeorg.extension"},
-        {"ipa", "iOS App (.ipa)", Packages, Zip, ""},
+        {"ipa", "iOS App (.ipa)", Packages, Zip, "", true},
         {"appx", "Windows App Package (.appx)", Packages, Zip, "application/appx"},
         {"msix", "Windows MSIX Package (.msix)", Packages, Zip, "application/msix"},
-        {"crate", "Rust Crate (.crate)", Packages, TarGzip, ""},
-        {"gem", "Ruby Gem (.gem)", Packages, Tar, ""},
+        {"crate", "Rust Crate (.crate)", Packages, TarGzip, "", true},
+        {"gem", "Ruby Gem (.gem)", Packages, Tar, "", true},
         {"kmz", "Google Earth Placemarks (.kmz)", Graphics, Zip, "application/vnd.google-earth.kmz"},
         {"3mf", "3D Manufacturing Model (.3mf)", Graphics, Zip, "model/3mf"},
-        {"usdz", "Universal Scene Description (.usdz)", Graphics, Zip, ""},
+        {"usdz", "Universal Scene Description (.usdz)", Graphics, Zip, "", true},
         {"ora", "OpenRaster Image (.ora)", Graphics, Zip, "image/openraster"},
         {"kra", "Krita Document (.kra)", Graphics, Zip, "application/x-krita"},
-        {"mcpack", "Minecraft Pack (.mcpack)", Games, Zip, ""},
-        {"mcworld", "Minecraft World (.mcworld)", Games, Zip, ""},
-        {"mcaddon", "Minecraft Add-On (.mcaddon)", Games, Zip, ""},
-        {"mctemplate", "Minecraft World Template (.mctemplate)", Games, Zip, ""},
+        {"mcpack", "Minecraft Pack (.mcpack)", Games, Zip, "", true},
+        {"mcworld", "Minecraft World (.mcworld)", Games, Zip, "", true},
+        {"mcaddon", "Minecraft Add-On (.mcaddon)", Games, Zip, "", true},
+        {"mctemplate", "Minecraft World Template (.mctemplate)", Games, Zip, "", true},
         {"mrpack", "Modrinth Modpack (.mrpack)", Games, Zip, "application/x-modrinth-modpack+zip"},
-        {"pk3", "Quake III Package (.pk3)", Games, Zip, ""},
-        {"pk4", "Doom 3 Package (.pk4)", Games, Zip, ""},
-        {"love", "LÖVE Game (.love)", Games, Zip, ""},
-        {"sb3", "Scratch Project (.sb3)", Games, Zip, ""},
+        {"pk3", "Quake III Package (.pk3)", Games, Zip, "", true},
+        {"pk4", "Doom 3 Package (.pk4)", Games, Zip, "", true},
+        {"love", "LÖVE Game (.love)", Games, Zip, "", true},
+        {"sb3", "Scratch Project (.sb3)", Games, Zip, "", true},
     });
   } // namespace archive_container_table
   // The one list of archive containers: recognition, the setting, the Settings page and the tests read it.
@@ -121,6 +123,15 @@ namespace luciole {
 
   // Which types open in the archive browser: bit i is kArchiveContainerTypes[i].
   using ArchiveContainerSet = std::bitset<kArchiveContainerCount>;
+
+  // The types marked browsesByDefault: the default of the open_as_archive setting.
+  constexpr ArchiveContainerSet archiveContainersBrowsingByDefault() {
+    ArchiveContainerSet set;
+    for (std::size_t index = 0; index < kArchiveContainerCount; ++index) {
+      set.set(index, kArchiveContainerTypes[index].browsesByDefault);
+    }
+    return set;
+  }
 
   constexpr std::string_view archiveFamilyLabel(ArchiveFamily family) {
     switch (family) {
