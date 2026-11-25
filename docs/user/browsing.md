@@ -78,7 +78,7 @@ Network protocols require their installed GVfs backends and a session D-Bus conn
 
 ### Network share automounts
 
-Open an NFS or SMB share from the sidebar or enter its local mount path. Systemd mounts it using your fstab entry or native automount unit, even without `user` in fstab. The share stays in the sidebar while idle. If the automount is stopped or the NAS is unreachable, Luciole shows an error.
+Open an NFS or SMB share from the sidebar or enter its local mount path. Systemd mounts it using your fstab entry or native automount unit, even without `user` in fstab. The share stays in the sidebar while idle. If the automount is stopped or the NAS is unreachable, Luciole shows an error; file operations, program launches, and terminal actions on the share fail the same way instead of using the local folder beneath it. Permanent deletion refuses a folder that contains a share's mount point, and recursive permission changes skip the share.
 
 Use **Refresh** to see folder changes.
 
@@ -151,6 +151,8 @@ The tab bar is shown by default even with one tab. Settings → Appearance → A
 Middle-click a folder, breadcrumb or Places row, or use a folder's Open In → New Tab menu, to open it in another tab. Settings → General → Switch to New Folder Tabs is on by default. Turn it off to load those folders in background tabs while keeping your current tab, focused pane, search, selection and scroll. Shift+middle-click reverses the preference for that one opening. Click the tab or use Ctrl+Tab to visit it when ready.
 
 Drag a tab along the tab bar to reorder it. A copy of the tab follows the pointer and a marker shows where it will land. When the tabs don't all fit, holding it near either end of the bar scrolls the bar. Drag it below the toolbar and release to move it into a new window; with Single Window on, or with only one tab, the drop stays in the tab bar. Escape cancels the drag.
+
+The empty part of the tab bar works as the window's title bar: drag it to move the window, double-click it to maximize or restore the window, and right-click it for the compositor's window menu. The window menu depends on the compositor; some offer none.
 
 Ctrl+T, the plus button and explicit New Tab menu actions always switch to the new tab. Duplicating or reopening a tab also selects it, and New Window retains its normal focus behavior. The folder-tab preference does not change those actions.
 

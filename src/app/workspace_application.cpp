@@ -871,7 +871,7 @@ void WorkspaceApplication::pointer(const PointerEvent& event) {
     }
     if (event.type == PointerEvent::Type::Button
         && event.pressed
-        && event.button == BTN_LEFT
+        && (event.button == BTN_LEFT || event.button == BTN_RIGHT)
         && host->tabScroll->containsScenePoint(x, y)) {
       bool child = host->newTabButton->containsScenePoint(x, y);
       for (const auto& [tab, button] : host->buttons) {
@@ -880,7 +880,18 @@ void WorkspaceApplication::pointer(const PointerEvent& event) {
         Node::absolutePosition(button, bx, by);
         child |= x >= bx && x <= bx + button->width();
       }
-      if (!child) {
+      // The empty strip works as a title bar, as browsers' tab strips do: double-click toggles maximized and a right
+      // click opens the compositor's window menu. A compositor that decorates the window may still draw no title bar.
+      const bool titlebar = !child && !host->surface.fullscreen();
+      if (titlebar && event.button == BTN_RIGHT) {
+        host->surface.showWindowMenu(event.serial, static_cast<std::int32_t>(x), static_cast<std::int32_t>(y));
+        return;
+      }
+      if (!child && event.button == BTN_LEFT) {
+        if (titlebar && host->stripMove.doubleClick(event.time, x, y)) {
+          host->surface.toggleMaximized();
+          return;
+        }
         host->stripMove.press(event.serial, x, y);
         return;
       }
