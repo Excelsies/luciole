@@ -80,7 +80,8 @@ These are pkg-config modules or header paths. Install the corresponding developm
 | `gdk-pixbuf-2.0` | 2.42+; a Glycin-enabled 2.44+ build is recommended |
 | `glycin-2` | 2.0.1+; decodes animated GIF, APNG and WebP |
 | `librsvg-2.0`, `libpng` | SVG and PNG libraries |
-| `libarchive`, `liblzma` | Archive libraries |
+| `libarchive` | Archive library |
+| `liblzma` | 5.4+; decodes XZ, LZMA-alone and lzip streams |
 | `libacl` | POSIX ACL library |
 | `tomlplusplus` | 3.4+ |
 | `nlohmann_json` | JSON library |
