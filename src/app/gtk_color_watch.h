@@ -14,7 +14,8 @@ namespace luciole {
   // files calls `changed`: the folder of the root stylesheet (its nearest existing ancestor until it exists) and the
   // folder of each file tried, read or not (the closest existing ancestor of a folder that is missing), and the
   // folder of the target of any link among them (once when it is the same directory), at most kMostFolders in all.
-  // A folder that is replaced by another at the same path is watched again from the next `follow`.
+  // A folder that is replaced by another at the same path is watched again from the next `follow`, and the folder
+  // that holds a linked folder is watched too, last, so repointing the link is seen.
   class GtkColorWatch {
   public:
     static constexpr std::size_t kMostFolders = 8;

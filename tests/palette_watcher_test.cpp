@@ -169,6 +169,7 @@ namespace {
     fs::remove_all(config / "gtk-old");
     waitFor([&] { return ::palette.surface == hex("#223344"); }, "replaced folder");
     write(gtk / "gtk.css", gtkCss("#334455", "#00aa55"));
+    // Inside the 2.5 s bound only a new monitor sees this; the file monitor's own recovery takes about 4 s.
     waitFor([&] { return ::palette.surface == hex("#334455"); }, "rewrite in the replaced folder", 2500);
   }
 
@@ -193,6 +194,37 @@ namespace {
     TEST_CHECK(::palette.surface == hex("#556677"));
     write(second / "gtk.css", gtkCss("#667788", "#00aa55"));
     waitFor([&] { return ::palette.surface == hex("#667788"); }, "rewrite behind the repointed link", 2500);
+  }
+
+  // gtk-4.0 itself is a link that a dotfile manager repoints atomically; the sheet it imports is watched in the
+  // new folder from then on, and the repoint shows by itself.
+  void testRepointedRootFolder() {
+    const luciole::test::TempFolder folder("palette-watcher-root-link");
+    const auto config = folder.path() / "config";
+    fs::create_directories(config);
+    TEST_CHECK(::setenv("XDG_CONFIG_HOME", config.c_str(), 1) == 0);
+    const auto first = folder.path() / "theme-a";
+    const auto second = folder.path() / "theme-b";
+    for (const auto& dir : {first, second}) {
+      write(dir / "gtk.css", "@import \"sheet.css\";\n");
+    }
+    write(first / "sheet.css", gtkCss("#445566", "#00aa55"));
+    write(second / "sheet.css", gtkCss("#556677", "#00aa55"));
+    fs::create_directory_symlink(first, config / "gtk-4.0");
+    luciole::PaletteWatcher watcher(ColorScheme::Auto);
+    TEST_CHECK(::palette.surface == hex("#445566"));
+
+    fs::create_directory_symlink(second, config / "gtk-4.0.new");
+    fs::rename(config / "gtk-4.0.new", config / "gtk-4.0");
+    waitFor([&] { return ::palette.surface == hex("#556677"); }, "repointed folder link", 2500);
+    write(second / "sheet.css", gtkCss("#667788", "#00aa55"));
+    waitFor([&] { return ::palette.surface == hex("#667788"); }, "rewrite behind the repointed folder", 2500);
+    // The old target is no longer watched, and a write there changes nothing.
+    write(first / "sheet.css", gtkCss("#010203", "#00aa55"));
+    settle();
+    TEST_CHECK(::palette.surface == hex("#667788"));
+    write(second / "sheet.css", gtkCss("#778899", "#00aa55"));
+    waitFor([&] { return ::palette.surface == hex("#778899"); }, "second rewrite behind the repointed folder", 2500);
   }
 
   // A folder reached through a linked parent is one folder.
@@ -261,6 +293,7 @@ int main() {
   testStableFoldersReportNoChange();
   testReplacedFolders();
   testRepointedLink();
+  testRepointedRootFolder();
   testFollowsDesktopColorsAndColorFile();
   std::println("palette watcher checks passed");
   return 0;

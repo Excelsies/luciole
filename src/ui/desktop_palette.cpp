@@ -4,7 +4,9 @@
 #include "ui/palette_file.h"
 
 #include <algorithm>
+#include <array>
 #include <initializer_list>
+#include <limits>
 #include <string_view>
 
 namespace {
@@ -125,18 +127,27 @@ namespace {
   }
 
   // Secondary text: from the surface toward the text color, from 55% on, until it reads at 3:1 on the surface and on
-  // every fill it is drawn on: the highest container and the selected-row fill.
+  // every fill it is drawn on: the highest container and the selected-row fill. When no step does, black or white,
+  // whichever reads better on the fill it reads worst on.
   Color variantText(const Base& base, const Color& highest, const Color& selected) {
+    const std::array fills{base.surface, highest, selected};
+    const auto worst = [&fills](const Color& text) {
+      float least = std::numeric_limits<float>::max();
+      for (const auto& fill : fills) {
+        least = std::min(least, contrastRatio(text, fill));
+      }
+      return least;
+    };
     for (int step = 0; step < kStrideSteps; ++step) {
       const float t = std::min(1.0F, kVariantStart + (kVariantStride * static_cast<float>(step)));
       const Color candidate = mixOklab(base.surface, base.onSurface, t);
-      if (contrastRatio(candidate, base.surface) >= kVariantRatio
-          && contrastRatio(candidate, highest) >= kVariantRatio
-          && contrastRatio(candidate, selected) >= kVariantRatio) {
+      if (worst(candidate) >= kVariantRatio) {
         return candidate;
       }
     }
-    return readableTextColorForBackground(base.surface);
+    const Color black = rgba(0.0F, 0.0F, 0.0F);
+    const Color white = rgba(1.0F, 1.0F, 1.0F);
+    return worst(white) > worst(black) ? white : black;
   }
 
   // A quiet line: from 16% of the way to the text color, in steps, until it shows on the surface and the container.

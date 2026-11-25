@@ -69,6 +69,13 @@ bool luciole::GtkColorWatch::follow(const fs::path& root, const std::vector<fs::
         }
       }
     }
+    // A folder that is a link is repointed in the folder that holds it.
+    for (std::size_t i = 0, count = folders.size(); i < count; ++i) {
+      std::error_code linked;
+      if (fs::is_symlink(folders[i], linked)) {
+        folders.push_back(folders[i].parent_path());
+      }
+    }
     for (const auto& folder : folders) {
       auto existing = nearestExisting(folder);
       if (std::ranges::find(wanted, existing) == wanted.end()) {
@@ -94,6 +101,10 @@ bool luciole::GtkColorWatch::follow(const fs::path& root, const std::vector<fs::
     }
     // A new folder, or one replaced since its monitor started, which that monitor no longer sees.
     changed = changed || kept != m_folders.end();
+    // The old monitor goes first: a second monitor on the same path would share its watch on the old directory.
+    if (kept != m_folders.end()) {
+      kept->monitor.reset();
+    }
     std::unique_ptr<DirectoryWatch> monitor;
     if (identity) {
       monitor = DirectoryWatch::start(path, [this](const fs::path& where) {

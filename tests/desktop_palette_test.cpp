@@ -312,6 +312,19 @@ namespace {
     }
   }
 
+  // Mid-gray text on a mid-gray surface with a black accent: no step toward the text color reads on all three fills,
+  // and black, the better choice on the surface alone, would read 2.27:1 on the selected-row fill.
+  void testVariantFallbackReadsOnEveryFill() {
+    const auto p = fromCss(
+        "@define-color window_bg_color #777777;\n@define-color window_fg_color #222222;\n"
+        "@define-color accent_bg_color #000000;\n"
+    );
+    TEST_CHECK(p.onSurfaceVariant == hex("#ffffff"));
+    TEST_CHECK(ratio(p.onSurfaceVariant, p.surface) >= 3.0);
+    TEST_CHECK(ratio(p.onSurfaceVariant, p.surfaceContainerHighest) >= 3.0);
+    TEST_CHECK(ratio(p.onSurfaceVariant, p.primaryContainer) >= 3.0);
+  }
+
   void testRequiredNames() {
     const GtkColorTable full{
         {"window_bg_color", hex("#101010")}, {"window_fg_color", hex("#eeeeee")}, {"accent_bg_color", hex("#3584e4")}
@@ -485,6 +498,7 @@ int main() {
   testContrastFloors();
   testContainersAreOrdered();
   testVariantFollowsTheColors();
+  testVariantFallbackReadsOnEveryFill();
   testRequiredNames();
   testExactMapping();
   testPreferenceOrder();
