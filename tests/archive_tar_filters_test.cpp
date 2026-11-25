@@ -320,6 +320,39 @@ namespace {
     }
   }
 
+  void lzipMembersAndTrailingData(const Folder& folder) {
+    const auto& kind = kinds()[2];
+    TEST_CHECK(kind.filter == ARCHIVE_FILTER_LZIP);
+    const auto tar = plainTar(sampleMembers());
+    const auto single = read(makeFile(folder, kind, "member1", tar));
+    TEST_CHECK(!inspect(folder.root / "member1.tar.lz").error);
+    // One TAR in two members, as tools that compress in blocks write it, opens and unpacks whole.
+    const auto cut = std::size_t{4096};
+    const auto first = read(makeFile(folder, kind, "half-a", tar.substr(0, cut)));
+    const auto second = read(makeFile(folder, kind, "half-b", tar.substr(cut)));
+    write(folder.root / "two-members.tar.lz", first + second);
+    const auto both = inspect(folder.root / "two-members.tar.lz");
+    TEST_CHECK(!both.error && hasEntry(both, "docs/a.txt") && hasEntry(both, "big.bin"));
+    const auto out = folder.root / "two-members-out";
+    TEST_CHECK(!extract(folder.root / "two-members.tar.lz", out).error);
+    TEST_CHECK(read(out / "big.bin") == pseudoRandom(200000) && read(out / "docs/a.txt") == "alpha\n");
+    // Whatever follows the last member is refused, down to a cut piece of the next member's magic number.
+    const auto refusedWith = [&](const std::string& bytes, const std::string& name) {
+      rejected(folder, bytes, name);
+      const auto found = inspect(folder.root / ("bad-" + name));
+      TEST_CHECK(found.error && found.error->message.contains("Lzip archive has data after its end"));
+    };
+    refusedWith(single + "junk", "lz-junk.tar.lz");
+    refusedWith(single + std::string(512, '\0'), "lz-zeros.tar.lz");
+    refusedWith(first + second + "trailing bytes", "lz-two-junk.tar.lz");
+    for (const auto* piece : {"L", "LZ", "LZI"}) {
+      const auto name = std::string("lz-magic-") + piece + ".tar.lz";
+      rejected(folder, single + piece, name);
+      const auto found = inspect(folder.root / ("bad-" + name));
+      TEST_CHECK(found.error && found.error->message.contains("Lzip archive is corrupt or truncated"));
+    }
+  }
+
   void trailingDataAfterLzmaAloneFails(const Folder& folder) {
     const auto& kind = kinds()[1];
     const auto good = read(makeFile(folder, kind, "tail", plainTar(sampleMembers())));
@@ -334,6 +367,9 @@ int main() {
   const Folder folder;
   filesOfOtherFormatsKeepTheirReader(folder);
   trailingDataAfterLzmaAloneFails(folder);
+  if (kinds()[2].available) {
+    lzipMembersAndTrailingData(folder);
+  }
   for (const auto& kind : kinds()) {
     if (!kind.available) {
       continue;

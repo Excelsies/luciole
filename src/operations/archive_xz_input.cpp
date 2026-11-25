@@ -32,7 +32,8 @@ namespace {
     case LzmaContainer::Alone:
       return lzma_alone_decoder(stream, DecoderMemoryLimit);
     case LzmaContainer::Lzip:
-      return lzma_lzip_decoder(stream, DecoderMemoryLimit, LZMA_CONCATENATED);
+      // One member at a time: with LZMA_CONCATENATED liblzma ignores whatever is not a member after one.
+      return lzma_lzip_decoder(stream, DecoderMemoryLimit, 0);
     }
     return LZMA_PROG_ERROR;
   }
@@ -83,6 +84,12 @@ std::size_t luciole::archive_work::XzInput::read(std::span<char> buffer) {
       throwFileError(FileErrorKind::Unsupported, "Compressed archive exceeds its decoded-container limit.");
     }
     m_decoded += produced;
+    if (status == LZMA_STREAM_END && m_kind == LzmaContainer::Lzip && nextLzipMember()) {
+      continue;
+    }
+    if (status == LZMA_FORMAT_ERROR && m_laterMember) {
+      throwFileError(FileErrorKind::InvalidArgument, "Lzip archive has data after its end.");
+    }
     if (status == LZMA_STREAM_END) {
       m_finished = true;
       // LZMA-alone cannot be concatenated, so anything after its end is not part of the archive.
@@ -98,6 +105,27 @@ std::size_t luciole::archive_work::XzInput::read(std::span<char> buffer) {
     lzma_end(&m_stream);
   }
   return produced;
+}
+bool luciole::archive_work::XzInput::nextLzipMember() {
+  if (m_stream.avail_in == 0 && !m_eof) {
+    m_stream.avail_in = m_input.read(m_encoded);
+    m_stream.next_in = reinterpret_cast<const std::uint8_t*>(m_encoded.data());
+    m_eof = m_stream.avail_in == 0;
+  }
+  if (m_stream.avail_in == 0) {
+    return false;
+  }
+  // Restarting keeps the input position of the stream, which only the decoder state is reset from.
+  const auto* next = m_stream.next_in;
+  const auto available = m_stream.avail_in;
+  const auto status = startDecoder(&m_stream, m_kind);
+  if (status != LZMA_OK) {
+    decodeError(status, m_kind);
+  }
+  m_stream.next_in = next;
+  m_stream.avail_in = available;
+  m_laterMember = true;
+  return true;
 }
 void luciole::archive_work::XzInput::finish() {
   // TAR stops at its end markers; drain the remaining XZ frames, checks and
