@@ -275,7 +275,7 @@ void TransferController::extractedDrop(
       || !destination.isNative()
       || !options.canCopy
       || !options.select
-      || !luciole::opensAsArchive(payload.locations.front(), "", m_page.settings().openAsArchive)) {
+      || !luciole::isBrowsableArchive(payload.locations.front(), "")) {
     finish(false);
     return;
   }
@@ -284,7 +284,7 @@ void TransferController::extractedDrop(
     return;
   }
   const auto& source = payload.locations.front();
-  const auto target = destination.child(luciole::archiveFolderName(source));
+  const auto target = destination.child(luciole::archiveExtractFolderName(source));
   const auto job = m_page.jobs().create<luciole::ArchiveService>();
   if (!job->service<luciole::ArchiveService>().extract(source, target, {}, nullptr)) {
     finish(false);
@@ -549,7 +549,7 @@ void TransferController::chooseDrop(
   const bool canExtract = pending->payload.locations.size() == 1
       && destination.isNative()
       && pending->options.canCopy
-      && luciole::opensAsArchive(pending->payload.locations.front(), "", m_page.settings().openAsArchive);
+      && luciole::isBrowsableArchive(pending->payload.locations.front(), "");
   const bool canNewFolder = pending->options.canMove && destination.isNative();
   std::vector<ContextMenuControlEntry> entries;
   entries.push_back({.id = kDropCopy, .label = "Copy Here", .enabled = pending->options.canCopy, .shortcut = "Ctrl"});

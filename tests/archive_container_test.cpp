@@ -66,7 +66,7 @@ namespace {
       TEST_CHECK(std::ranges::contains(listed, type.name));
       TEST_CHECK(names.insert(type.name).second);
       TEST_CHECK(!type.label.empty() && type.label.contains("(." + std::string(type.name) + ")"));
-      TEST_CHECK(type.mime.empty() || mimes.insert(type.mime).second); // a type type has its own MIME type
+      TEST_CHECK(type.mime.empty() || mimes.insert(type.mime).second); // a type has its own MIME type
     }
     TEST_CHECK(luciole::archiveFamilyLabel(luciole::ArchiveFamily::Java) == "Java");
     TEST_CHECK(luciole::archiveFamilyLabel(luciole::ArchiveFamily::OfficeOpenXml) == "Office Open XML");
@@ -177,6 +177,54 @@ namespace {
     TEST_CHECK(!luciole::isBrowsableArchive(file("a.txt"), "text/plain"));
   }
 
+  // A name that makes a real archive, or a split or volume part, is never a container, whatever MIME type is reported.
+  void aRealArchiveNameBeatsTheMimeType() {
+    const auto* const openDocument = "application/vnd.oasis.opendocument.text";
+    for (const auto* name :
+         {"a.zip", "A.ZIP", "a.zip.001", "a.zip.002", "a.tar", "a.tar.gz", "a.tgz", "a.tar.bz2", "a.tar.xz",
+          "a.tar.zst", "a.7z", "a.7z.001", "a.rar", "a.part1.rar", "a.r00"}) {
+      const bool before = luciole::isSupportedArchive(file(name), "");
+      for (const auto* mime : {"application/epub+zip", "application/java-archive", openDocument}) {
+        TEST_CHECK(!luciole::archiveContainerType(file(name), mime));
+        TEST_CHECK(!luciole::isArchiveContainer(file(name), mime));
+        TEST_CHECK(luciole::opensAsArchive(file(name), mime, {}) == before);
+        TEST_CHECK(luciole::opensAsArchive(file(name), mime, setOf({"epub", "jar", "odt"})) == before);
+      }
+    }
+    TEST_CHECK(luciole::opensAsArchive(file("a.zip"), "application/epub+zip", {}));
+    TEST_CHECK(!luciole::opensAsArchive(file("a.zip.002"), "application/epub+zip", {}));
+    // A name that says nothing about the format keeps its MIME type.
+    TEST_CHECK(
+        luciole::archiveContainerType(file("book"), "application/epub+zip") == luciole::archiveContainerByName("epub")
+    );
+    TEST_CHECK(
+        luciole::archiveContainerType(file("book.dat"), "application/java-archive")
+        == luciole::archiveContainerByName("jar")
+    );
+  }
+
+  // The folder a file extracts into: the file name without its archive suffix, so it never equals the file.
+  void theExtractFolderDropsTheContainerSuffix() {
+    const auto name = [](std::string_view file_) { return luciole::archiveExtractFolderName(file(file_)); };
+    TEST_CHECK(name("app.jar") == "app");
+    TEST_CHECK(name("Book.EPUB") == "Book");
+    TEST_CHECK(name("Report.Final.docx") == "Report.Final");
+    TEST_CHECK(name("x.tar.jar") == "x.tar");
+    TEST_CHECK(name("comic.cbr") == "comic" && name("comic.cb7") == "comic" && name("comic.cbt") == "comic");
+    TEST_CHECK(name("lib.whl") == "lib" && name("pack.mcpack") == "pack");
+    TEST_CHECK(luciole::archiveCompressionAvailable(luciole::ArchiveCompression::Gzip));
+    TEST_CHECK(name("serde.crate") == "serde");
+    // Nothing left of the name.
+    TEST_CHECK(name(".jar") == "Archive" && name(".EPUB") == "Archive");
+    // Real archives and other files keep the results of archiveFolderName.
+    for (const auto* real : {"plain.zip", "A.TAR.GZ", "b.tgz", "c.7z", "d.rar", "e.tar", "f.zip.001", "g.tar.xz"}) {
+      TEST_CHECK(name(real) == luciole::archiveFolderName(file(real)));
+    }
+    TEST_CHECK(name("plain.zip") == "plain" && name("A.TAR.GZ") == "A" && name("f.zip.001") == "f");
+    TEST_CHECK(name("notes.txt") == "notes.txt" && name("download") == "download" && name("a.jarx") == "a.jarx");
+    TEST_CHECK(name(".zip") == "Archive");
+  }
+
   void theMenuAlwaysBrowsesAContainer() {
     for (const auto& type : luciole::kArchiveContainerTypes) {
       const auto name = "pack." + std::string(type.name);
@@ -240,14 +288,16 @@ namespace {
 
   void thePreviewListsASwitchedOnContainer() {
     using Kind = luciole::ColumnPreviewKind;
-    TEST_CHECK(luciole::columnPreviewKind(file("a.zip"), "application/zip", true, true) == Kind::Archive);
-    TEST_CHECK(luciole::columnPreviewKind(file("app.jar"), "application/java-archive", true, true) != Kind::Archive);
+    TEST_CHECK(luciole::columnPreviewKind(file("a.zip"), "application/zip", true, true, {}) == Kind::Archive);
+    TEST_CHECK(
+        luciole::columnPreviewKind(file("app.jar"), "application/java-archive", true, true, {}) != Kind::Archive
+    );
     TEST_CHECK(
         luciole::columnPreviewKind(file("app.jar"), "application/java-archive", true, true, setOf({"jar"}))
         == Kind::Archive
     );
     TEST_CHECK(luciole::columnPreviewKind(file("app.apk"), "", true, true, setOf({"jar"})) != Kind::Archive);
-    TEST_CHECK(luciole::columnPreviewKind(file("lib.whl"), "application/zip", true, true) != Kind::Archive);
+    TEST_CHECK(luciole::columnPreviewKind(file("lib.whl"), "application/zip", true, true, {}) != Kind::Archive);
     TEST_CHECK(
         luciole::columnPreviewKind(file("lib.whl"), "application/zip", true, true, setOf({"whl"})) == Kind::Archive
     );
@@ -346,6 +396,8 @@ int main() {
   aGzipContainerNeedsTheGzipFilter();
   recognitionBySuffix();
   recognitionByMimeType();
+  aRealArchiveNameBeatsTheMimeType();
+  theExtractFolderDropsTheContainerSuffix();
   realArchivesAreNotContainers();
   theMenuAlwaysBrowsesAContainer();
   openFollowsTheSetting();

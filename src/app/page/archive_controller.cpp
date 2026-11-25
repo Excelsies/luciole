@@ -11,7 +11,7 @@
 #include "core/input/key_modifiers.h"
 #include "core/input/key_symbols.h"
 #include "core/ui_phase.h"
-#include "fs/archive_type.h"
+#include "fs/archive_container.h"
 #include "fs/filename.h"
 #include "operations/archive_service.h"
 #include "platform/desktop_integration.h"
@@ -111,7 +111,7 @@ void ArchiveController::onFrame() {
 }
 
 luciole::Location ArchiveController::destination(const luciole::Location& source) {
-  return source.parent().value_or(source).child(luciole::archiveFolderName(source));
+  return source.parent().value_or(source).child(luciole::archiveExtractFolderName(source));
 }
 
 void ArchiveController::openDialog(

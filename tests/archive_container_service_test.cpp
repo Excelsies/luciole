@@ -2,6 +2,7 @@
 #include "archive_sevenzip_fixtures.h"
 #include "event_loop/glib_poll_source.h"
 #include "fs/archive_container.h"
+#include "fs/file_error.h"
 #include "fs/gio_ptr.h"
 #include "operations/archive_service.h"
 #include "temp_folder.h"
@@ -198,6 +199,41 @@ namespace {
     waitFor(service);
     TEST_CHECK(!service.error() && fs::file_size(output / reference.member) == reference.size);
   }
+
+  // Extract Here of a container lands beside it in a folder without the suffix, with no conflict.
+  void extractHereBesideTheFile(const Folder& folder) {
+    const auto* type = &luciole::kArchiveContainerTypes[*luciole::archiveContainerByName("jar")];
+    const auto source = folder.root / "app.jar";
+    generate(source, *type);
+    const auto target = location(source).parent()->child(luciole::archiveExtractFolderName(location(source)));
+    TEST_CHECK(target.nativePath() && fs::path(*target.nativePath()) == folder.root / "app");
+    luciole::ArchiveService service;
+    TEST_CHECK(service.extract(location(source), target, {}, nullptr));
+    waitFor(service);
+    TEST_CHECK(!service.error() && read(folder.root / "app" / "payload.txt") == kPayload);
+    TEST_CHECK(fs::is_regular_file(source));
+  }
+
+  // A container name on a file that is no archive fails like a broken .zip: an error, no catalog, nothing written.
+  void aFileThatIsNoArchiveFails(const Folder& folder, const std::string& suffix, const std::string& body) {
+    const auto inspect = [&](const std::string& name) {
+      const auto path = folder.root / name;
+      write(path, body);
+      luciole::ArchiveService service;
+      TEST_CHECK(service.inspect(location(path)));
+      waitFor(service);
+      TEST_CHECK(service.error().has_value() && service.catalog() == nullptr);
+      const auto out = folder.root / ("out-" + name);
+      TEST_CHECK(service.extract(location(path), location(out), {}, nullptr));
+      waitFor(service);
+      TEST_CHECK(service.error().has_value() && service.catalog() == nullptr);
+      TEST_CHECK(!fs::exists(out) || fs::is_empty(out));
+      return service.error().value_or(luciole::FileError{});
+    };
+    const auto broken = inspect("broken-" + std::to_string(body.size()) + ".zip");
+    const auto container = inspect("broken-" + std::to_string(body.size()) + "." + suffix);
+    TEST_CHECK(!container.message.empty() && container == broken);
+  }
 } // namespace
 
 int main() {
@@ -209,6 +245,13 @@ int main() {
       rarContainer(folder);
     } else {
       browseAndUnpack(folder, type);
+    }
+  }
+  extractHereBesideTheFile(folder);
+  const std::string elf = std::string("\x7f") + "ELF" + std::string(60, '\x01');
+  for (const auto* suffix : {"jar", "cbt", "crate"}) {
+    for (const auto& body : {std::string(), std::string("plain text, not an archive\n"), elf}) {
+      aFileThatIsNoArchiveFails(folder, suffix, body);
     }
   }
   std::println("archive-container-service: all checks passed");
