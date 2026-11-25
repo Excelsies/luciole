@@ -605,6 +605,142 @@ namespace {
     pump.ready(service);
     TEST_CHECK(service.error().empty() && service.separators().size() == 2);
   }
+  void testSeparatorHeadings(const Fixture& fixture) {
+    Pump pump;
+    const auto path = fixture.root / "headings/state.toml";
+    const auto shared = fixture.root / "headings/bookmarks";
+    const auto a = fixture.pin("head-a");
+    const auto b = fixture.pin("head-b");
+    const auto c = fixture.pin("head-c");
+    write(shared, a.location.uri() + " head-a\n" + b.location.uri() + " head-b\n" + c.location.uri() + " head-c\n");
+    luciole::PinService service(path, shared, {});
+    service.reload();
+    pump.ready(service);
+    const auto first = row(service, a.location);
+    const auto second = row(service, c.location);
+    TEST_CHECK(service.addSeparator(first));
+    pump.ready(service);
+    TEST_CHECK(service.addSeparator(second));
+    pump.ready(service);
+
+    // A heading belongs to one separator; a bad one or a missing separator is refused.
+    TEST_CHECK(service.separatorHeading(first).empty() && !service.setSeparatorHeading(first + 1, "Nowhere"));
+    TEST_CHECK(!service.setSeparatorHeading(first, "Bad\nline"));
+    TEST_CHECK(!service.setSeparatorHeading(first, "   ") && !service.setSeparatorHeading(first, "\u00a0\u3000"));
+    TEST_CHECK(service.setSeparatorHeading(first, "Projects"));
+    pump.ready(service);
+    TEST_CHECK(service.separatorHeading(first) == "Projects" && service.separatorHeading(second).empty());
+    TEST_CHECK(read(path).contains("Projects") && !read(shared).contains("Projects"));
+    luciole::PinService restarted(path, shared, {});
+    restarted.reload();
+    pump.ready(restarted);
+    TEST_CHECK(restarted.separatorHeading(first) == "Projects");
+
+    // Moving the separator takes its heading along.
+    TEST_CHECK(service.moveSeparatorTo(first, first + 1));
+    pump.ready(service);
+    TEST_CHECK(service.separatorHeading(first + 1) == "Projects" && service.separatorHeading(second).empty());
+    // Removing a pin in front of it keeps the heading with its separator.
+    TEST_CHECK(service.remove(a.location));
+    pump.ready(service);
+    TEST_CHECK(service.separatorHeading(first) == "Projects");
+    // An empty heading turns it back into a plain line, and the key leaves the file.
+    TEST_CHECK(service.setSeparatorHeading(first, {}));
+    pump.ready(service);
+    TEST_CHECK(service.separatorHeading(first).empty() && !read(path).contains("place_separator_headings"));
+
+    // Another instance gives the separator a heading; this one, still without it, reports the conflict on its next
+    // write and takes the heading instead of dropping it.
+    restarted.reload();
+    pump.ready(restarted);
+    TEST_CHECK(restarted.setSeparatorHeading(first, "Theirs"));
+    pump.ready(restarted);
+    const auto theirs = read(path);
+    TEST_CHECK(service.separatorHeading(first).empty() && service.removeSeparator(first + 1));
+    pump.ready(service);
+    TEST_CHECK(!service.error().empty() && read(path) == theirs && service.separatorHeading(first) == "Theirs");
+  }
+  void testMergedHeadings(const Fixture& fixture) {
+    Pump pump;
+    const auto path = fixture.root / "merged-headings/state.toml";
+    const auto shared = fixture.root / "merged-headings/bookmarks";
+    const auto x = fixture.pin("merge-x");
+    const auto y = fixture.pin("merge-y");
+    const auto z = fixture.pin("merge-z");
+    write(shared, x.location.uri() + " merge-x\n" + y.location.uri() + " merge-y\n" + z.location.uri() + " merge-z\n");
+    luciole::PinService service(path, shared, {});
+    service.reload();
+    pump.ready(service);
+    // "Solo" heads a group of one pin, x; "Rest" heads y and z.
+    for (const auto& [pin, heading] : {std::pair{x, "Solo"}, std::pair{y, "Rest"}}) {
+      TEST_CHECK(service.addSeparator(row(service, pin.location)));
+      pump.ready(service);
+      TEST_CHECK(service.setSeparatorHeading(row(service, pin.location), heading));
+      pump.ready(service);
+    }
+    // Unpinning x empties its group: the two separators become one, in front of y, and it heads y's group.
+    TEST_CHECK(service.remove(x.location));
+    pump.ready(service);
+    TEST_CHECK((service.separators() == std::vector{row(service, y.location)}));
+    TEST_CHECK(service.separatorHeading(row(service, y.location)) == "Rest");
+  }
+  // A pin dropped next to a headed separator leaves each heading on its line.
+  void testHeadingsFollowDrops(const Fixture& fixture) {
+    Pump pump;
+    const auto path = fixture.root / "drop-headings/state.toml";
+    const auto shared = fixture.root / "drop-headings/bookmarks";
+    const auto p = fixture.pin("hd-p");
+    const auto q = fixture.pin("hd-q");
+    const auto r = fixture.pin("hd-r");
+    write(shared, p.location.uri() + " hd-p\n" + q.location.uri() + " hd-q\n" + r.location.uri() + " hd-r\n");
+    luciole::PinService service(path, shared, {});
+    service.reload();
+    pump.ready(service);
+    for (const auto& [pin, heading] : {std::pair{q, "Top"}, std::pair{r, "Low"}}) {
+      TEST_CHECK(service.addSeparator(row(service, pin.location)));
+      pump.ready(service);
+      TEST_CHECK(service.setSeparatorHeading(row(service, pin.location), heading));
+      pump.ready(service);
+    }
+    const auto pin = [&](const luciole::Bookmark& place) { return service.bookmarks()[row(service, place.location)]; };
+    // p dropped below the "Top" line: "Top" now sits in front of p, "Low" still in front of r.
+    TEST_CHECK(service.add({pin(p)}, row(service, q.location), true));
+    pump.ready(service);
+    TEST_CHECK(service.separatorHeading(row(service, p.location)) == "Top");
+    TEST_CHECK(service.separatorHeading(row(service, r.location)) == "Low");
+    // p and q dropped below the "Low" line empty the "Top" group: the lines merge, and "Low" heads the rows below.
+    TEST_CHECK(service.add({pin(p), pin(q)}, row(service, r.location), true));
+    pump.ready(service);
+    TEST_CHECK((service.separators() == std::vector{row(service, p.location)}));
+    TEST_CHECK(service.separatorHeading(row(service, p.location)) == "Low");
+  }
+  void testHeadingsFollowExternalChanges(const Fixture& fixture) {
+    Pump pump;
+    const auto path = fixture.root / "external-headings/state.toml";
+    const auto shared = fixture.root / "external-headings/bookmarks";
+    const auto a = fixture.pin("exth-a");
+    const auto b = fixture.pin("exth-b");
+    const auto c = fixture.pin("exth-c");
+    const auto line = [](const luciole::Bookmark& pin) { return pin.location.uri() + " " + pin.label + "\n"; };
+    write(shared, line(a) + line(b) + line(c));
+    luciole::PinService service(path, shared, {});
+    service.reload();
+    pump.ready(service);
+    TEST_CHECK(service.addSeparator(row(service, c.location)));
+    pump.ready(service);
+    TEST_CHECK(service.setSeparatorHeading(row(service, c.location), "Last"));
+    pump.ready(service);
+    // Another application unpins a place above it: the heading stays with its separator, in front of c.
+    replace(shared, line(b) + line(c));
+    service.reload();
+    pump.ready(service);
+    TEST_CHECK(service.separatorHeading(row(service, c.location)) == "Last");
+    luciole::PinService restarted(path, shared, {});
+    restarted.reload();
+    pump.ready(restarted);
+    TEST_CHECK((restarted.separators() == std::vector{row(restarted, c.location)}));
+    TEST_CHECK(restarted.separatorHeading(row(restarted, c.location)) == "Last");
+  }
 } // namespace
 
 int main() {
@@ -617,6 +753,10 @@ int main() {
     testSeparatorGaps(fixture);
     testSeparatorDrops(fixture);
     testSeparatorsFollowExternalChanges(fixture);
+    testSeparatorHeadings(fixture);
+    testMergedHeadings(fixture);
+    testHeadingsFollowDrops(fixture);
+    testHeadingsFollowExternalChanges(fixture);
     std::println("Shared bookmarks and Places checks passed");
     return 0;
   } catch (const std::exception& error) {
