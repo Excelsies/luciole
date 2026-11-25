@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <array>
 #include <bitset>
 #include <cstddef>
@@ -30,7 +31,7 @@ namespace luciole {
     std::string_view label; // as the Settings page shows it
     ArchiveFamily family;
     ArchiveContainerFormat format;
-    std::string_view mime; // the type of its own the system reports for it; empty when the suffix alone names it
+    std::string_view mime; // the type of its own the system reports for it; empty when the table carries none
     // The system reports it as a plain archive, so it opens in the archive browser until switched off.
     bool browsesByDefault = false;
   };
@@ -120,6 +121,13 @@ namespace luciole {
   // The one list of archive containers: recognition, the setting, the Settings page and the tests read it.
   using archive_container_table::kArchiveContainerTypes;
   inline constexpr std::size_t kArchiveContainerCount = kArchiveContainerTypes.size();
+  static_assert(
+      std::ranges::none_of(
+          kArchiveContainerTypes,
+          [](const ArchiveContainerType& type) { return type.browsesByDefault && !type.mime.empty(); }
+      ),
+      "a type that browses by default has no content type of its own"
+  );
 
   // Which types open in the archive browser: bit i is kArchiveContainerTypes[i].
   using ArchiveContainerSet = std::bitset<kArchiveContainerCount>;

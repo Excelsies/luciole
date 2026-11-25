@@ -127,11 +127,17 @@ namespace {
     const auto start = docs.find("Open (double-click, Enter or Open) uses");
     TEST_CHECK(start != std::string::npos);
     const auto paragraph = docs.substr(start, docs.find('\n', start) - start);
+    // The default cell of the open_as_archive row names exactly those types.
     const auto config = read(fs::path(source) / "docs/user/configuration.md");
+    const std::string rowStart = "| `open_as_archive` | ";
+    const auto cell = config.find(rowStart);
+    TEST_CHECK(cell != std::string::npos);
+    const auto defaults =
+        config.substr(cell + rowStart.size(), config.find(" | ", cell + rowStart.size()) - cell - rowStart.size());
     for (const auto& type : luciole::kArchiveContainerTypes) {
       const auto suffix = "`." + std::string(type.name) + "`";
       TEST_CHECK(paragraph.contains(suffix) == type.browsesByDefault);
-      TEST_CHECK(config.contains("`" + std::string(type.name) + "`") || !type.browsesByDefault);
+      TEST_CHECK(defaults.contains("`" + std::string(type.name) + "`") == type.browsesByDefault);
     }
   }
 
