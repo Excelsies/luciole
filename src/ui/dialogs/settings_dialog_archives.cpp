@@ -13,6 +13,16 @@ void SettingsDialog::addArchiveContainers() {
   for (std::size_t family = 0; family < luciole::kArchiveFamilyCount; ++family) {
     const auto kind = static_cast<luciole::ArchiveFamily>(family);
     card(std::string(luciole::archiveFamilyLabel(kind)));
+    if (family == 0) {
+      m_section->addChild(
+          ui::label(
+              {.text = "A type that is switched on opens in the archive browser instead of its default application.",
+               .fontSize = Style::fontSizeCaption,
+               .color = colorSpecFromRole(ColorRole::OnSurfaceVariant),
+               .maxLines = 3}
+          )
+      );
+    }
     for (std::size_t index = 0; index < luciole::kArchiveContainerCount; ++index) {
       const auto& type = luciole::kArchiveContainerTypes[index];
       if (type.family != kind) {

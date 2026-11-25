@@ -173,7 +173,7 @@ namespace {
     TEST_CHECK(!busy.enabled && busy.reason == "Another file operation is still finishing.");
     TEST_CHECK(luciole::ActionRegistry::browseArchiveState(false, facts).enabled);
     const auto text = luciole::archiveFactsFor(folder.at("note.txt"), {});
-    TEST_CHECK(luciole::ActionRegistry::browseArchiveState(false, text).reason == "Select one ZIP or TAR archive.");
+    TEST_CHECK(luciole::ActionRegistry::browseArchiveState(false, text).reason == "Select one archive.");
   }
 } // namespace
 

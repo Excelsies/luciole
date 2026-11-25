@@ -200,7 +200,7 @@ namespace {
         return unavailable("Special files cannot be compressed.");
       }
     } else if (!browsableArchive(c, r)) {
-      return unavailable("Select one ZIP or TAR archive.");
+      return unavailable("Select one archive.");
     }
     return {};
   }
@@ -678,7 +678,7 @@ luciole::ActionState luciole::ActionRegistry::browseArchiveState(bool operations
   if (!file.location.nativePath().has_value() || !file.readable.value_or(true)) {
     return unavailable("Archives require readable native items.");
   }
-  return require(browsableFile(file), "Select one ZIP or TAR archive.");
+  return require(browsableFile(file), "Select one archive.");
 }
 
 luciole::BrowserAction luciole::ActionRegistry::openAction(const ActionContext& context, const ActionRequest& request) {

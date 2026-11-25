@@ -38,7 +38,7 @@ namespace luciole::preference_schema {
   }
 
   inline std::string expected(const Rule<luciole::ArchiveContainerSet>& /*rule*/) {
-    return "expected an array of archive type names such as 'jar' or 'epub'";
+    return "expected an array of lower case archive type names such as 'jar' or 'epub'";
   }
 
   inline void encode(

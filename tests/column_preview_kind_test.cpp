@@ -116,8 +116,8 @@ namespace {
 
   void everyRow() {
     for (const auto& row : kRows) {
-      const auto with = luciole::columnPreviewKind(file(row.name), row.type, true, true);
-      const auto without = luciole::columnPreviewKind(file(row.name), row.type, true, false);
+      const auto with = luciole::columnPreviewKind(file(row.name), row.type, true, true, {});
+      const auto without = luciole::columnPreviewKind(file(row.name), row.type, true, false, {});
       if (with != row.withPlayback || without != row.withoutPlayback) {
         std::println("{} ({}): {} and {}", row.name, row.type, static_cast<int>(with), static_cast<int>(without));
       }
@@ -128,19 +128,19 @@ namespace {
 
   // Compressed tarballs are listed only where the reader can unpack their filter.
   void compressedArchivesFollowTheReader() {
-    const auto kind = luciole::columnPreviewKind(file("pack.tar.gz"), "application/x-compressed-tar", true, true);
+    const auto kind = luciole::columnPreviewKind(file("pack.tar.gz"), "application/x-compressed-tar", true, true, {});
     const bool gzip = luciole::archiveCompressionAvailable(luciole::ArchiveCompression::Gzip);
     TEST_CHECK(kind == (gzip ? Kind::Archive : Kind::Still));
   }
 
   // Folders, devices and files that are not local keep the page's own preview.
   void onlyLocalRegularFiles() {
-    TEST_CHECK(luciole::columnPreviewKind(file("notes.txt"), "text/plain", false, true) == Kind::Still);
-    TEST_CHECK(luciole::columnPreviewKind(file("pack.zip"), "inode/directory", false, true) == Kind::Still);
+    TEST_CHECK(luciole::columnPreviewKind(file("notes.txt"), "text/plain", false, true, {}) == Kind::Still);
+    TEST_CHECK(luciole::columnPreviewKind(file("pack.zip"), "inode/directory", false, true, {}) == Kind::Still);
     const auto remote = Location::fromUri("trash:///notes.txt");
     TEST_CHECK(!remote.nativePath());
-    TEST_CHECK(luciole::columnPreviewKind(remote, "text/plain", true, true) == Kind::Still);
-    TEST_CHECK(luciole::columnPreviewKind(Location::fromPath("/"), "inode/directory", true, true) == Kind::Still);
+    TEST_CHECK(luciole::columnPreviewKind(remote, "text/plain", true, true, {}) == Kind::Still);
+    TEST_CHECK(luciole::columnPreviewKind(Location::fromPath("/"), "inode/directory", true, true, {}) == Kind::Still);
   }
 
   void factsLine() {

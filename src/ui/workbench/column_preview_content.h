@@ -38,7 +38,7 @@ namespace luciole {
   // material, which is never shown.
   ColumnPreviewKind columnPreviewKind(
       const Location& file, std::string_view contentType, bool regular, bool playback,
-      const ArchiveContainerSet& openAsArchive = {}
+      const ArchiveContainerSet& openAsArchive
   );
 
   // What a column preview knows of its file; a fact is left out while unknown.
