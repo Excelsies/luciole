@@ -205,7 +205,10 @@ public:
   float sidebarWidth() const;
   float sidebarControlWidth() const;
   void pumpJobs();
-  void workspaceMenu(std::vector<ContextMenuControlEntry> entries, std::function<void(int)> callback, float x, float y);
+  void workspaceMenu(
+      std::vector<ContextMenuControlEntry> entries, std::function<void(int)> callback, float x, float y,
+      std::uint32_t serial
+  );
   void transferTo(const luciole::Location& destination, bool copy);
   std::optional<std::pair<luciole::Location, LayoutRect>> foreignTarget(float x, float y) const;
 

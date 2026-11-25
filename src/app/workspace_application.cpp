@@ -868,7 +868,7 @@ void WorkspaceApplication::pointer(const PointerEvent& event) {
           return;
         }
         if (event.button == BTN_RIGHT) {
-          tabMenu(*host, tab, x, y);
+          tabMenu(*host, tab, x, y, event.serial);
           return;
         }
         if (event.button == BTN_LEFT) {
@@ -1689,7 +1689,7 @@ void WorkspaceApplication::layoutTabDrag(Host& host, Renderer& renderer) const {
   host.tabDropMarker->arrange(renderer, {markerX - 1.5F, 0.0F, 3.0F, kTabStripHeight});
 }
 
-void WorkspaceApplication::tabMenu(Host& host, luciole::TabId tab, float x, float y) {
+void WorkspaceApplication::tabMenu(Host& host, luciole::TabId tab, float x, float y, std::uint32_t serial) {
   auto& page = *m_pages.at(m_model.windows().at(host.id).active);
   std::vector<ContextMenuControlEntry> entries{
       {.id = 0, .label = "New Tab", .shortcut = luciole::keybindShortcutOptionalLabel(luciole::KeybindCommand::NewTab)},
@@ -1723,7 +1723,7 @@ void WorkspaceApplication::tabMenu(Host& host, luciole::TabId tab, float x, floa
           defer(window, tab, commands[static_cast<std::size_t>(id)]);
         }
       },
-      x, y
+      x, y, serial
   );
 }
 

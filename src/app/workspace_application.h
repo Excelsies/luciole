@@ -167,7 +167,7 @@ private:
   static void buildTabDrag(Host& host);
   // Shows the dragged tab's copy under the pointer and, while it would reorder, the marker where it lands.
   void layoutTabDrag(Host& host, Renderer& renderer) const;
-  void tabMenu(Host& host, luciole::TabId tab, float x, float y);
+  void tabMenu(Host& host, luciole::TabId tab, float x, float y, std::uint32_t serial);
   static Button::ButtonPalette closeTabPalette(ColorRole foreground);
   void rebuildStrip(Host& host, const luciole::TabWindow& window);
   void syncTooltip(Host& host);

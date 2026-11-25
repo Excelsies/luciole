@@ -886,8 +886,13 @@ void BrowserPage::pumpJobs() {
 }
 
 void BrowserPage::workspaceMenu(
-    std::vector<ContextMenuControlEntry> entries, std::function<void(int)> callback, float x, float y
+    std::vector<ContextMenuControlEntry> entries, std::function<void(int)> callback, float x, float y,
+    std::uint32_t serial
 ) {
+  // The popup grab needs the serial of the press that opens the menu; 0 keeps the recorded one.
+  if (serial != 0) {
+    m_popupSerial = serial;
+  }
   m_menuController.showContextMenu(std::move(entries), std::move(callback), {x, y, 1, 1});
 }
 
