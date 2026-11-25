@@ -510,7 +510,12 @@ void BrowserPage::focusChanged(InputArea* focused) {
 bool BrowserPage::completeLocationOnTab(std::uint32_t modifiers) { return m_locationBar.completeOnTab(modifiers); }
 bool BrowserPage::sidebarKey(const KeyboardEvent& event) { return m_sidebar.key(event); }
 bool BrowserPage::sidebarOverlays(float x, float y) const { return !overlay() && m_sidebar.drawerContains(x, y); }
-void BrowserPage::prepareSidebar(float width) { m_sidebar.prepareWidth(width); }
+void BrowserPage::prepareSidebar(float width) {
+  m_sidebar.prepareWidth(width);
+  // The window arranges the sidebar before this page's layoutFrame(): rebuild a changed Places list now, so the
+  // new rows are arranged and drawn in this frame instead of waiting for the next one.
+  m_sidebar.invalidate();
+}
 void BrowserPage::arrangeSidebar(Renderer& renderer, float top, float height) {
   m_sidebar.arrange(renderer, top, height);
 }
@@ -2519,7 +2524,8 @@ void BrowserPage::prepareFrame(bool, bool layout) {
 void BrowserPage::layoutFrame(Renderer& renderer) {
   UiPhaseScope phase(UiPhase::Layout);
   m_statusBar.layout(m_pageBounds.width);
-  auto placesFocus = m_sidebar.invalidate();
+  // Places changed while this frame was prepared, after the window arranged the sidebar: draw them in another frame.
+  const bool placesLate = m_sidebar.invalidate();
   m_dragDrop.applyScroll();
   m_sidebar.layout();
   m_locationBar.prepareLayout();
@@ -2588,8 +2594,11 @@ void BrowserPage::layoutFrame(Renderer& renderer) {
   m_dragDrop.layout(renderer);
   m_locationBar.layoutCompletions(renderer);
   m_thumbnails.endFrame();
-  m_sidebar.restoreFocus(std::move(placesFocus), m_popupSurface != nullptr || m_archiveController.open() || !m_active);
+  m_sidebar.restoreFocus(m_popupSurface != nullptr || m_archiveController.open() || !m_active);
   m_fileKeys.notifyStateChanged();
+  if (placesLate) {
+    m_surface->requestUpdate();
+  }
 }
 
 void BrowserPage::buildScene() {
