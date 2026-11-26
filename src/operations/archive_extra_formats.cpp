@@ -29,8 +29,7 @@ namespace {
   constexpr std::string_view kArMagic = "!<arch>\n";
   constexpr std::size_t kArHeaderBytes = 60;
   constexpr std::size_t kArSizeAt = 48, kArSizeWidth = 10;
-  // Real long-name tables are a few KiB. libarchive holds the declared size in memory, so it is capped here even
-  // when the job has no metadata budget of its own.
+  // Memory cap on a long-name table, which libarchive reads whole; real ones are a few KiB.
   constexpr std::uint64_t kMaxArNameTableBytes = 16U * 1024U * 1024U;
 
   // Whether the file itself, before any decompression, starts as an ar archive.
@@ -71,8 +70,7 @@ namespace {
   void requireBoundedTables(Input& input, const Work& work) {
     const auto fileSize = static_cast<std::uint64_t>(input.seek(0, SEEK_END));
     std::uint64_t position = kArMagic.size();
-    // Index members are skipped without counting as entries, so the walk allows as many of them again. Each header
-    // moves the position on by at least its own length, so the file size bounds the walk whatever this is.
+    // Twice the entry limit, saturating: index members do not count as entries. The file size bounds the walk anyway.
     const auto entries = work.limits.maxEntries;
     const std::size_t bound = entries > (std::numeric_limits<std::size_t>::max() - 2) / 2
         ? std::numeric_limits<std::size_t>::max()
