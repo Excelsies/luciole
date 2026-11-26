@@ -16,6 +16,8 @@ bin=${1:-build-debug/luciole}
 PAUSE=${PAUSE:-2}
 # Published width of the cropped window.
 WIDTH=${WIDTH:-1000}
+# Window corner radius in output pixels.
+RADIUS=${RADIUS:-7}
 
 if [[ ${SHOTS_INNER:-} ]]; then
   # Inside the nested compositor: WAYLAND_DISPLAY is the nested socket.
@@ -33,8 +35,12 @@ if [[ ${SHOTS_INNER:-} ]]; then
     size=${geom%%+*}
     IFS=+ read -r _ x y <<<"$geom"
     grim -o shots "$SHOTS_TMP/raw.png"
-    magick "$SHOTS_TMP/raw.png" -crop "$size+$((x - outx))+$y" +repage -resize "${WIDTH}x" "$SHOTS_TMP/$1.png"
-    cwebp -quiet -q 85 "$SHOTS_TMP/$1.png" -o "$SHOTS_OUT/$1.webp"
+    # Round the corners with transparency so the nested wallpaper does not show behind them.
+    magick "$SHOTS_TMP/raw.png" -crop "$size+$((x - outx))+$y" +repage -alpha set \
+      \( +clone -channel A -evaluate set 0 +channel -fill white \
+      -draw "roundrectangle 0,0 $((${size%%x*} - 1)),$((${size##*x} - 1)) $RADIUS,$RADIUS" \) \
+      -compose DstIn -composite -resize "${WIDTH}x" "$SHOTS_TMP/$1.png"
+    cwebp -quiet -q 85 -alpha_q 100 "$SHOTS_TMP/$1.png" -o "$SHOTS_OUT/$1.webp"
     echo "wrote $SHOTS_OUT/$1.webp"
   }
   start() { # folder
@@ -137,9 +143,9 @@ parent=${WAYLAND_DISPLAY:?run inside a Wayland session}
 env -i PATH="$PATH" WAYLAND_DISPLAY="$parent" HOME="$home" \
   XDG_CONFIG_HOME="$tmp/config" XDG_CACHE_HOME="$tmp/cache" XDG_DATA_HOME="$tmp/data" \
   XDG_STATE_HOME="$tmp/state" XDG_RUNTIME_DIR="$tmp/run" \
-  XDG_DATA_DIRS="$real_data:/usr/local/share:/usr/share" GSETTINGS_BACKEND=keyfile \
+  XDG_DATA_DIRS="$real_data:/usr/local/share:/usr/share" GSETTINGS_BACKEND=keyfile GVFS_DISABLE_FUSE=1 \
   SHOTS_INNER=1 SHOTS_TMP="$tmp" SHOTS_OUT="$out" SHOTS_BIN="$bin" \
-  PAUSE="$PAUSE" WIDTH="$WIDTH" \
+  PAUSE="$PAUSE" WIDTH="$WIDTH" RADIUS="$RADIUS" \
   dbus-run-session -- bash -c '
     umbriel -c "'"$tmp"'/umbriel.toml" -s "'"$0"'"
   ' || true # killed by the driver on exit, so its status says nothing
