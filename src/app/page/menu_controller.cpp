@@ -56,6 +56,8 @@ namespace {
   };
 
   constexpr float kShortSubmenuWidth = 200.0F;
+  // Fits a glyph, "Other Pane" and "Ctrl+Alt+Enter" without clipping the shortcut.
+  constexpr float kOpenInSubmenuWidth = 240.0F;
 
   // Appends a separator unless `entries` is empty or already ends with one.
   void addSeparator(std::vector<ContextMenuControlEntry>& entries) {
@@ -340,12 +342,23 @@ void MenuController::openFileMenu(std::optional<luciole::EntryId> id, float x, f
 void MenuController::showOpenInMenu(const luciole::ActionRequest& request) {
   const bool singleWindow = m_page.settings().singleWindow;
   std::vector<ContextMenuControlEntry> entries{
-      {.id = NewTab, .label = "New Tab", .glyph = "plus"},
+      {.id = NewTab,
+       .label = "New Tab",
+       .glyph = "plus",
+       .shortcut = luciole::keybindShortcutOptionalLabel(luciole::KeybindCommand::OpenInNewTab)},
       // Without a second pane, the workspace splits the window to open one.
-      {.id = OtherPane, .label = m_page.hasOtherPane() ? "Other Pane" : "New Pane", .glyph = "layout-sidebar-right"},
+      {.id = OtherPane,
+       .label = m_page.hasOtherPane() ? "Other Pane" : "New Pane",
+       .glyph = "layout-sidebar-right",
+       .shortcut = luciole::keybindShortcutOptionalLabel(luciole::KeybindCommand::OpenInOtherPane)},
   };
   if (!singleWindow) {
-    entries.push_back({.id = NewWindow, .label = "New Window", .glyph = "device-desktop"});
+    entries.push_back(
+        {.id = NewWindow,
+         .label = "New Window",
+         .glyph = "device-desktop",
+         .shortcut = luciole::keybindShortcutOptionalLabel(luciole::KeybindCommand::OpenInNewWindow)}
+    );
   }
   m_submenus.show(
       std::move(entries),
@@ -368,7 +381,7 @@ void MenuController::showOpenInMenu(const luciole::ActionRequest& request) {
             entry->navigationLocation(), std::nullopt
         );
       },
-      kShortSubmenuWidth
+      kOpenInSubmenuWidth
   );
 }
 
