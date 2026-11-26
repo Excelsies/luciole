@@ -332,6 +332,7 @@ test_table = [
   {'name': 'workbench-pane-layout', 'deps': [workbench_dep]},
   {'name': 'workbench-column-plan', 'deps': [workbench_dep]},
   {'name': 'workbench-preview-home', 'deps': [workbench_dep]},
+  {'name': 'column-preview-archive-limits', 'deps': [app_workbench_dep, libarchive, dependency('zlib')], 'timeout': 60},
   {'name': 'workbench-center-plan', 'deps': [workbench_dep]},
   {'name': 'workbench-strip-plan', 'deps': [workbench_dep]},
   {'name': 'workbench-list-columns', 'deps': [workbench_dep]},

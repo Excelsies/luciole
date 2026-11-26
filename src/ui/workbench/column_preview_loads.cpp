@@ -26,8 +26,15 @@ namespace luciole {
     constexpr std::string_view kModelUnreadable = "This model could not be read.";
     constexpr std::string_view kModelKind = "3D model";
 
-    // A preview lists an archive within these, much tighter than extracting it.
-    constexpr ArchiveLimits kArchiveLimits{.maxTime = std::chrono::seconds(15)};
+    // Bounds of a preview, which loads on its own as the cursor rests on a file; extraction has none.
+    constexpr ArchiveLimits kArchiveLimits{
+        .maxArchiveBytes = 4ULL * 1024 * 1024 * 1024,
+        .maxExpandedBytes = 8ULL * 1024 * 1024 * 1024,
+        .maxEntries = 50000,
+        .maxMetadataBytes = 16U * 1024 * 1024,
+        .maxDepth = 128,
+        .maxTime = std::chrono::seconds(15),
+    };
 
     std::string contentTypeOf(const DirectoryEntry& entry) { return std::string(entry.contentType.value_or("")); }
 
