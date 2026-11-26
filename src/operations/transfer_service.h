@@ -44,6 +44,8 @@ namespace luciole {
     ~TransferService();
     TransferService(const TransferService&) = delete;
     TransferService& operator=(const TransferService&) = delete;
+    // Application-owned jobs replay ordinary operations rather than retaining file bodies for Redo.
+    void useOperationHistory();
     bool start(TransferRequest request);
     bool replay(const std::shared_ptr<const MoveReceipt>& receipt);
     bool replayCopy(const std::shared_ptr<const CopyReceipt>& receipt);

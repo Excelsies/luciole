@@ -11,6 +11,7 @@
 #include "operations/copy_receipt.h"
 #include "operations/history_revisions.h"
 #include "operations/move_receipt.h"
+#include "operations/operation_history.h"
 #include "operations/provider_transfer.h"
 #include "operations/transfer_copy.h"
 #include "operations/transfer_staging.h"
@@ -69,7 +70,7 @@ namespace {
 
   std::string jobReport(const std::vector<luciole::TransferResult>& results) {
     std::string report = "Transfer results\n";
-    constexpr std::array labels{"Moved", "Copied", "Skipped", "Failed", "Cancelled", "Partial", "Linked"};
+    constexpr std::array labels{"Moved", "Copied", "Skipped", "Failed", "Cancelled", "Partial", "Linked", "Deleted"};
     std::function<void(const luciole::TransferResult&)> append = [&](const auto& result) {
       if (report.size() > 16 * 1024 * 1024) {
         return;
@@ -115,6 +116,26 @@ struct luciole::TransferService::State {
   std::shared_ptr<const MoveReceipt> receipt;
   std::shared_ptr<const CopyReceipt> copyReceipt;
   bool historyRetired = false;
+  bool operationHistory = false;
+
+  void beginTransfer(const TransferRequest& request, bool retry) {
+    active = true;
+    action = request.action;
+    total = request.sources.size();
+    completed.store(0);
+    bytes.store(0);
+    token = CancelToken{};
+    receipt.reset();
+    copyReceipt.reset();
+    historyRetired = false;
+    if (!retry) {
+      ++jobId;
+      results.clear();
+      report.clear();
+      retryable = 0;
+      job.reset();
+    }
+  }
 
   static void notify(const std::shared_ptr<State>& owner) {
     auto* source = g_idle_source_new();
@@ -413,6 +434,11 @@ namespace {
 } // namespace
 
 luciole::TransferService::TransferService() : m_state(std::make_shared<State>()) {}
+void luciole::TransferService::useOperationHistory() {
+  if (!busy() && !m_state->job) {
+    m_state->operationHistory = true;
+  }
+}
 luciole::TransferService::~TransferService() {
   m_state->changed = {};
   cancel();
@@ -917,22 +943,7 @@ bool luciole::TransferService::launch(TransferRequest request, bool retry) {
   if (busy() || request.sources.empty()) {
     return false;
   }
-  m_state->active = true;
-  m_state->action = request.action;
-  m_state->total = request.sources.size();
-  m_state->completed.store(0);
-  m_state->bytes.store(0);
-  m_state->token = CancelToken{};
-  m_state->receipt.reset();
-  m_state->copyReceipt.reset();
-  m_state->historyRetired = false;
-  if (!retry) {
-    ++m_state->jobId;
-    m_state->results.clear();
-    m_state->report.clear();
-    m_state->retryable = 0;
-    m_state->job.reset();
-  }
+  m_state->beginTransfer(request, retry);
   auto job = retry ? m_state->job : std::make_shared<Job>(std::move(request));
   runJob<Reply>(
       [owner = m_state, job, token = m_state->token, retry] {
@@ -946,6 +957,10 @@ bool luciole::TransferService::launch(TransferRequest request, bool retry) {
         work.allowMerge = allowMerge;
         auto revisions = std::make_shared<HistoryRevisions>();
         work.history = revisions;
+        auto operationHistory = owner->operationHistory && !retry
+            ? std::make_unique<OperationHistory>(job->request.action, token, revisions)
+            : nullptr;
+        work.operationHistory = operationHistory.get();
         std::vector<std::shared_ptr<const CopyEffect>> copies;
         std::size_t publishedCopies = 0;
         bool checkpointFailed = false;
@@ -1039,7 +1054,7 @@ bool luciole::TransferService::launch(TransferRequest request, bool retry) {
                     const auto answer = owner->gate.ask(std::move(conflict), token, [owner] { State::notify(owner); });
                     return answer ? answer->choice : TransferConflictChoice::Cancel;
                   },
-                  &work, !retry && !job->request.destination.isNative()
+                  &work, !retry && !job->request.destination.isNative() && !operationHistory
               )
             : retry ? retryJob(*job, work, owner->completed)
                     : runFirst(*job, work, owner->completed);
@@ -1047,6 +1062,25 @@ bool luciole::TransferService::launch(TransferRequest request, bool retry) {
         job->mergedItems = work.mergedItems;
         std::shared_ptr<const MoveReceipt> receipt;
         std::shared_ptr<const CopyReceipt> copyReceipt;
+        const auto complete = [](auto&& self, const TransferResult& item) -> bool {
+          return !item.error
+              && (item.outcome == TransferOutcome::Moved
+                  || item.outcome == TransferOutcome::Copied
+                  || item.outcome == TransferOutcome::Linked
+                  || item.outcome == TransferOutcome::Skipped)
+              && std::ranges::all_of(item.children, [&](const auto& child) { return self(self, child); });
+        };
+        if (operationHistory
+            && std::ranges::all_of(outcomes, [&](const auto& item) { return complete(complete, item); })) {
+          operationHistory->capture(outcomes, copyReceipt, receipt);
+          job->outcomes = outcomes;
+          return Reply{
+              .results = outcomes,
+              .report = jobReport(outcomes),
+              .receipt = std::move(receipt),
+              .copyReceipt = std::move(copyReceipt)
+          };
+        }
         std::size_t moved = 0, merged = 0;
         const bool movesComplete = completedMoves(*job, outcomes, moved, merged);
         bool moveCaptureChanged = false;
@@ -1238,4 +1272,44 @@ bool luciole::TransferService::replayCopy(const std::shared_ptr<const CopyReceip
     callback();
   }
   return true;
+}
+
+std::vector<luciole::TransferResult> luciole::runHistoryTransfer(
+    const Location& source, const Location& destination, TransferAction action, OperationHistory& history,
+    const CancelToken& token, std::atomic<std::uint64_t>& bytes
+) {
+  if (!destination.parent() || !destination.basename()) {
+    throwFileError(FileErrorKind::InvalidArgument, "History requires an exact destination item name.");
+  }
+  if (action == TransferAction::Link) {
+    return history.replayLink(source, destination);
+  }
+  Job job(TransferRequest{{source}, *destination.parent(), action, false});
+  const auto mounts = openTransferMounts(job, false, false, token);
+  const auto choose = [&](const Location& target) -> TransferConflictChoice {
+    if (history.owns(target)) {
+      return TransferConflictChoice::Replace;
+    }
+    throwFileError(FileErrorKind::Exists, "The history destination name is occupied: " + target.uri());
+  };
+  transfer::Work work(
+      token, bytes,
+      [&](const transfer::Source&, const Location& parent, const std::string& name, const struct stat&, bool) {
+        return choose(parent.child(name));
+      }
+  );
+  work.allowMerge = false;
+  work.history = std::make_shared<HistoryRevisions>();
+  work.revisionObserver = [&history](const struct stat& value, bool removed) { history.observed(value, removed); };
+  work.operationHistory = &history;
+  work.exactTarget = destination;
+  std::atomic<std::size_t> completed{0};
+  if (!source.isNative() || !destination.isNative()) {
+    ProviderTransfer provider(job.request, destination);
+    return provider.run(
+        token, bytes, completed, [&](const TransferConflict& conflict) { return choose(conflict.destination); }, &work,
+        false
+    );
+  }
+  return runFirst(job, work, completed);
 }

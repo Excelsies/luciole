@@ -631,7 +631,7 @@ void TransferController::syncConflict() {
   }
   const bool archive = job->kind() == JobKind::Archive;
   const bool restore = job->kind() == JobKind::Restore;
-  const bool nativeReplace = !archive && !restore && conflict->destination.isNative();
+  const bool permanentReplace = !archive && !restore;
   const ActiveConflict active{.job = job->id(), .conflict = conflict->id};
   const float width = m_page.dialogWidth(DialogWidth::Medium);
   auto facts = [&](const std::string& title, bool folder, std::optional<std::uint64_t> bytes,
@@ -721,8 +721,8 @@ void TransferController::syncConflict() {
            .color = colorSpecFromRole(ColorRole::OnSurfaceVariant),
            .maxWidth = width - 24.0F,
            .maxLines = 2,
-           .visible = nativeReplace,
-           .participatesInLayout = nativeReplace}
+           .visible = permanentReplace,
+           .participatesInLayout = permanentReplace}
       ),
       ui::row(
           {.align = FlexAlign::Center,

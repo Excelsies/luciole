@@ -158,30 +158,49 @@ namespace luciole::transfer {
       }
     }
 
+    std::shared_ptr<OperationHistory::Publication>
+    prepareRenameHistory(Work& work, const Source& source, const Location& destination) {
+      return work.operationHistory
+          ? work.operationHistory->prepareNative(source.location, destination, source.parent.get(), source.name, false)
+          : nullptr;
+    }
+
+    struct ItemPreparation {
+      bool sameFolder, skip;
+    };
+    ItemPreparation prepareItem(Source& source, int destination, TransferAction action, Work& work) {
+      work.check();
+      source.metadata = work.expected(source.metadata);
+      requireUnchanged(source.metadata, info(source.parent.get(), source.name));
+      const bool sameFolder = sameIdentity(statFd(source.parent.get()), statFd(destination));
+      if (sameFolder
+          && action == TransferAction::Move
+          && (!work.exactTarget || work.exactTarget->basename() == source.location.basename())) {
+        return {sameFolder, true};
+      }
+      if (S_ISDIR(source.metadata.st_mode) && hasAncestor(destination, source.metadata)) {
+        throwFileError(FileErrorKind::WouldRecurse, "A folder cannot be placed inside itself.");
+      }
+      if (!S_ISDIR(source.metadata.st_mode) && !S_ISREG(source.metadata.st_mode) && !S_ISLNK(source.metadata.st_mode)) {
+        throwFileError(FileErrorKind::Unsupported, "Special files cannot be transferred.");
+      }
+      return {sameFolder, false};
+    }
+
     TransferResult transferItem(Node& node, int destination, TransferAction action, Work& work) {
       auto& source = node.source;
       const auto& binding = *node.destination;
       using enum TransferOutcome;
       TransferResult result{source.location};
       try {
-        work.check();
-        source.metadata = work.expected(source.metadata);
-        requireUnchanged(source.metadata, info(source.parent.get(), source.name));
-        const bool sameFolder = sameIdentity(statFd(source.parent.get()), statFd(destination));
-        if (sameFolder && action == TransferAction::Move) {
+        const auto prepared = prepareItem(source, destination, action, work);
+        if (prepared.skip) {
           result.outcome = Skipped;
           return result;
         }
-        if (S_ISDIR(source.metadata.st_mode) && hasAncestor(destination, source.metadata)) {
-          throwFileError(FileErrorKind::WouldRecurse, "A folder cannot be placed inside itself.");
-        }
-        if (!S_ISDIR(source.metadata.st_mode)
-            && !S_ISREG(source.metadata.st_mode)
-            && !S_ISLNK(source.metadata.st_mode)) {
-          throwFileError(FileErrorKind::Unsupported, "Special files cannot be transferred.");
-        }
-        std::string target = source.name;
-        bool keepBoth = sameFolder, merging = false, forcePrompt = false;
+        const bool sameFolder = prepared.sameFolder;
+        std::string target = work.exactTarget && node.depth == 0 ? *work.exactTarget->basename() : source.name;
+        bool keepBoth = sameFolder && !work.exactTarget, merging = false, forcePrompt = false;
         std::uint64_t number = 0;
         std::optional<struct stat> replace;
         for (;;) {
@@ -201,9 +220,13 @@ namespace luciole::transfer {
             return merge(node, destination, action, work, *replace);
           }
           validateBindings(source, binding);
+          if (work.operationHistory) {
+            work.operationHistory->beforeTransfer(source.location, binding.location.child(target));
+          }
           if (action == TransferAction::Move && replace && work.prepareMove) {
             auto proof = work.prepareMove(source, binding.location.child(target), destination);
             if (proof) {
+              auto operation = prepareRenameHistory(work, source, binding.location.child(target));
               work.check();
               requireUnchanged(source.metadata, info(source.parent.get(), source.name));
               requireUnchanged(*replace, info(destination, target));
@@ -222,6 +245,9 @@ namespace luciole::transfer {
                 work.note(info(destination, target));
                 work.note(info(source.parent.get(), source.name));
                 work.recordPreparedMove(proof);
+                if (work.operationHistory) {
+                  work.operationHistory->published(operation, true);
+                }
                 result.outcome = Moved;
               } catch (const std::exception&) {
                 result.error = currentFileError();
@@ -240,12 +266,16 @@ namespace luciole::transfer {
           if (work.recordMove) {
             historyItem = Fd(::openat(source.parent.get(), source.name.c_str(), O_PATH | O_NOFOLLOW | O_CLOEXEC));
           }
+          auto operation = prepareRenameHistory(work, source, binding.location.child(target));
           if (renameNoReplace(source.parent.get(), source.name.c_str(), destination, target.c_str()) == 0) {
             work.note(info(destination, target));
             result.outcome = Moved;
             result.destination = binding.location.child(target);
             if (work.recordMove && !work.recordMove(source, *result.destination, destination, historyItem.get())) {
               work.recordMove = {};
+            }
+            if (work.operationHistory) {
+              work.operationHistory->published(operation);
             }
             return result;
           }
@@ -324,6 +354,11 @@ namespace luciole::transfer {
                       source, binding.location.child(target), destination, stage.fd(), replace.has_value()
                   )
                 : nullptr;
+            auto operation = work.operationHistory
+                ? work.operationHistory->prepareNative(
+                      source.location, binding.location.child(target), stage.fd(), "item"
+                  )
+                : nullptr;
             work.check();
             checkReplacementSource(source, action, replace);
             const auto placed = replace ? renameExchange(stage.fd(), "item", destination, target.c_str())
@@ -351,6 +386,9 @@ namespace luciole::transfer {
             }
             result.outcome = action == TransferAction::Link ? Linked : Copied;
             recordPublication(copyProof, moveProof, replace.has_value(), stage, work);
+            if (work.operationHistory) {
+              work.operationHistory->published(operation, replace.has_value());
+            }
             if (action == TransferAction::Move) {
               // The sources go only after the published copy is durable; flushMoves() syncs a batch at once.
               queueSourceRemoval(node, *tree, destination, std::move(moveProof), work);
@@ -428,6 +466,9 @@ namespace luciole::transfer {
           throwFileError(FileErrorKind::WouldRecurse, "Related or identical folders cannot be merged.");
         }
         if (!node.merging) {
+          if (work.operationHistory) {
+            work.operationHistory->beforeMerge(source.location);
+          }
           if (work.prepareMerge) {
             work.prepareMerge(*result.destination);
           }
@@ -499,6 +540,9 @@ namespace luciole::transfer {
             if ((!work.recordMerge || !work.recordMerge(source, *result.destination, output.get()))
                 && ::unlinkat(source.parent.get(), source.name.c_str(), AT_REMOVEDIR) != 0) {
               fail("Could not remove empty merged source folder");
+            }
+            if (work.operationHistory) {
+              work.operationHistory->removedMerge(source.location);
             }
             result.outcome = Moved;
           } else {
@@ -705,6 +749,9 @@ namespace luciole::transfer {
           move.proof->beforeSourceRemoval(work.token);
         }
         removeSource(parent.get(), move.tree, work);
+        if (work.operationHistory) {
+          work.operationHistory->sourceRemoved(move.node->source.location);
+        }
         if (move.proof) {
           try {
             move.proof->sourceRemoved(work.token);

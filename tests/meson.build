@@ -22,6 +22,7 @@ test_table = [
   {'name': 'tab-workspace', 'deps': [browser_dep]},
   {'name': 'job-routing', 'deps': [browser_dep]},
   {'name': 'operation-activity', 'deps': [app_jobs_dep, event_loop_dep], 'env': gio_env},
+  {'name': 'operation-history', 'deps': [app_jobs_dep, event_loop_dep], 'timeout': 120, 'env': gio_env},
   {'name': 'drive-removal', 'deps': [app_jobs_dep, event_loop_dep], 'env': gio_env},
   {'name': 'device-mount', 'deps': [browser_dep], 'env': gio_env},
   {'name': 'drive-glyph', 'deps': [ui_dep], 'env': assets_env},

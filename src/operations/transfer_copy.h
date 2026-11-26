@@ -7,6 +7,7 @@
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <limits>
 #include <map>
 #include <memory>
@@ -46,6 +47,7 @@ namespace luciole::transfer {
     // Metadata of items this job renamed or unlinked, so later checks accept the job's own changes.
     std::map<std::pair<dev_t, ino_t>, struct stat> changedLinks;
     std::shared_ptr<HistoryRevisions> history;
+    std::function<void(const struct stat&, bool)> revisionObserver;
     std::vector<char> buffer;
     bool metadataIncomplete = false;
     // Kernel copy paths the destination filesystem rejected; later files skip straight to the next one.

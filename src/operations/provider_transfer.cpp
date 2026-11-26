@@ -384,6 +384,8 @@ namespace {
 
 struct luciole::ProviderTransfer::State {
   TransferRequest request;
+  std::optional<Location> exactTarget;
+  OperationHistory* operationHistory = nullptr;
   std::vector<std::unique_ptr<Node>> roots;
   std::size_t entries = 0;
   bool collectingRemote = false;
@@ -433,6 +435,9 @@ struct luciole::ProviderTransfer::State {
       auto proof = work.prepareCopy
           ? work.prepareCopy(node.sourceIndex, target, parent.get(), stage.fd(), previous.has_value())
           : nullptr;
+      auto operation = work.operationHistory
+          ? work.operationHistory->prepareNative(node.source, target, stage.fd(), "item")
+          : nullptr;
       work.check();
       validateDestination();
       if (previous) {
@@ -457,6 +462,9 @@ struct luciole::ProviderTransfer::State {
       }
       if (proof && work.recordCopy) {
         work.recordCopy(proof, stage.fd());
+      }
+      if (work.operationHistory) {
+        work.operationHistory->published(operation, previous.has_value());
       }
       node.destinationStamp = info(target, work.token);
       if (!stage.clear()) {
@@ -529,6 +537,9 @@ struct luciole::ProviderTransfer::State {
       proof->beforeSourceRemoval(token);
     }
     removeSource(tree, token);
+    if (operationHistory) {
+      operationHistory->sourceRemoved(tree.source);
+    }
     if (proof && collectingRemote) {
       try {
         proof->sourceRemoved(token);
@@ -544,6 +555,9 @@ struct luciole::ProviderTransfer::State {
     node.merged = true;
     node.result.destination = target;
     node.destinationStamp = std::move(existing);
+    if (operationHistory) {
+      operationHistory->beforeMerge(node.source);
+    }
     if (request.action == TransferAction::Move && !node.mergeOwner && collectingRemote) {
       try {
         node.mergeSource =
@@ -589,6 +603,9 @@ struct luciole::ProviderTransfer::State {
       }
     } else if (complete && action == TransferAction::Move) {
       erase(node.source, token);
+      if (operationHistory) {
+        operationHistory->removedMerge(node.source);
+      }
     } else if (complete && action == TransferAction::Copy) {
       unchanged(node.captured.get(), info(node.source, token).get());
     }
@@ -642,7 +659,7 @@ struct luciole::ProviderTransfer::State {
               || (folder(node.captured.get()) && transferLocationInside(node.parent, node.source)))) {
         throwFileError(FileErrorKind::WouldRecurse, "A folder cannot be placed inside itself.");
       }
-      auto name = node.source.basename();
+      auto name = exactTarget && depth == 0 ? exactTarget->basename() : node.source.basename();
       if (!name || !validName(*name)) {
         throwFileError(FileErrorKind::InvalidArgument, "A filesystem root cannot be transferred.");
       }
@@ -723,6 +740,9 @@ struct luciole::ProviderTransfer::State {
         executeMerge(node, token, bytes, choose, nativeCopies, depth);
         return;
       }
+      if (operationHistory) {
+        operationHistory->beforeTransfer(node.source, target);
+      }
       if (nativeCopies && request.action == TransferAction::Copy && node.parent.isNative()) {
         download(node, target, parent.get(), existing.get(), *nativeCopies);
         return;
@@ -737,6 +757,7 @@ struct luciole::ProviderTransfer::State {
         const auto item = stage.child("item"), backup = stage.child("previous");
         auto tree = stageItem(node, item, token, bytes);
         remoteProof = prepareHistory(node, target, item, static_cast<bool>(existing), token);
+        auto operation = operationHistory ? operationHistory->prepareProvider(node.source, target, item) : nullptr;
         unchanged(parent.get(), info(node.parent, token).get(), false);
         if (existing) {
           unchanged(existing.get(), info(target, token).get());
@@ -762,6 +783,9 @@ struct luciole::ProviderTransfer::State {
         node.result.destination = target;
         node.published = true;
         node.destinationStamp = info(target, token);
+        if (operationHistory) {
+          operationHistory->published(operation);
+        }
         if (remoteProof && collectingRemote) {
           try {
             remoteProof->published(token, existing ? std::optional(backup) : std::nullopt);
@@ -821,8 +845,10 @@ struct luciole::ProviderTransfer::State {
   }
 };
 
-luciole::ProviderTransfer::ProviderTransfer(TransferRequest request)
-    : m_state(std::make_unique<State>(std::move(request))) {}
+luciole::ProviderTransfer::ProviderTransfer(TransferRequest request, std::optional<Location> exactTarget)
+    : m_state(std::make_unique<State>(std::move(request))) {
+  m_state->exactTarget = std::move(exactTarget);
+}
 luciole::ProviderTransfer::~ProviderTransfer() = default;
 std::size_t luciole::ProviderTransfer::retryable() const {
   std::size_t result = 0;
@@ -836,6 +862,7 @@ std::vector<luciole::TransferResult> luciole::ProviderTransfer::run(
     const Choose& choose, transfer::Work* nativeCopies, bool captureRemoteHistory
 ) {
   auto& state = *m_state;
+  state.operationHistory = nativeCopies ? nativeCopies->operationHistory : nullptr;
   if (!captureRemoteHistory) {
     state.disableRemoteHistory();
   }

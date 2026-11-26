@@ -82,7 +82,7 @@ namespace {
     }
   }
   void transferResults(JobActivity& activity, const std::vector<luciole::TransferResult>& results, bool details) {
-    constexpr std::array names{"Moved", "Copied", "Skipped", "Failed", "Cancelled", "Partial", "Linked"};
+    constexpr std::array names{"Moved", "Copied", "Skipped", "Failed", "Cancelled", "Partial", "Linked", "Deleted"};
     Counts counts;
     Report report;
     for (const auto& result : results) {
@@ -90,6 +90,7 @@ namespace {
       case luciole::TransferOutcome::Moved:
       case luciole::TransferOutcome::Copied:
       case luciole::TransferOutcome::Linked:
+      case luciole::TransferOutcome::Deleted:
         ++counts.done;
         break;
       case luciole::TransferOutcome::Skipped:

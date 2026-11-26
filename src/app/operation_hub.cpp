@@ -142,6 +142,9 @@ OperationJob* OperationHub::find(luciole::JobId id) const {
 std::shared_ptr<OperationJob> OperationHub::add(luciole::TabId page, OperationJob::Service service, JobScope scope) {
   const auto id = ++m_next;
   auto job = std::make_shared<OperationJob>(id, std::move(service));
+  if (job->kind() == JobKind::Transfer) {
+    job->service<luciole::TransferService>().useOperationHistory();
+  }
   std::visit(
       [this, raw = job.get()](auto& value) { value->setChangedCallback([this, raw] { changed(*raw); }); },
       job->m_service

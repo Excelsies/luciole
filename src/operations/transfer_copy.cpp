@@ -275,6 +275,9 @@ namespace luciole::transfer {
       history->observed(value, false);
     }
     changedLinks[{value.st_dev, value.st_ino}] = value;
+    if (revisionObserver) {
+      revisionObserver(value, false);
+    }
   }
 
   void CopyWork::noteUnlinked(const struct stat& value) {
@@ -282,6 +285,9 @@ namespace luciole::transfer {
       history->observed(value, true);
     }
     changedLinks[{value.st_dev, value.st_ino}] = value;
+    if (revisionObserver) {
+      revisionObserver(value, true);
+    }
   }
 
   void CopyWork::check() const {

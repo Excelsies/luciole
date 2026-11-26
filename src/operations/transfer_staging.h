@@ -3,6 +3,7 @@
 #include "fs/location.h"
 #include "fs/posix_fd.h"
 #include "fs/transfer_types.h"
+#include "operations/operation_history.h"
 #include "operations/transfer_copy.h"
 #include "operations/transfer_service.h"
 
@@ -75,6 +76,8 @@ namespace luciole::transfer {
     std::function<std::shared_ptr<const CopiedMoveEffect>(const Source&, const Location&, int, int, bool)>
         prepareCopiedMove;
     bool allowMerge = true;
+    OperationHistory* operationHistory = nullptr;
+    std::optional<Location> exactTarget;
     std::size_t mergedItems = 0;
     // Owned by flushMoves(); nodes outlive the job's final flush.
     std::vector<PendingMove> pendingMoves;

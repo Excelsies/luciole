@@ -7,6 +7,7 @@
 #include "operations/creation_stage.h"
 #include "operations/history_mount.h"
 #include "operations/history_revisions.h"
+#include "operations/operation_history.h"
 #include "operations/provider_copy_receipt.h"
 #include "operations/transfer_copy.h"
 
@@ -858,7 +859,7 @@ std::vector<luciole::TransferResult> luciole::CopyReceipt::unconfirmed(const Fil
   return results;
 }
 bool luciole::CopyReceipt::cleanupPending() {
-  return pendingCleanup.load() != 0 || ProviderCopyReceipt::cleanupPending();
+  return pendingCleanup.load() != 0 || ProviderCopyReceipt::cleanupPending() || OperationHistory::cleanupPending();
 }
 std::vector<luciole::FileError> luciole::CopyReceipt::takeCleanupErrors() {
   const std::scoped_lock lock(cleanupMutex);

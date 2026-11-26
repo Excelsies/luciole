@@ -178,7 +178,20 @@ namespace {
       TEST_CHECK(!fs::exists(fixture.root / "volume/destination/input"));
     }
     const auto descriptors = fixture.held();
-    TEST_CHECK(descriptors >= 2);
+    // Transfer history pins containing folders without retaining a descriptor to the payload.
+    TEST_CHECK(descriptors >= 1);
+    if (kind == History::Create || kind == History::Rename || kind == History::BatchRename) {
+      TEST_CHECK(descriptors >= 2);
+    } else {
+      for (const auto& file : fs::directory_iterator("/proc/self/fd")) {
+        std::error_code error;
+        const auto target = fs::read_symlink(file.path(), error).native();
+        if (!error && target.starts_with((fixture.root / "volume").native() + "/")) {
+          struct stat facts{};
+          TEST_CHECK(::stat(file.path().c_str(), &facts) == 0 && S_ISDIR(facts.st_mode));
+        }
+      }
+    }
     const bool redo = workspace.hub.canRedo();
     const auto unrelated = realMounts ? std::make_unique<Fixture>() : nullptr;
     const auto otherRoot = unrelated ? unrelated->at("volume") : luciole::Location::fromUri("smb://fixture/other/");
@@ -252,9 +265,32 @@ namespace {
     TEST_CHECK(workspace.hub.canRedo() && !fs::exists(fixture.root / "outside/source"));
     TEST_CHECK(!prepare(workspace.hub, luciole::Location::fromUri("smb://fixture/share/")));
     TEST_CHECK(workspace.hub.canRedo());
+    if (realMounts) {
+      // Redo reads the original source again. A missing source leaves a retryable record and no output.
+      TEST_CHECK(workspace.hub.replayHistory(workspace.page, true));
+      until([&] { return !workspace.hub.busy(); });
+      TEST_CHECK(workspace.hub.canRedo() && !fs::exists(fixture.root / "outside/source"));
+      const auto* replay =
+          workspace.hub.newest(workspace.page, [](const auto& item) { return item.kind() == JobKind::Transfer; });
+      TEST_CHECK(replay && replay->service<luciole::TransferService>().results().front().error);
+      TEST_CHECK(::mount("tmpfs", (fixture.root / "volume").c_str(), "tmpfs", MS_NOSUID | MS_NODEV, "size=16m") == 0);
+      fixture.mounted = true;
+      fixture.write("volume/source", "source available after remount");
+    }
     TEST_CHECK(workspace.hub.replayHistory(workspace.page, true));
     until([&] { return !workspace.hub.busy(); });
     TEST_CHECK(workspace.hub.canUndo() && fs::exists(fixture.root / "outside/source"));
+    if (realMounts) {
+      std::string bytes;
+      std::getline(std::ifstream(fixture.root / "outside/source"), bytes);
+      TEST_CHECK(bytes == "source available after remount");
+      TEST_CHECK(workspace.hub.replayHistory(workspace.page, false));
+      until([&] { return !workspace.hub.busy(); });
+      TEST_CHECK(workspace.hub.canRedo());
+      TEST_CHECK(!prepare(workspace.hub, fixture.at("volume")));
+      TEST_CHECK(!workspace.hub.canUndo() && !workspace.hub.canRedo());
+      TEST_CHECK(fixture.remove().error.empty());
+    }
   }
   void bindMountHistory() {
     if (!realMounts) {
