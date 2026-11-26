@@ -1,19 +1,43 @@
 # Luciole
 
-Luciole is a native Wayland file manager with list, grid and optional Miller column views, tabs, split view and a side preview. It runs independently of the Noctalia shell.
+Luciole is a native Wayland file manager with grid, list and column views, tabs, split view and a side preview. It runs independently of the Noctalia shell. The application is in development; these guides describe current features.
 
-The application is in development. The guides below describe current features.
+![Luciole showing a folder of images in grid view with the side preview open](assets/index-hero.webp)
 
-## Start here
+## Guides
 
-1. [Install and start Luciole](installation.md).
-2. Learn [navigation, search, selection and views](browsing.md).
-3. Adjust [settings and configuration](configuration.md).
-4. Use [file operations, Trash, archives and Properties](file-operations.md).
-5. Add [custom scripts or explicitly run a program](scripts.md).
+| Page | Purpose |
+|---|---|
+| **Getting started** | |
+| [Installation](installation.md) | Install from a package, Nix or Guix |
+| [Building from source](building.md) | Dependencies and build commands |
+| [Getting started](getting-started.md) | Start Luciole, tour the window, learn shortcuts |
+| [File picker](file-picker.md) | Use Luciole for other applications' Open and Save dialogs |
+| **Basics** | |
+| [Navigation](navigation.md) | Location bar, search, history and keyboard navigation |
+| [Views](views.md) | Grid, list and column views, sorting and selection |
+| [Tabs and split view](tabs-and-windows.md) | Tabs, two panes and windows |
+| [Sidebar and drives](sidebar.md) | Places, pinned folders, drives and unlocking |
+| [Preview and Properties](preview-and-properties.md) | Preview files, inspect details and permissions |
+| **Files** | |
+| [File operations](file-operations.md) | Copy, move, rename, drag and drop, conflicts |
+| [Undo and redo](undo-redo.md) | Reverse the last file operation |
+| [Trash](trash.md) | Delete, restore and empty the Trash |
+| [File operations](file-operations.md) | Copy, move, create, rename and background operations |
+| [Undo and redo](undo-redo.md) | What you can take back |
+| [Trash](trash.md) | Delete, restore and empty |
+| [Archives](archives.md) | Browse, extract and create archives |
+| [Opening files](opening-files.md) | Default apps, Open With, running programs, terminals |
+| [Custom scripts](scripts.md) | Add your own actions |
+| **Network** | |
+| [Network folders](network.md) | SFTP, SMB and WebDAV locations |
+| **Customize** | |
+| [Settings](settings.md) | Tour the Settings page |
+| [Configuration reference](configuration.md) | Every `config.toml` key |
+| [Keyboard shortcuts](keybinds.md) | Default shortcuts and customization |
+| **Help** | |
+| [Troubleshooting](troubleshooting.md) | Symptoms, causes and fixes |
 
-Settings opens inside the existing window with Ctrl+,. Preferences save automatically. About is available from the main menu.
+## Get help
 
-## Help and contributing
-
-Report issues through the [project tracker](https://github.com/noctalia-dev/luciole/issues). Include the Luciole version, distribution, relevant helper/provider versions and a small reproduction when possible. For development and packaging, see [Contributing](../../CONTRIBUTING.md), [design notes](../design/README.md) and [Packaging](../../PACKAGING.md).
+Report problems on the [issue tracker](https://github.com/noctalia-dev/luciole/issues) or ask on [Discord](https://discord.noctalia.dev). Include the Luciole version, your distribution and a small reproduction. For development, see [Contributing](../../CONTRIBUTING.md), the [design notes](../design/README.md) and [Packaging](../../PACKAGING.md).
