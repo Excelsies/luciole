@@ -12,5 +12,7 @@ namespace luciole {
   std::optional<unsigned> splitZipPart(const Location& location);
   // mime is the provider's content type; empty when unknown.
   bool isSupportedArchive(const Location& location, std::string_view mime);
+  // The decompressed name of a single compressed file such as dump.sql.gz; never a compressed TAR.
+  std::optional<std::string> compressedFileName(const Location& location);
   std::string archiveFolderName(const Location& location);
 } // namespace luciole

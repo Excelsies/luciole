@@ -2,6 +2,7 @@
 
 #include "browser/location_presentation.h"
 #include "config/keybinds.h"
+#include "ui/browser/drive_glyph.h"
 #include "ui/builders.h"
 #include "ui/controls/button.h"
 #include "ui/controls/scroll_view.h"
@@ -205,7 +206,7 @@ void luciole::SidebarTreeView::setRoots(
   m_pinCount = pins.bookmarks().size();
   for (std::size_t i = 0; i < pins.bookmarks().size(); ++i) {
     const auto& pin = pins.bookmarks()[i];
-    if (!showNetwork && pin.location == Location::network()) {
+    if (!placeShown(pin, showNetwork)) {
       continue;
     }
     const auto prior = m_rootIds.find(pin.location.uri());
@@ -242,7 +243,7 @@ void luciole::SidebarTreeView::setRoots(
     const auto prior = m_rootIds.find(uri);
     const auto id = prior == m_rootIds.end() ? m_nextRoot++ : prior->second;
     roots.emplace(uri, id);
-    m_glyphs.emplace(id, drive.glyph);
+    m_glyphs.emplace(id, driveGlyph(drive));
     DirectoryEntry entry{
         .id = id,
         .place = target,

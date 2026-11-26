@@ -186,7 +186,15 @@ namespace {
     };
     const auto empty = [] {
       return luciole::ArchiveCatalog{
-          .source = file("pack.zip"), .stamp = {}, .format = {}, .entries = {}, .expandedBytes = 0, .encrypted = false
+          .source = file("pack.zip"),
+          .stamp = {},
+          .format = {},
+          .entries = {},
+          .expandedBytes = 0,
+          .encrypted = false,
+          .compression = {},
+          .archiveBytes = 0,
+          .single = false
       };
     };
     auto catalog = empty();

@@ -5,9 +5,11 @@
 
 #include <array>
 #include <lzma.h>
+#include <string_view>
 
 namespace luciole::archive_work {
-  // Decode outside libarchive, whose native XZ, LZMA and lzip filters have no memory-limit API.
+  // Decode outside libarchive to validate concatenated frames, integrity checks and trailing padding, and to bound
+  // the memory of LZMA-alone and lzip, whose libarchive filters have no memory-limit API.
   // Only TAR consumes this stream. Source identity remains owned by Input.
   class XzInput {
   public:
@@ -19,6 +21,8 @@ namespace luciole::archive_work {
     XzInput& operator=(const XzInput&) = delete;
     std::size_t read(std::span<char> buffer);
     void finish();
+    // The compression a reader shows for this stream.
+    std::string_view compression() const;
 
   private:
     static std::optional<LzmaContainer> peek(Input& input);

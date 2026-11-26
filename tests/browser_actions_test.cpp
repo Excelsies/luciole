@@ -751,9 +751,15 @@ namespace {
     for (const char* const name : {"a.tbz2", "a.tbz", "a.tzst", "a.txz"}) {
       TEST_CHECK(luciole::archiveFolderName(luciole::Location::fromPath(std::string("/tmp/") + name)) == "a");
     }
-    TEST_CHECK(!luciole::isSupportedArchive(luciole::Location::fromPath("/tmp/plain.bz2"), "application/x-bzip2"));
-    TEST_CHECK(!luciole::isSupportedArchive(luciole::Location::fromPath("/tmp/plain.zst"), "application/zstd"));
-    TEST_CHECK(!luciole::isSupportedArchive(luciole::Location::fromPath("/tmp/plain.xz"), "application/x-xz"));
+    for (const auto& [name, compression] :
+         {std::pair{"/tmp/plain.bz2", luciole::ArchiveCompression::Bzip2},
+          std::pair{"/tmp/plain.zst", luciole::ArchiveCompression::Zstd},
+          std::pair{"/tmp/plain.xz", luciole::ArchiveCompression::Xz}}) {
+      TEST_CHECK(
+          luciole::isSupportedArchive(luciole::Location::fromPath(name), {})
+          == luciole::archiveCompressionAvailable(compression)
+      );
+    }
   }
   void testSearchTrashActions() {
     luciole::DirectoryModel model;
@@ -1101,12 +1107,30 @@ namespace {
     }
     TEST_CHECK(luciole::shortcutMatches(A::Search, XKB_KEY_f, KeyMod::Ctrl));
   }
+  void testClipboardShortcutBindings() {
+    using K = luciole::KeybindCommand;
+    TEST_CHECK(luciole::shortcutMatches(A::CopyTargetPath, XKB_KEY_c, KeyMod::Ctrl | KeyMod::Alt));
+    TEST_CHECK(luciole::shortcutMatches(A::CopyTargetUri, XKB_KEY_u, KeyMod::Ctrl | KeyMod::Alt));
+    TEST_CHECK(!luciole::shortcutMatches(A::CopyTargetPath, XKB_KEY_c, KeyMod::Ctrl));
+    auto rebound = luciole::KeybindConfig{};
+    luciole::setKeybindChord(rebound, K::CopyTargetPath, 0, luciole::parseKeybindChord("Alt+P"));
+    luciole::setKeybindChord(rebound, K::CopyTargetUri, 0, std::nullopt);
+    luciole::setActiveKeybinds(rebound);
+    TEST_CHECK(luciole::shortcutMatches(A::CopyTargetPath, XKB_KEY_p, KeyMod::Alt));
+    TEST_CHECK(!luciole::shortcutMatches(A::CopyTargetPath, XKB_KEY_c, KeyMod::Ctrl | KeyMod::Alt));
+    TEST_CHECK(luciole::actionShortcutLabel(A::CopyTargetPath) == "Alt+P");
+    TEST_CHECK(!luciole::shortcutMatches(A::CopyTargetUri, XKB_KEY_u, KeyMod::Ctrl | KeyMod::Alt));
+    TEST_CHECK(luciole::actionShortcutLabel(A::CopyTargetUri).empty());
+    luciole::setActiveKeybinds(luciole::KeybindConfig{});
+  }
+
 } // namespace
 int main() {
   try {
     testActionTable();
     testShortcuts();
     testViewModeActions();
+    testClipboardShortcutBindings();
     testPointerActivation();
     testTerminalActions();
     testArchiveActions();

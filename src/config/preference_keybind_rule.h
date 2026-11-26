@@ -42,8 +42,9 @@ namespace luciole::preference_schema {
         }
         parsed[index++] = *chord;
       }
-      config.chords(*command) = parsed;
+      config.setChords(*command, parsed);
     }
+    config.resolveFallbackDefaults();
     return luciole::keybindConfigValid(config) ? std::optional(config) : std::nullopt;
   }
 
@@ -59,11 +60,12 @@ namespace luciole::preference_schema {
     toml::table commands;
     for (const auto scope : luciole::kKeybindScopes) {
       for (const auto command : luciole::keybindCommands(scope)) {
-        if (value.chords(command) == inherited.chords(command)) {
+        if (value.storedChords(command) == inherited.storedChords(command)
+            && value.hasExplicitFallback(command) == inherited.hasExplicitFallback(command)) {
           continue;
         }
         toml::array chords;
-        for (const auto& chord : value.chords(command)) {
+        for (const auto& chord : value.storedChords(command)) {
           if (chord) {
             chords.push_back(luciole::keybindChordSpec(*chord));
           }

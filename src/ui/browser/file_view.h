@@ -25,6 +25,7 @@ namespace luciole {
     void bindDecoration(Node& decoration, const VirtualGridDecorationLayout& layout) override;
     void setTileVisible(Node& tile, bool visible) override;
     void releaseTile(Node& tile, Renderer& renderer) override;
+    void destroyTile(Node& tile) override { m_tiles.erase(&tile); }
     void bindTile(Node& tile, std::size_t index, bool selected, bool hovered) override;
     bool onPointerPress(std::size_t index, float, float, float, float) override;
     bool onPointerDrag(std::optional<std::size_t>, float, float, float, float) override;
@@ -33,7 +34,7 @@ namespace luciole {
     bool onBackgroundPointerPress() override;
     bool onAreaSelection(const std::vector<std::size_t>& indices) override;
     bool areaSelectionCurrent() const override;
-    bool itemHitTest(std::size_t, float x, float y, float width, float height) const override;
+    bool itemHitTest(std::size_t index, float x, float y, float width, float height) const override;
     void onActivate(std::size_t index) override;
     void onSecondaryActivate(std::size_t index, float x, float y) override;
     void onBackgroundSecondaryActivate(float x, float y) override;

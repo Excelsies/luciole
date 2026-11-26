@@ -1,5 +1,6 @@
 #include "archive_format_harness.h"
 #include "fs/archive_container.h"
+#include "fs/archive_type.h"
 
 #include <cstdio>
 #include <cstdlib>
@@ -79,9 +80,11 @@ namespace {
     TEST_CHECK(!remote.isNative());
     TEST_CHECK(!luciole::isBrowsableArchive(remote, "application/x-cpio"));
     TEST_CHECK(!luciole::opensAsArchive(remote, "application/x-cpio", {}));
-    // Compressed cpio names are not part of this support.
-    TEST_CHECK(!luciole::isBrowsableArchive(location("/tmp/initrd.cpio.gz"), ""));
-    TEST_CHECK(!luciole::isBrowsableArchive(location("/tmp/initrd.cpio.xz"), ""));
+    // A compressed cpio is a single compressed file, not a cpio archive.
+    for (const auto* name : {"/tmp/initrd.cpio.gz", "/tmp/initrd.cpio.xz"}) {
+      TEST_CHECK(luciole::isBrowsableArchive(location(name), ""));
+      TEST_CHECK(luciole::compressedFileName(location(name)) == "initrd.cpio");
+    }
   }
 
   void everyFlavorBrowsesAndUnpacks(const Folder& folder) {

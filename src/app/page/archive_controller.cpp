@@ -273,6 +273,12 @@ void ArchiveController::sync() {
             openDialog({catalog->source}, std::move(selected), false);
           }
         },
+        [this](std::vector<std::string> selected) {
+          const auto* catalog = m_browser ? m_browser->service<luciole::ArchiveService>().catalog().get() : nullptr;
+          if (catalog && !extract(catalog->source, destination(catalog->source), std::move(selected))) {
+            m_page.actionError("Could not start extraction.");
+          }
+        },
         [this](const std::string& path) {
           if (m_browser) {
             (void)m_browser->service<luciole::ArchiveService>().openMember(path);

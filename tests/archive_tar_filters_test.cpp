@@ -122,6 +122,11 @@ namespace {
       TEST_CHECK(!outcome.error && outcome.catalog);
       TEST_CHECK(hasEntry(outcome, "docs") && hasEntry(outcome, "docs/a.txt") && hasEntry(outcome, "big.bin"));
       TEST_CHECK(hasEntry(outcome, "to-a"));
+      // The archive page names the compression it read.
+      TEST_CHECK(!outcome.catalog->compression.empty());
+      if (kind.filter == ARCHIVE_FILTER_LZMA || kind.filter == ARCHIVE_FILTER_LZIP) {
+        TEST_CHECK(outcome.catalog->compression == kind.label);
+      }
       const auto out = folder.root / ("out-" + std::string(kind.label) + std::string(suffix));
       const auto done = extract(path, out);
       TEST_CHECK(!done.error);

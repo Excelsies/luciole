@@ -447,6 +447,12 @@ luciole::AtomicWriteState luciole::ConfigService::saveOverrides(std::span<const 
         for (const auto& edit : edits) {
           editPatch(*patch, edit);
         }
+        if (auto& keybinds = std::get<std::optional<KeybindConfig>>(*patch)) {
+          keybinds->resolveFallbackDefaults(&inherited.browser.keybinds);
+          if (!keybindConfigValid(*keybinds)) {
+            return std::unexpected("keybinding edits conflict with the current configuration");
+          }
+        }
         applyPatch(candidate, *patch);
         if (*patch == previous) {
           return std::nullopt;

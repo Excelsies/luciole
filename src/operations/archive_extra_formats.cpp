@@ -7,6 +7,7 @@
 #include <archive_entry.h>
 #include <array>
 #include <charconv>
+#include <limits>
 #include <string_view>
 
 namespace {
@@ -28,6 +29,9 @@ namespace {
   constexpr std::string_view kArMagic = "!<arch>\n";
   constexpr std::size_t kArHeaderBytes = 60;
   constexpr std::size_t kArSizeAt = 48, kArSizeWidth = 10;
+  // Real long-name tables are a few KiB. libarchive holds the declared size in memory, so it is capped here even
+  // when the job has no metadata budget of its own.
+  constexpr std::uint64_t kMaxArNameTableBytes = 16U * 1024U * 1024U;
 
   // Whether the file itself, before any decompression, starts as an ar archive.
   bool startsAsAr(Input& input) {
@@ -62,13 +66,18 @@ namespace {
   }
 
   // Walks the member headers of a plain ar file and refuses a name table that libarchive would hold beyond the
-  // metadata limit. A complete header that is not well formed is refused: a walk that merely stopped there could
-  // miss a table that libarchive still finds.
+  // metadata limit or kMaxArNameTableBytes. A complete header that is not well formed is refused: a walk that merely
+  // stopped there could miss a table that libarchive still finds.
   void requireBoundedTables(Input& input, const Work& work) {
     const auto fileSize = static_cast<std::uint64_t>(input.seek(0, SEEK_END));
     std::uint64_t position = kArMagic.size();
-    // Index members are skipped without counting as entries, so the walk allows as many of them again.
-    const std::size_t bound = 2 * work.limits.maxEntries + 2;
+    // Index members are skipped without counting as entries, so the walk allows as many of them again. Each header
+    // moves the position on by at least its own length, so the file size bounds the walk whatever this is.
+    const auto entries = work.limits.maxEntries;
+    const std::size_t bound = entries > (std::numeric_limits<std::size_t>::max() - 2) / 2
+        ? std::numeric_limits<std::size_t>::max()
+        : 2 * entries + 2;
+    const std::uint64_t tableLimit = std::min<std::uint64_t>(work.limits.maxMetadataBytes, kMaxArNameTableBytes);
     std::size_t seen = 0;
     for (; seen < bound && position + kArHeaderBytes <= fileSize; ++seen) {
       work.check();
@@ -82,10 +91,8 @@ namespace {
         malformedHeader();
       }
       const auto size = memberSize(view);
-      if (maybeNameTable(view) && size > work.limits.maxMetadataBytes) {
-        throwFileError(
-            FileErrorKind::Unsupported, "The ar archive's long-name table is larger than the metadata limit."
-        );
+      if (maybeNameTable(view) && size > tableLimit) {
+        throwFileError(FileErrorKind::Unsupported, "The ar archive's long-name table is too large.");
       }
       position += kArHeaderBytes + size + (size % 2);
     }

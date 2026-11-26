@@ -6,6 +6,7 @@
 #include "operations/transfer_service.h"
 
 #include <chrono>
+#include <limits>
 #include <optional>
 #include <span>
 #include <string_view>
@@ -27,7 +28,11 @@ namespace luciole {
     std::string link;
     unsigned mode = 0644;
     FileIconSource icon{};
+    std::string type;
     bool encrypted = false;
+    // Sparse file data extents; ordinary files use size for storage estimates.
+    std::optional<std::uint64_t> dataBytes = std::nullopt;
+    std::optional<std::uint64_t> modifiedSeconds = std::nullopt;
   };
   struct ArchiveCatalog {
     Location source;
@@ -35,14 +40,20 @@ namespace luciole {
     std::vector<ArchiveEntry> entries;
     std::uint64_t expandedBytes = 0;
     bool encrypted = false;
+    // The outer compression filter, such as "gzip"; empty when uncompressed.
+    std::string compression;
+    std::uint64_t archiveBytes = 0;
+    // One compressed file such as dump.sql.gz, whose only entry has no size until extracted.
+    bool single = false;
   };
   struct ArchiveLimits {
-    std::uint64_t maxArchiveBytes = 4ULL * 1024 * 1024 * 1024;
-    std::uint64_t maxExpandedBytes = 8ULL * 1024 * 1024 * 1024;
-    std::size_t maxEntries = 50000;
-    std::size_t maxMetadataBytes = 16U * 1024 * 1024;
-    unsigned maxDepth = 128;
-    std::chrono::seconds maxTime{120};
+    // Normal jobs have no policy quotas. Explicit consumers and tests can impose finite budgets.
+    std::uint64_t maxArchiveBytes = std::numeric_limits<std::uint64_t>::max();
+    std::uint64_t maxExpandedBytes = std::numeric_limits<std::uint64_t>::max();
+    std::size_t maxEntries = std::numeric_limits<std::size_t>::max();
+    std::size_t maxMetadataBytes = std::numeric_limits<std::size_t>::max();
+    unsigned maxDepth = std::numeric_limits<unsigned>::max();
+    std::chrono::seconds maxTime = std::chrono::seconds::max();
   };
   std::span<const ArchiveFormatInfo> archiveFormats();
   bool archiveEncryptionAvailable();

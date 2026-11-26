@@ -225,7 +225,7 @@ luciole::FileDropTarget DragDropController::externalDrop(float x, float y, const
                   finish(false);
                   return;
                 }
-                finish(m_pins.add(bookmarks, slot));
+                finish(m_pins.add(bookmarks, slot.before, slot.belowSeparator));
               },
           .preferred = luciole::DragAction::Copy,
           .copyOnly = true
@@ -497,7 +497,7 @@ std::optional<DragDropController::DropTarget> DragDropController::dropTarget() c
   return std::nullopt;
 }
 
-std::optional<std::size_t> DragDropController::pinDropSlot() const {
+std::optional<luciole::PinSlot> DragDropController::pinDropSlot() const {
   if (!m_drag || !m_pins.editable() || !m_sidebar.visible()) {
     return std::nullopt;
   }
@@ -828,6 +828,6 @@ void DragDropController::finishDrag() {
     };
     m_transferController.receiveDrop({std::move(sources), false}, target->location, std::move(options), [](bool) {});
   } else if (slot) {
-    m_sidebar.pinFolders(drag.bookmarks, *slot);
+    m_sidebar.pinFolders(drag.bookmarks, slot->before, slot->belowSeparator);
   }
 }

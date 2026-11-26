@@ -3,11 +3,13 @@
 #include "operations/archive_lzma_header.h"
 
 #include <cstdio>
+#include <limits>
 #include <string>
 
 namespace {
   using luciole::archive_work::LzmaContainer;
-  constexpr std::uint64_t DecoderMemoryLimit = 128U * 1024U * 1024U;
+  // XZ has no memory ceiling. LZMA-alone and lzip, which libarchive would decode without any, keep one.
+  constexpr std::uint64_t kSideDecoderMemoryLimit = 128U * 1024U * 1024U;
   std::string containerName(LzmaContainer kind) {
     return kind == LzmaContainer::Xz ? "XZ" : kind == LzmaContainer::Alone ? "LZMA" : "Lzip";
   }
@@ -28,12 +30,14 @@ namespace {
   lzma_ret startDecoder(lzma_stream* stream, LzmaContainer kind) {
     switch (kind) {
     case LzmaContainer::Xz:
-      return lzma_stream_decoder(stream, DecoderMemoryLimit, LZMA_CONCATENATED | LZMA_TELL_UNSUPPORTED_CHECK);
+      return lzma_stream_decoder(
+          stream, std::numeric_limits<std::uint64_t>::max(), LZMA_CONCATENATED | LZMA_TELL_UNSUPPORTED_CHECK
+      );
     case LzmaContainer::Alone:
-      return lzma_alone_decoder(stream, DecoderMemoryLimit);
+      return lzma_alone_decoder(stream, kSideDecoderMemoryLimit);
     case LzmaContainer::Lzip:
       // One member at a time: with LZMA_CONCATENATED liblzma ignores whatever is not a member after one.
-      return lzma_lzip_decoder(stream, DecoderMemoryLimit, 0);
+      return lzma_lzip_decoder(stream, kSideDecoderMemoryLimit, 0);
     }
     return LZMA_PROG_ERROR;
   }
@@ -61,6 +65,9 @@ luciole::archive_work::XzInput::XzInput(Input& input, Work& work)
     lzma_end(&m_stream);
     decodeError(status, m_kind);
   }
+}
+std::string_view luciole::archive_work::XzInput::compression() const {
+  return m_kind == LzmaContainer::Xz ? "xz" : m_kind == LzmaContainer::Alone ? "lzma" : "lzip";
 }
 luciole::archive_work::XzInput::~XzInput() { lzma_end(&m_stream); }
 std::size_t luciole::archive_work::XzInput::read(std::span<char> buffer) {

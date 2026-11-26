@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <bitset>
 #include <cstddef>
 #include <cstdint>
 #include <optional>
@@ -61,12 +62,16 @@ namespace luciole {
     Open,
     OpenInNewTab,
     OpenInNewTabBackground,
+    OpenInOtherPane,
+    OpenInNewWindow,
     ToggleSelection,
     Rename,
     CreateFolder,
     CreateFile,
     Cut,
     Copy,
+    CopyTargetPath,
+    CopyTargetUri,
     Paste,
     Trash,
     DeletePermanently,
@@ -110,7 +115,7 @@ namespace luciole {
     SelectTab8,
     SelectTab9,
   };
-  inline constexpr std::size_t kKeybindCommandCount = 76;
+  inline constexpr std::size_t kKeybindCommandCount = 80;
   inline constexpr std::size_t kMaxKeybindChords = 4;
   inline constexpr std::array<KeybindScope, 3> kKeybindScopes{
       KeybindScope::Controls, KeybindScope::FileBrowser, KeybindScope::TabsAndWindows
@@ -123,11 +128,17 @@ namespace luciole {
   public:
     KeybindConfig();
     const KeybindChords& chords(KeybindCommand command) const;
-    KeybindChords& chords(KeybindCommand command);
+    // Stored chords retain defaults that conflict with a configured command.
+    const KeybindChords& storedChords(KeybindCommand command) const;
+    bool hasExplicitFallback(KeybindCommand command) const;
+    void setChords(KeybindCommand command, KeybindChords chords);
+    void resolveFallbackDefaults(const KeybindConfig* inherited = nullptr);
     bool operator==(const KeybindConfig&) const = default;
 
   private:
     std::array<KeybindChords, kKeybindCommandCount> m_chords{};
+    std::bitset<kKeybindCommandCount> m_explicitFallbacks;
+    std::bitset<kKeybindCommandCount> m_suppressedDefaults;
   };
 
   std::span<const KeybindCommand> keybindCommands(KeybindScope scope);

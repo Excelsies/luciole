@@ -55,7 +55,8 @@ namespace {
     TEST_CHECK(text == expected);
     luciole::FileIconCache icons;
     ArchiveView view(
-        icons, [] { return 0U; }, [] {}, [](std::vector<std::string>) {}, [](const std::string&) {}, [] {}, [] {}
+        icons, [] { return 0U; }, [] {}, [](std::vector<std::string>) {}, [](std::vector<std::string>) {},
+        [](const std::string&) {}, [] {}, [] {}
     );
     view.sync(nullptr, service.phase(), service.items(), service.bytes(), service.error());
     TEST_CHECK(shows(view, text));

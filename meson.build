@@ -564,6 +564,7 @@ media_dep = declare_dependency(link_with: media_lib, include_directories: src_in
 ui_lib = static_library('luciole-ui',
   files(
     'src/ui/browser/action_shortcuts.cpp',
+    'src/ui/browser/drive_glyph.cpp',
     'src/ui/browser/file_icon.cpp',
     'src/ui/browser/file_tooltip.cpp',
     'src/ui/browser/file_view.cpp',

@@ -61,6 +61,32 @@ std::optional<unsigned> luciole::splitZipPart(const Location& location) {
   return static_cast<unsigned>((index[0] - '0') * 100 + (index[1] - '0') * 10 + index[2] - '0');
 }
 
+std::optional<std::string> luciole::compressedFileName(const Location& location) {
+  const auto name = location.basename();
+  if (!name) {
+    return std::nullopt;
+  }
+  const luciole::GString lower(g_ascii_strdown(name->c_str(), -1));
+  const std::string_view text(lower.get());
+  for (const auto& [suffix, compression] :
+       {std::pair{std::string_view(".gz"), ArchiveCompression::Gzip},
+        std::pair{std::string_view(".bz2"), ArchiveCompression::Bzip2},
+        std::pair{std::string_view(".xz"), ArchiveCompression::Xz},
+        std::pair{std::string_view(".zst"), ArchiveCompression::Zstd}}) {
+    if (text.ends_with(suffix)) {
+      auto stem = name->substr(0, name->size() - suffix.size());
+      if (text.substr(0, stem.size()).ends_with(".tar")
+          || stem.empty()
+          || filenameProblem(stem)
+          || !archiveCompressionAvailable(compression)) {
+        return std::nullopt;
+      }
+      return stem;
+    }
+  }
+  return std::nullopt;
+}
+
 bool luciole::isSupportedArchive(const Location& location, std::string_view mime) {
   if (!location.nativePath()) {
     return false;
@@ -115,10 +141,15 @@ bool luciole::isSupportedArchive(const Location& location, std::string_view mime
   if (text.ends_with(".tar.xz") || text.ends_with(".txz")) {
     return archiveCompressionAvailable(ArchiveCompression::Xz);
   }
-  return (text.ends_with(".tar.zst") || text.ends_with(".tzst"))
-      && archiveCompressionAvailable(ArchiveCompression::Zstd);
+  if (text.ends_with(".tar.zst") || text.ends_with(".tzst")) {
+    return archiveCompressionAvailable(ArchiveCompression::Zstd);
+  }
+  return compressedFileName(location).has_value();
 }
 std::string luciole::archiveFolderName(const Location& location) {
+  if (auto stem = compressedFileName(location)) {
+    return *stem;
+  }
   std::string name = location.basename().value_or("Archive");
   const luciole::GString lower(g_ascii_strdown(name.c_str(), -1));
   const std::string_view text(lower.get());

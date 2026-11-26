@@ -3,6 +3,7 @@
 # 'parallel': false runs a test with no other test beside it, for a test whose
 # result needs a processor to itself.
 gio_env = ['G_DEBUG=fatal-warnings', 'GIO_USE_VFS=local']
+assets_env = ['LUCIOLE_ASSETS_DIR=' + (meson.project_source_root() / 'lib/assets')]
 python = import('python').find_installation('python3')
 # The launcher suite starts its own private bus, never the desktop session bus.
 find_program('dbus-daemon')
@@ -16,7 +17,7 @@ activation_server = custom_target('launch-activation-server-header',
 
 test_table = [
   {'name': 'adaptive-sidebar', 'deps': [model_dep]},
-  {'name': 'system-mounts', 'deps': [fs_dep, event_loop_dep], 'env': gio_env},
+  {'name': 'system-mounts', 'deps': [operations_dep, platform_dep, event_loop_dep], 'env': gio_env},
   {'name': 'ws-discovery', 'deps': [fs_dep], 'env': gio_env, 'wrapper': files('ws_discovery_test.py')},
   {'name': 'input-lifetime', 'deps': [noctalia_ui_dep]},
   {'name': 'window-move-gesture', 'deps': [model_dep]},
@@ -27,6 +28,7 @@ test_table = [
   {'name': 'drive-removal', 'deps': [app_jobs_dep, event_loop_dep], 'env': gio_env},
   {'name': 'device-mount', 'deps': [browser_dep], 'env': gio_env},
   {'name': 'archive-inspect-error', 'deps': [ui_dep, operations_dep, event_loop_dep], 'timeout': 60, 'env': gio_env},
+  {'name': 'drive-glyph', 'deps': [ui_dep], 'env': assets_env},
   {'name': 'archive-service', 'deps': [operations_dep, event_loop_dep], 'timeout': 90, 'env': gio_env},
   {'name': 'thumbnail', 'deps': [thumbnails_dep, imaging_dep, event_loop_dep, dependency('libwebp')],
     'timeout': 90, 'env': gio_env},
@@ -310,6 +312,7 @@ test_table = [
   {'name': 'user-file-save', 'deps': [fs_dep], 'timeout': 60, 'env': gio_env},
   {'name': 'user-file-save-check', 'deps': [fs_dep], 'env': gio_env},
   {'name': 'user-file-save-permissions', 'deps': [fs_dep], 'env': gio_env},
+  {'name': 'posix-rename', 'deps': [fs_dep]},
   {'name': 'xdg-dirs', 'deps': [fs_dep]},
   {'name': 'shared-helpers', 'deps': [operations_dep], 'env': gio_env},
   {'name': 'state-store', 'deps': [config_dep], 'env': gio_env},
@@ -542,6 +545,14 @@ endif
 
 library_assets_env = 'LUCIOLE_LIBRARY_ASSETS_DIR=' + (meson.project_source_root() / 'lib/assets')
 
+# Suites that publish through renameat2 flags run again as if on NFS or a FUSE filesystem that rejects them.
+rename_flags_unsupported = shared_module('rename-flags-unsupported',
+  'rename_flags_unsupported.c',
+  dependencies: dependency('dl'),
+)
+without_rename_flags = ['posix-rename', 'atomic-file', 'create-service', 'rename-service', 'batch-rename-service',
+  'provider-move-history', 'provider-transfer', 'transfer-service']
+
 foreach entry : test_table
   name = entry['name']
   test_env = entry.get('env', [])
@@ -572,10 +583,17 @@ foreach entry : test_table
   else
     test(name, exe, timeout: entry.get('timeout', 30), env: test_env, is_parallel: entry.get('parallel', true))
   endif
+  if name in without_rename_flags
+    test(name + '-without-rename-flags', exe,
+      timeout: entry.get('timeout', 30),
+      env: entry.get('env', []) + ['LD_PRELOAD=' + rename_flags_unsupported.full_path()],
+      depends: rename_flags_unsupported,
+    )
+  endif
 endforeach
 
 test('headless-cli', python,
   args: [files('cli_test.py'), app, meson.project_version()],
   timeout: 30,
-  env: ['LUCIOLE_ASSETS_DIR=' + (meson.project_source_root() / 'lib/assets')],
+  env: assets_env,
 )

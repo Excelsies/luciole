@@ -36,6 +36,7 @@ public:
     OperationDetails,
     // "Save Changes to <name>?" before an edited file is left; see PageEditing.
     SaveChanges,
+    SeparatorHeading,
   };
 
   // Takes the popup scene. `content` is the menu or dialog inside it: the scene itself for menus, the dialog

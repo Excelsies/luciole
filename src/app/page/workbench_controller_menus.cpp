@@ -41,9 +41,9 @@ void WorkbenchController::contextMenu(const luciole::WorkbenchContextRequest& re
   if (!isFolder) {
     return;
   }
-  std::vector<ContextMenuControlEntry> entries{{.id = kMenuOpen, .label = "Open"}};
+  std::vector<ContextMenuControlEntry> entries{{.id = kMenuOpen, .label = "Open", .glyph = "folder-open"}};
   if (*isFolder) {
-    entries.push_back({.id = kMenuOpenInNewTab, .label = "Open in New Tab"});
+    entries.push_back({.id = kMenuOpenInNewTab, .label = "Open in New Tab", .glyph = "plus"});
   }
   m_menus.showContextMenu(
       std::move(entries),
