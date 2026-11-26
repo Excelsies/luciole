@@ -586,7 +586,7 @@ foreach entry : test_table
   if name in without_rename_flags
     test(name + '-without-rename-flags', exe,
       timeout: entry.get('timeout', 30),
-      env: entry.get('env', []) + ['LD_PRELOAD=' + rename_flags_unsupported.full_path()],
+      env: test_env + ['LD_PRELOAD=' + rename_flags_unsupported.full_path()],
       depends: rename_flags_unsupported,
     )
   endif
