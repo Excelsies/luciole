@@ -11,6 +11,7 @@
 #include <archive.h>
 #include <archive_entry.h>
 #include <chrono>
+#include <clocale>
 #include <cstdint>
 #include <cstdlib>
 #include <filesystem>
@@ -43,6 +44,10 @@ namespace luciole::test::formats {
   class AddressCap {
   public:
     explicit AddressCap(std::size_t headroom) {
+      // glibc keeps a locale that failed to load, for good. The archive worker loads C.UTF-8 on first use, and
+      // under the cap that load can fail and then fail for the rest of the process, so it is loaded before.
+      static const locale_t resident = ::newlocale(LC_CTYPE_MASK, "C.UTF-8", nullptr);
+      TEST_CHECK(resident != nullptr);
       TEST_CHECK(::getrlimit(RLIMIT_AS, &m_before) == 0);
       std::ifstream statm("/proc/self/statm");
       std::size_t pages = 0;
