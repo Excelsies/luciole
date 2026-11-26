@@ -185,8 +185,10 @@ namespace {
     write(path, kMagic + arHeaderOnly(name, size));
     fs::resize_file(path, 8 + 60 + size);
   }
-  constexpr std::size_t kCapHeadroom = 64U * 1024U * 1024U;
-  constexpr std::uint64_t kHugeTable = 96ULL * 1024 * 1024;
+  // A job grows the address space by under 50 MiB, and a declared table of 900 MiB, the most a size field with a
+  // sign or a letter still holds, is more than three times the headroom.
+  constexpr std::size_t kCapHeadroom = 256U * 1024U * 1024U;
+  constexpr std::uint64_t kHugeTable = 900ULL * 1024 * 1024;
   // A job that bounds its metadata, as the Workbench preview does.
   luciole::ArchiveLimits boundedMetadata() {
     luciole::ArchiveLimits limits;
@@ -319,6 +321,7 @@ namespace {
   }
 
   void compressedArchivesNeverReachTheArReader(const Folder& folder) {
+    constexpr std::uint64_t kDecodedTable = 64ULL * 1024 * 1024;
     // The decoded bytes of a gzip start like an ar archive, one with a huge "//" table and one that is fine.
     const std::string normal = kMagic + arMember("//", "long_member_name_x.o/\n") + arMember("/0", "abc");
     for (const auto* label : {"table", "normal"}) {
@@ -326,7 +329,7 @@ namespace {
       {
         const auto body = std::string(label) == "normal"
             ? normal
-            : kMagic + arHeaderOnly("//", kHugeTable) + std::string(kHugeTable, '\0');
+            : kMagic + arHeaderOnly("//", kDecodedTable) + std::string(kDecodedTable, '\0');
         compressStream(path, ARCHIVE_FILTER_GZIP, body);
       }
       const AddressCap cap(kCapHeadroom);

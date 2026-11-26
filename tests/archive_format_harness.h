@@ -16,6 +16,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <malloc.h>
 #include <memory>
 #include <optional>
 #include <poll.h>
@@ -39,11 +40,31 @@ namespace luciole::test::formats {
     }
   };
 
+  // The sanitizer's allocator aborts on an allocation that fails instead of returning null, and its shadow memory
+  // needs the address space a cap takes away.
+#if defined(__SANITIZE_ADDRESS__)
+  inline constexpr bool kAddressSanitizer = true;
+#elif defined(__has_feature)
+#if __has_feature(address_sanitizer)
+  inline constexpr bool kAddressSanitizer = true;
+#else
+  inline constexpr bool kAddressSanitizer = false;
+#endif
+#else
+  inline constexpr bool kAddressSanitizer = false;
+#endif
+
+  // glibc reserves 64 MiB of address space for the arena of every new thread, which a cap counts at once. One arena
+  // keeps the growth of a job near what it really uses. Set before any thread starts.
+  inline const bool kSingleArena = kAddressSanitizer || ::mallopt(M_ARENA_MAX, 1) == 1;
+
   // Caps the address space at what the process uses now plus `headroom`, so a decoder that allocated its declared
-  // dictionary would fail where the limit check must have refused it first.
+  // dictionary would fail where the limit check must have refused it first. The headroom is far above what a job
+  // grows by and far below the allocation the check guards against.
   class AddressCap {
   public:
     explicit AddressCap(std::size_t headroom) {
+      TEST_CHECK(kSingleArena);
       // glibc keeps a locale that failed to load, for good. The archive worker loads C.UTF-8 on first use, and
       // under the cap that load can fail and then fail for the rest of the process, so it is loaded before.
       static const locale_t resident = ::newlocale(LC_CTYPE_MASK, "C.UTF-8", nullptr);

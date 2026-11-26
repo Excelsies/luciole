@@ -220,10 +220,16 @@ namespace {
     }
     return bytes;
   }
+  // A job grows the address space by under 50 MiB. The cap leaves 256 MiB, and the dictionaries below declare 512 MiB
+  // to 1 GiB.
+  constexpr std::size_t kCapHeadroom = 256U * 1024U * 1024U;
+  // Room for a 256 MiB dictionary.
+  constexpr std::size_t kRoomyHeadroom = 900U * 1024U * 1024U;
+
   // The decoders have no memory limit of their own and allocate the declared dictionary lazily. Where the process
   // cannot hold it, the job fails with an allocation error and leaves nothing behind.
   void requireCleanAllocationFailure(const Folder& folder, const fs::path& path, const std::string& name) {
-    const AddressCap cap(200U * 1024U * 1024U);
+    const AddressCap cap(kCapHeadroom);
     const auto found = inspect(path);
     const auto expected = "Could not allocate memory for the " + name + " decoder.";
     TEST_CHECK(!found.catalog && found.error && found.error->kind == luciole::FileErrorKind::Other);
@@ -241,8 +247,13 @@ namespace {
     write(folder.root / ("dict-ok-" + label), withDictionary(source, kind, 26));
     const auto fits = inspect(folder.root / ("dict-ok-" + label));
     TEST_CHECK(!fits.error && hasEntry(fits, "docs/a.txt"));
-    // 256 MiB and 512 MiB: not opened under the cap, the error names the allocation.
-    for (const unsigned log2 : {28U, 29U}) {
+    if (kAddressSanitizer) {
+      std::println(stderr, "skipped: address-space caps under the sanitizer ({})", label);
+      return;
+    }
+    // 512 MiB, and for LZMA-alone 1 GiB: not opened under the cap, the error names the allocation. A lzip
+    // dictionary stops at 512 MiB.
+    for (const unsigned log2 : kind.filter == ARCHIVE_FILTER_LZMA ? std::vector{29U, 30U} : std::vector{29U}) {
       const auto path = folder.root / ("dict-big-" + label + std::to_string(log2));
       write(path, withDictionary(source, kind, log2));
       requireCleanAllocationFailure(folder, path, kind.filter == ARCHIVE_FILTER_LZMA ? "LZMA" : "Lzip");
@@ -250,22 +261,26 @@ namespace {
     // Room for 256 MiB of address space: the file opens, so the dictionary was never touched.
     const auto path = folder.root / ("dict-roomy-" + label);
     write(path, withDictionary(source, kind, 28));
-    const AddressCap cap(900U * 1024U * 1024U);
+    const AddressCap cap(kRoomyHeadroom);
     const auto roomy = inspect(path);
     TEST_CHECK(!roomy.error && hasEntry(roomy, "docs/a.txt"));
   }
 
   // XZ gives the same outcomes for the same dictionaries.
   void largeXzDictionariesAreTheReference(const Folder& folder) {
+    if (kAddressSanitizer) {
+      std::println(stderr, "skipped: address-space caps under the sanitizer (xz)");
+      return;
+    }
     const auto tar = plainTar(sampleMembers());
-    for (const unsigned log2 : {28U, 29U}) {
+    for (const unsigned log2 : {29U, 30U}) {
       const auto path = folder.root / ("dict-big-xz" + std::to_string(log2));
       write(path, xzWithDictionary(folder, tar, log2));
       requireCleanAllocationFailure(folder, path, "XZ");
     }
     const auto path = folder.root / "dict-roomy-xz";
     write(path, xzWithDictionary(folder, tar, 28));
-    const AddressCap cap(900U * 1024U * 1024U);
+    const AddressCap cap(kRoomyHeadroom);
     const auto roomy = inspect(path);
     TEST_CHECK(!roomy.error && hasEntry(roomy, "docs/a.txt"));
   }
