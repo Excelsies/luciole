@@ -22,6 +22,7 @@ namespace luciole {
     void bindDecoration(Node& decoration, const VirtualGridDecorationLayout& layout) override;
     void setTileVisible(Node& tile, bool visible) override;
     void releaseTile(Node& tile, Renderer& renderer) override;
+    void destroyTile(Node& tile) override { m_tiles.erase(&tile); }
     void bindTile(Node& tile, std::size_t index, bool selected, bool hovered) override;
     bool onPointerPress(std::size_t index, float, float, float, float) override;
     bool onPointerDrag(std::optional<std::size_t>, float, float, float, float) override;
