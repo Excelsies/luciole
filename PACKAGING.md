@@ -82,6 +82,7 @@ These are pkg-config modules or header paths. Install the corresponding developm
 | `librsvg-2.0`, `libpng` | SVG and PNG libraries |
 | `libarchive` | Archive library |
 | `liblzma` | 5.4+; decodes XZ, LZMA-alone and lzip streams |
+| `zlib` | Checks the CRC32 and length of gzip streams |
 | `libacl` | POSIX ACL library |
 | `tomlplusplus` | 3.4+ |
 | `nlohmann_json` | JSON library |

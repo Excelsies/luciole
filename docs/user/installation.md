@@ -281,7 +281,7 @@ Build and library dependencies:
 sudo pacman -S --needed base-devel meson just \
   wayland wayland-protocols libglvnd \
   glib2 freetype2 fontconfig cairo pango harfbuzz libxkbcommon \
-  gdk-pixbuf2 glycin librsvg libpng libarchive xz acl curl libxml2 \
+  gdk-pixbuf2 glycin librsvg libpng libarchive xz zlib acl curl libxml2 \
   tomlplusplus nlohmann-json stb
 ```
 
@@ -309,7 +309,7 @@ Build and library dependencies:
 sudo dnf install gcc-c++ meson just \
   wayland-devel wayland-protocols-devel libglvnd-devel \
   glib2-devel freetype-devel fontconfig-devel cairo-devel pango-devel harfbuzz-devel libxkbcommon-devel \
-  gdk-pixbuf2-devel glycin-devel librsvg2-devel libpng-devel libarchive-devel xz-devel libacl-devel \
+  gdk-pixbuf2-devel glycin-devel librsvg2-devel libpng-devel libarchive-devel xz-devel zlib-devel libacl-devel \
   libcurl-devel libxml2-devel tomlplusplus-devel json-devel stb_image_resize2-devel
 ```
 
