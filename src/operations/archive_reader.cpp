@@ -255,7 +255,7 @@ namespace {
   }
   std::shared_ptr<ArchiveCatalog> catalog(Reader& reader) {
     auto result = std::make_shared<ArchiveCatalog>(
-        ArchiveCatalog{Location::fromPath(reader.filename), reader.original, {}, {}, 0}
+        ArchiveCatalog{Location::fromPath(reader.filename), reader.original, {}, {}, 0, false, {}, 0, false}
     );
     std::map<std::string, std::size_t> known;
     std::set<std::string> explicitNames;
@@ -303,7 +303,8 @@ namespace {
           .name = leaf(path),
           .displayName = {},
           .size = std::nullopt,
-          .link = {}
+          .link = {},
+          .type = {}
       };
       entry.encrypted = archive_entry_is_data_encrypted(header) > 0;
       const auto type = archive_entry_filetype(header);
@@ -331,6 +332,9 @@ namespace {
         throwFileError(FileErrorKind::Unsupported, "Archive contains an unsupported special file.");
       }
       entry.mode = static_cast<unsigned>(archive_entry_perm(header)) & 0777U;
+      if (archive_entry_mtime_is_set(header) && archive_entry_mtime(header) >= 0) {
+        entry.modifiedSeconds = static_cast<std::uint64_t>(archive_entry_mtime(header));
+      }
       if (entry.kind == ArchiveEntryKind::File && archive_entry_size_is_set(header)) {
         const auto size = archive_entry_size(header);
         if (size < 0) {
@@ -380,7 +384,8 @@ namespace {
                .displayName = {},
                .kind = ArchiveEntryKind::Directory,
                .size = std::nullopt,
-               .link = {}}
+               .link = {},
+               .type = {}}
           );
         }
       }
@@ -409,6 +414,15 @@ namespace {
     result->encrypted = result->encrypted || reader.nativeSevenZip();
     result->expandedBytes = reader.work.expanded;
     result->format = archive_format_name(reader.value.get()) ? archive_format_name(reader.value.get()) : "Archive";
+    if (reader.xz) {
+      result->compression = "xz";
+    } else if (archive_filter_code(reader.value.get(), 0) != ARCHIVE_FILTER_NONE) {
+      result->compression = archive_filter_name(reader.value.get(), 0);
+    }
+    result->single = reader.single.has_value();
+    std::error_code failed;
+    const auto archiveBytes = fs::file_size(reader.filename, failed);
+    result->archiveBytes = failed ? 0 : archiveBytes;
     if (reader.single) {
       reader.input.unchanged();
     } else {

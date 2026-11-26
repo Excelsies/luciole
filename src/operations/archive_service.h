@@ -28,9 +28,11 @@ namespace luciole {
     std::string link;
     unsigned mode = 0644;
     FileIconSource icon{};
+    std::string type;
     bool encrypted = false;
     // Sparse file data extents; ordinary files use size for storage estimates.
     std::optional<std::uint64_t> dataBytes = std::nullopt;
+    std::optional<std::uint64_t> modifiedSeconds = std::nullopt;
   };
   struct ArchiveCatalog {
     Location source;
@@ -38,6 +40,11 @@ namespace luciole {
     std::vector<ArchiveEntry> entries;
     std::uint64_t expandedBytes = 0;
     bool encrypted = false;
+    // The outer compression filter, such as "gzip"; empty when uncompressed.
+    std::string compression;
+    std::uint64_t archiveBytes = 0;
+    // One compressed file such as dump.sql.gz, whose only entry has no size until extracted.
+    bool single = false;
   };
   struct ArchiveLimits {
     // Normal jobs have no policy quotas. Explicit consumers and tests can impose finite budgets.
