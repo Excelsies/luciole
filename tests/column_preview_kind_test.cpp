@@ -271,6 +271,8 @@ namespace {
     TEST_CHECK(said(FileErrorKind::Unsupported, "The archive provider output exceeds its limit.") == kTooLarge);
     TEST_CHECK(said(FileErrorKind::Unsupported, "RAR trailing headers exceed the metadata limit.") == kTooLarge);
     TEST_CHECK(said(FileErrorKind::Unsupported, "Archive exceeds the expanded-size limit.") == kTooLarge);
+    TEST_CHECK(said(FileErrorKind::Unsupported, "The ar archive's long-name table is too large.") == kTooLarge);
+    TEST_CHECK(said(FileErrorKind::Unsupported, "Archive paths are too deep.") == kTooLarge);
     // Any other reason is the reader's own business.
     constexpr std::string_view kUnreadable = "This archive could not be read.";
     TEST_CHECK(said(FileErrorKind::Unavailable, "Could not start the archive provider.") == kUnreadable);

@@ -37,6 +37,8 @@ namespace luciole {
     constexpr auto kSeparator = " · "sv;
 
     constexpr auto kArchiveUnreadable = "This archive could not be read."sv;
+    // Parts of the reader's sentences that say the archive is past a bound.
+    constexpr auto kTooLarge = std::array{"limit"sv, "too many"sv, "too large"sv, "paths are too deep"sv};
     // How the reader's sentences that name what an archive needs begin.
     constexpr auto kArchiveNeeds = std::array{"Encrypted 7z archives need "sv, "Multipart RAR "sv, "Encrypted RAR "sv};
 
@@ -208,7 +210,7 @@ namespace luciole {
       if (std::ranges::any_of(kArchiveNeeds, [&](std::string_view head) { return error.message.starts_with(head); })) {
         return error.message;
       }
-      if (error.message.contains("limit") || error.message.contains("too many")) {
+      if (std::ranges::any_of(kTooLarge, [&](std::string_view part) { return error.message.contains(part); })) {
         return "This archive is too large to list.";
       }
       return std::string(kArchiveUnreadable);
