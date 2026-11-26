@@ -167,11 +167,18 @@ namespace luciole::test::formats {
     return bytes;
   }
 
-  // `bytes` as one stream through the writer's filter `code`.
-  inline void compressStream(const fs::path& path, int code, std::string_view bytes) {
+  // `bytes` as one stream through the writer's filter `code`, at the filter's `level` when given.
+  inline void
+  compressStream(const fs::path& path, int code, std::string_view bytes, std::optional<int> level = std::nullopt) {
     const auto writer = newWriter();
     TEST_CHECK(archive_write_set_format_raw(writer.get()) == ARCHIVE_OK);
     TEST_CHECK(archive_write_add_filter(writer.get(), code) == ARCHIVE_OK);
+    if (level) {
+      TEST_CHECK(
+          archive_write_set_filter_option(writer.get(), nullptr, "compression-level", std::to_string(*level).c_str())
+          == ARCHIVE_OK
+      );
+    }
     TEST_CHECK(archive_write_set_bytes_per_block(writer.get(), 0) == ARCHIVE_OK);
     TEST_CHECK(archive_write_open_filename(writer.get(), path.c_str()) == ARCHIVE_OK);
     const std::unique_ptr<struct archive_entry, decltype(&archive_entry_free)> entry(

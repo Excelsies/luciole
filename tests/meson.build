@@ -52,6 +52,7 @@ test_table = [
     'env': gio_env + ['LUCIOLE_SOURCE_DIR=' + meson.project_source_root()]},
   {'name': 'archive-container-service', 'deps': [operations_dep, event_loop_dep], 'timeout': 90, 'env': gio_env},
   {'name': 'archive-tar-filters', 'deps': [operations_dep, event_loop_dep], 'timeout': 120, 'env': gio_env},
+  {'name': 'archive-gzip-trailer', 'deps': [operations_dep, event_loop_dep], 'timeout': 120, 'env': gio_env},
   {'name': 'archive-ar', 'deps': [operations_dep, event_loop_dep], 'timeout': 90, 'env': gio_env},
   {'name': 'archive-cpio', 'deps': [operations_dep, event_loop_dep], 'timeout': 90, 'env': gio_env},
   {'name': 'browser-actions', 'deps': [browser_dep, ui_dep, config_dep], 'env': gio_env},
