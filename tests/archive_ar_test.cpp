@@ -187,6 +187,12 @@ namespace {
   }
   constexpr std::size_t kCapHeadroom = 64U * 1024U * 1024U;
   constexpr std::uint64_t kHugeTable = 96ULL * 1024 * 1024;
+  // A job that bounds its metadata, as the Workbench preview does.
+  luciole::ArchiveLimits boundedMetadata() {
+    luciole::ArchiveLimits limits;
+    limits.maxMetadataBytes = 16U * 1024U * 1024U;
+    return limits;
+  }
 
   void oversizedNameTablesAreRefusedWithoutAllocating(const Folder& folder) {
     // A plain file: libarchive holds the declared size of the "//" table in memory, twice over.
@@ -194,11 +200,11 @@ namespace {
       const auto path = folder.root / "huge-table.a";
       writeSparseAr(path, "//", kHugeTable);
       const AddressCap cap(kCapHeadroom);
-      const auto found = inspect(path);
+      const auto found = inspect(path, boundedMetadata());
       TEST_CHECK(!found.catalog && found.error && found.error->kind == luciole::FileErrorKind::Unsupported);
       TEST_CHECK(found.error->message.contains("long-name table"));
       const auto out = folder.root / "huge-out";
-      const auto done = extract(path, out);
+      const auto done = extract(path, out, {}, boundedMetadata());
       TEST_CHECK(done.error && done.error->message.contains("long-name table") && !fs::exists(out));
     }
     // A table behind other members is found by walking the headers.
@@ -209,7 +215,7 @@ namespace {
     fs::resize_file(folder.root / "late-table.a", fs::file_size(folder.root / "late-table.a") + kHugeTable);
     {
       const AddressCap cap(kCapHeadroom);
-      const auto late = inspect(folder.root / "late-table.a");
+      const auto late = inspect(folder.root / "late-table.a", boundedMetadata());
       TEST_CHECK(late.error && late.error->message.contains("long-name table"));
     }
     // A table at the limit still opens.
@@ -220,6 +226,9 @@ namespace {
     TEST_CHECK(!fits.error && hasEntry(fits, "a.o"));
     write(folder.root / "over.a", kMagic + arMember("//", std::string(4096, 'n') + "/\n") + arMember("a.o/", "1"));
     TEST_CHECK(inspect(folder.root / "over.a", limits).error.has_value());
+    // Without a metadata limit a table of a few KiB opens: nothing else bounds it.
+    const auto unbounded = inspect(folder.root / "over.a");
+    TEST_CHECK(!unbounded.error && hasEntry(unbounded, "a.o"));
     TEST_CHECK(tmpIsEmpty(folder));
   }
 
@@ -244,7 +253,7 @@ namespace {
   }
   std::string refusalOf(const fs::path& path) {
     const AddressCap cap(kCapHeadroom);
-    const auto found = inspect(path);
+    const auto found = inspect(path, boundedMetadata());
     TEST_CHECK(!found.catalog && found.error);
     return found.error ? found.error->message : std::string();
   }
@@ -299,7 +308,7 @@ namespace {
       const auto path = folder.root / "damaged.a";
       writeSparseAfter(path, rawHeader(name, size), kHugeTable);
       const AddressCap cap(kCapHeadroom);
-      const auto found = inspect(path);
+      const auto found = inspect(path, boundedMetadata());
       // An allocation that fails under the cap would surface as an error that is neither of ours nor libarchive's.
       TEST_CHECK(found.error || found.catalog);
       if (found.error) {

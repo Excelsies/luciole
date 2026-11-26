@@ -8,8 +8,6 @@
 
 namespace {
   using luciole::archive_work::LzmaContainer;
-  // Decoder memory ceiling of LZMA-alone and lzip; XZ has none.
-  constexpr std::uint64_t kSideDecoderMemoryLimit = 128U * 1024U * 1024U;
   std::string containerName(LzmaContainer kind) {
     return kind == LzmaContainer::Xz ? "XZ" : kind == LzmaContainer::Alone ? "LZMA" : "Lzip";
   }
@@ -17,11 +15,7 @@ namespace {
     using namespace luciole;
     const auto name = containerName(kind);
     if (status == LZMA_MEMLIMIT_ERROR) {
-      throwFileError(
-          FileErrorKind::Unsupported,
-          kind == LzmaContainer::Xz ? "XZ archive exceeds the decoder memory limit."
-                                    : name + " archive exceeds the 128 MiB decoder memory limit."
-      );
+      throwFileError(FileErrorKind::Unsupported, name + " archive exceeds the decoder memory limit.");
     }
     if (status == LZMA_OPTIONS_ERROR || status == LZMA_UNSUPPORTED_CHECK) {
       throwFileError(FileErrorKind::Unsupported, name + " archive uses unsupported compression or integrity checks.");
@@ -32,16 +26,15 @@ namespace {
     throwFileError(FileErrorKind::InvalidArgument, name + " archive is corrupt or truncated.");
   }
   lzma_ret startDecoder(lzma_stream* stream, LzmaContainer kind) {
+    constexpr auto unlimited = std::numeric_limits<std::uint64_t>::max();
     switch (kind) {
     case LzmaContainer::Xz:
-      return lzma_stream_decoder(
-          stream, std::numeric_limits<std::uint64_t>::max(), LZMA_CONCATENATED | LZMA_TELL_UNSUPPORTED_CHECK
-      );
+      return lzma_stream_decoder(stream, unlimited, LZMA_CONCATENATED | LZMA_TELL_UNSUPPORTED_CHECK);
     case LzmaContainer::Alone:
-      return lzma_alone_decoder(stream, kSideDecoderMemoryLimit);
+      return lzma_alone_decoder(stream, unlimited);
     case LzmaContainer::Lzip:
       // One member at a time: with LZMA_CONCATENATED liblzma ignores whatever is not a member after one.
-      return lzma_lzip_decoder(stream, kSideDecoderMemoryLimit, 0);
+      return lzma_lzip_decoder(stream, unlimited, 0);
     }
     return LZMA_PROG_ERROR;
   }

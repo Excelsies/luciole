@@ -8,8 +8,7 @@
 #include <string_view>
 
 namespace luciole::archive_work {
-  // Decode outside libarchive to validate concatenated frames, integrity checks and trailing padding, and to bound
-  // the memory of LZMA-alone and lzip, whose libarchive filters have no memory-limit API.
+  // Decode outside libarchive to validate concatenated frames, integrity checks and trailing padding.
   // Only TAR consumes this stream. Source identity remains owned by Input.
   class XzInput {
   public:

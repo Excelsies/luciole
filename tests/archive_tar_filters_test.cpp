@@ -201,26 +201,73 @@ namespace {
     return bytes;
   }
 
-  void oversizedDictionaryIsRefused(const Folder& folder, const Kind& kind) {
+  // An XZ file whose only LZMA2 filter declares a 2^log2 dictionary: the property byte and the CRC32 of the block
+  // header are rewritten, the data is the same.
+  std::string xzWithDictionary(const Folder& folder, std::string_view tarBytes, unsigned log2) {
+    const auto path = folder.root / "dict-source.xz";
+    compressStream(path, ARCHIVE_FILTER_XZ, tarBytes);
+    auto bytes = read(path);
+    constexpr std::size_t block = 12;
+    TEST_CHECK(bytes.size() > block + 16);
+    const auto headerSize = (static_cast<unsigned char>(bytes[block]) + 1U) * 4U;
+    TEST_CHECK(headerSize == 12 && bytes[block + 1] == 0 && bytes[block + 2] == 0x21 && bytes[block + 3] == 1);
+    // Property p declares (2 | p & 1) << (p / 2 + 11) bytes; an even p is a power of two.
+    TEST_CHECK(log2 >= 12 && log2 <= 31);
+    bytes[block + 4] = static_cast<char>((log2 - 12) * 2);
+    const auto crc = lzma_crc32(reinterpret_cast<const std::uint8_t*>(bytes.data()) + block, headerSize - 4, 0);
+    for (unsigned i = 0; i < 4; ++i) {
+      bytes[block + headerSize - 4 + i] = static_cast<char>((crc >> (8 * i)) & 0xFF);
+    }
+    return bytes;
+  }
+  // The decoders have no memory limit of their own and allocate the declared dictionary lazily. Where the process
+  // cannot hold it, the job fails with an allocation error and leaves nothing behind.
+  void requireCleanAllocationFailure(const Folder& folder, const fs::path& path, const std::string& name) {
+    const AddressCap cap(200U * 1024U * 1024U);
+    const auto found = inspect(path);
+    const auto expected = "Could not allocate memory for the " + name + " decoder.";
+    TEST_CHECK(!found.catalog && found.error && found.error->kind == luciole::FileErrorKind::Other);
+    TEST_CHECK(found.error && found.error->message == expected);
+    const auto out = folder.root / (path.filename().string() + "-out");
+    const auto done = extract(path, out);
+    TEST_CHECK(done.error && done.error->message == expected && !fs::exists(out));
+    TEST_CHECK(tmpIsEmpty(folder));
+  }
+
+  void largeDictionariesBehaveLikeXz(const Folder& folder, const Kind& kind) {
     const std::string label(kind.label);
     const auto source = read(makeFile(folder, kind, "dict-" + label, plainTar(sampleMembers())));
-    // A 64 MiB dictionary is within the limit and the same data still decodes.
+    // A 64 MiB dictionary fits and the same data still decodes.
     write(folder.root / ("dict-ok-" + label), withDictionary(source, kind, 26));
     const auto fits = inspect(folder.root / ("dict-ok-" + label));
     TEST_CHECK(!fits.error && hasEntry(fits, "docs/a.txt"));
-    // 256 MiB and 1 GiB (lzip stops at 512 MiB) are not, and nothing large is allocated to find out.
+    // 256 MiB and 512 MiB: not opened under the cap, the error names the allocation.
     for (const unsigned log2 : {28U, 29U}) {
       const auto path = folder.root / ("dict-big-" + label + std::to_string(log2));
       write(path, withDictionary(source, kind, log2));
-      const AddressCap cap(200U * 1024U * 1024U);
-      const auto found = inspect(path);
-      TEST_CHECK(!found.catalog && found.error && found.error->kind == luciole::FileErrorKind::Unsupported);
-      TEST_CHECK(found.error->message.contains("128 MiB"));
-      const auto out = folder.root / ("dict-out-" + label + std::to_string(log2));
-      const auto done = extract(path, out);
-      TEST_CHECK(done.error && done.error->message.contains("128 MiB") && !fs::exists(out));
+      requireCleanAllocationFailure(folder, path, kind.filter == ARCHIVE_FILTER_LZMA ? "LZMA" : "Lzip");
     }
-    TEST_CHECK(tmpIsEmpty(folder));
+    // Room for 256 MiB of address space: the file opens, so the dictionary was never touched.
+    const auto path = folder.root / ("dict-roomy-" + label);
+    write(path, withDictionary(source, kind, 28));
+    const AddressCap cap(900U * 1024U * 1024U);
+    const auto roomy = inspect(path);
+    TEST_CHECK(!roomy.error && hasEntry(roomy, "docs/a.txt"));
+  }
+
+  // XZ gives the same outcomes for the same dictionaries.
+  void largeXzDictionariesAreTheReference(const Folder& folder) {
+    const auto tar = plainTar(sampleMembers());
+    for (const unsigned log2 : {28U, 29U}) {
+      const auto path = folder.root / ("dict-big-xz" + std::to_string(log2));
+      write(path, xzWithDictionary(folder, tar, log2));
+      requireCleanAllocationFailure(folder, path, "XZ");
+    }
+    const auto path = folder.root / "dict-roomy-xz";
+    write(path, xzWithDictionary(folder, tar, 28));
+    const AddressCap cap(900U * 1024U * 1024U);
+    const auto roomy = inspect(path);
+    TEST_CHECK(!roomy.error && hasEntry(roomy, "docs/a.txt"));
   }
 
   using luciole::archive_work::LzmaContainer;
@@ -390,9 +437,10 @@ int main() {
     brokenStreamsFail(folder, kind);
     decodedBombHitsTheLimit(folder, kind);
     if (kind.filter == ARCHIVE_FILTER_LZMA || kind.filter == ARCHIVE_FILTER_LZIP) {
-      oversizedDictionaryIsRefused(folder, kind);
+      largeDictionariesBehaveLikeXz(folder, kind);
     }
   }
+  largeXzDictionariesAreTheReference(folder);
   std::println("archive-tar-filters: all checks passed");
   return 0;
 }

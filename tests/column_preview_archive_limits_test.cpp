@@ -8,7 +8,9 @@
 #include <archive_entry.h>
 #include <chrono>
 #include <cstddef>
+#include <cstdint>
 #include <filesystem>
+#include <fstream>
 #include <glib.h>
 #include <memory>
 #include <print>
@@ -91,12 +93,33 @@ namespace {
     TEST_CHECK(loaded.view.message() == "This archive is too large to list.");
     TEST_CHECK(!loaded.load->facts().entries);
   }
+
+  // The preview bounds an ar archive's long-name table by its 16 MiB metadata limit; the file is sparse.
+  void anArArchiveWithAHugeNameTableIsRefused(const fs::path& folder) {
+    const auto path = folder / "huge-table.a";
+    constexpr std::uint64_t table = 20ULL * 1024 * 1024;
+    std::string header = "!<arch>\n//";
+    header.resize(8 + 48, ' ');
+    header += std::to_string(table);
+    header.resize(8 + 58, ' ');
+    header += "`\n";
+    {
+      std::ofstream out(path, std::ios::binary);
+      out << header;
+      TEST_CHECK(out.good());
+    }
+    fs::resize_file(path, header.size() + table);
+    Loaded loaded(path);
+    TEST_CHECK(loaded.settle() == ColumnPreviewStatus::Failed);
+    TEST_CHECK(loaded.view.message() == "This archive is too large to list.");
+  }
 } // namespace
 
 int main() {
   const luciole::test::TempFolder scratch("luciole-archive-limits");
   anArchiveWithinTheLimitsIsListed(scratch.path());
   anArchiveOverTheEntryLimitIsRefused(scratch.path());
+  anArArchiveWithAHugeNameTableIsRefused(scratch.path());
   std::println("column-preview-archive-limits: all checks passed");
   return 0;
 }
