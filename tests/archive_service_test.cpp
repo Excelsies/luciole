@@ -1004,6 +1004,45 @@ namespace {
       TEST_CHECK(service.error() && !fs::exists(cancelled) && fs::is_empty(fixture.root / "tmp"));
     }
   }
+  void testCompressedFile(const Fixture& fixture, Pump& pump) {
+    TEST_CHECK(!luciole::compressedFileName(location(fixture.root / "package.TAR.gz")));
+    for (const auto [suffix, filter] : {std::pair{".gz", ARCHIVE_FILTER_GZIP}, std::pair{".xz", ARCHIVE_FILTER_XZ}}) {
+      const auto path = fixture.root / ("dump.SQL" + std::string(suffix));
+      {
+        const std::unique_ptr<struct archive, decltype(&archive_write_free)> writer(
+            archive_write_new(), &archive_write_free
+        );
+        TEST_CHECK(archive_write_add_filter(writer.get(), filter) == ARCHIVE_OK);
+        TEST_CHECK(archive_write_set_format_raw(writer.get()) == ARCHIVE_OK);
+        TEST_CHECK(archive_write_open_filename(writer.get(), path.c_str()) == ARCHIVE_OK);
+        const std::unique_ptr<struct archive_entry, decltype(&archive_entry_free)> entry(
+            archive_entry_new(), &archive_entry_free
+        );
+        archive_entry_set_filetype(entry.get(), AE_IFREG);
+        TEST_CHECK(archive_write_header(writer.get(), entry.get()) == ARCHIVE_OK);
+        TEST_CHECK(archive_write_data(writer.get(), "select 1;", 9) == 9);
+      }
+      TEST_CHECK(luciole::isSupportedArchive(location(path), {}));
+      TEST_CHECK(luciole::archiveFolderName(location(path)) == "dump.SQL");
+      luciole::ArchiveService service;
+      const auto destination = fixture.root / ("dump" + std::string(suffix));
+      TEST_CHECK(service.extract(location(path), location(destination), {}));
+      wait(service, pump);
+      TEST_CHECK(!service.error() && read(destination / "dump.SQL") == "select 1;");
+      const auto original = read(path);
+      const auto truncated = fixture.root / ("truncated" + std::string(suffix));
+      write(truncated, original.substr(0, original.size() - 4));
+      TEST_CHECK(service.extract(location(truncated), location(fixture.root / "truncated"), {}));
+      wait(service, pump);
+      TEST_CHECK(service.error() && !fs::exists(fixture.root / "truncated"));
+    }
+    luciole::ArchiveService service;
+    const auto plain = fixture.root / "plain.gz";
+    write(plain, "not compressed");
+    TEST_CHECK(service.extract(location(plain), location(fixture.root / "plain"), {}));
+    wait(service, pump);
+    TEST_CHECK(service.error() && !fs::exists(fixture.root / "plain"));
+  }
   void testCompressedTarFailures(const Fixture& fixture, Pump& pump) {
     for (const auto& item : compressedTars) {
       if (!luciole::archiveCompressionAvailable(item.compression)) {
@@ -2253,6 +2292,7 @@ int main(int argc, char** argv) {
     testXzWorkerBoundaries(fixture);
     testXzMemberFromLargeArchive(fixture, pump);
     testCompressedTarProviders(fixture, pump);
+    testCompressedFile(fixture, pump);
     testCompressedTarFailures(fixture, pump);
     testCompressedPaddingLimit(fixture, pump);
     testRoundTrips(fixture, pump);

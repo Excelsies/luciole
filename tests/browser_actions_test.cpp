@@ -696,9 +696,15 @@ namespace {
     for (const char* const name : {"a.tbz2", "a.tbz", "a.tzst", "a.txz"}) {
       TEST_CHECK(luciole::archiveFolderName(luciole::Location::fromPath(std::string("/tmp/") + name)) == "a");
     }
-    TEST_CHECK(!luciole::isSupportedArchive(luciole::Location::fromPath("/tmp/plain.bz2"), "application/x-bzip2"));
-    TEST_CHECK(!luciole::isSupportedArchive(luciole::Location::fromPath("/tmp/plain.zst"), "application/zstd"));
-    TEST_CHECK(!luciole::isSupportedArchive(luciole::Location::fromPath("/tmp/plain.xz"), "application/x-xz"));
+    for (const auto [name, compression] :
+         {std::pair{"/tmp/plain.bz2", luciole::ArchiveCompression::Bzip2},
+          std::pair{"/tmp/plain.zst", luciole::ArchiveCompression::Zstd},
+          std::pair{"/tmp/plain.xz", luciole::ArchiveCompression::Xz}}) {
+      TEST_CHECK(
+          luciole::isSupportedArchive(luciole::Location::fromPath(name), {})
+          == luciole::archiveCompressionAvailable(compression)
+      );
+    }
   }
   void testSearchTrashActions() {
     luciole::DirectoryModel model;

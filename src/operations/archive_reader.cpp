@@ -25,6 +25,7 @@ namespace {
     std::int64_t headerOffset = 0;
     std::optional<XzInput> xz;
     std::string filename, original;
+    std::optional<std::string> single = compressedFileName(Location::fromPath(filename));
     std::unique_ptr<struct archive, decltype(&archive_read_free)> value{archive_read_new(), &archive_read_free};
     std::array<char, 65536> buffer{};
     std::optional<std::vector<SevenZipMember>> sevenzip;
@@ -50,8 +51,8 @@ namespace {
       if (XzInput::recognizes(input)) {
         xz.emplace(input, work);
       }
-      const auto rar = raw || xz ? RarInput::None : validateRarInput(input);
-      if (raw) {
+      const auto rar = raw || single || xz ? RarInput::None : validateRarInput(input);
+      if (raw || single) {
         requireArchive(archive_read_support_format_raw(value.get()), value.get(), work);
       } else if (rar != RarInput::None) {
         requireArchive(
@@ -197,6 +198,13 @@ namespace {
         return false;
       }
       requireArchive(status, value.get(), work);
+      if (single) {
+        if (!xz && archive_filter_code(value.get(), 0) == ARCHIVE_FILTER_NONE) {
+          throwFileError(FileErrorKind::InvalidArgument, "The file is not compressed.");
+        }
+        // The raw format names its only entry "data".
+        archive_entry_set_pathname(entry, single->c_str());
+      }
       headerOffset = before;
       if (format == ARCHIVE_FORMAT_RAR && archive_entry_filetype(entry) == AE_IFLNK) {
         verifyRar4Stored(input, headerOffset, work);
@@ -385,6 +393,10 @@ namespace {
       } else {
         add(std::move(entry));
       }
+      if (reader.single) {
+        // Listing a compressed file needs only its name; extraction decodes and verifies the stream once.
+        break;
+      }
       reader.skip();
     }
     std::map<std::string, std::string> links;
@@ -397,8 +409,12 @@ namespace {
     result->encrypted = result->encrypted || reader.nativeSevenZip();
     result->expandedBytes = reader.work.expanded;
     result->format = archive_format_name(reader.value.get()) ? archive_format_name(reader.value.get()) : "Archive";
-    validateCompression(reader);
-    reader.unchanged();
+    if (reader.single) {
+      reader.input.unchanged();
+    } else {
+      validateCompression(reader);
+      reader.unchanged();
+    }
     return result;
   }
   Fd directoryAt(int root, const std::string& path) {
