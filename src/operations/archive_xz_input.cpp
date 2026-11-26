@@ -8,7 +8,7 @@
 
 namespace {
   using luciole::archive_work::LzmaContainer;
-  // XZ has no memory ceiling. LZMA-alone and lzip, which libarchive would decode without any, keep one.
+  // Decoder memory ceiling of LZMA-alone and lzip; XZ has none.
   constexpr std::uint64_t kSideDecoderMemoryLimit = 128U * 1024U * 1024U;
   std::string containerName(LzmaContainer kind) {
     return kind == LzmaContainer::Xz ? "XZ" : kind == LzmaContainer::Alone ? "LZMA" : "Lzip";
@@ -17,7 +17,11 @@ namespace {
     using namespace luciole;
     const auto name = containerName(kind);
     if (status == LZMA_MEMLIMIT_ERROR) {
-      throwFileError(FileErrorKind::Unsupported, name + " archive exceeds the 128 MiB decoder memory limit.");
+      throwFileError(
+          FileErrorKind::Unsupported,
+          kind == LzmaContainer::Xz ? "XZ archive exceeds the decoder memory limit."
+                                    : name + " archive exceeds the 128 MiB decoder memory limit."
+      );
     }
     if (status == LZMA_OPTIONS_ERROR || status == LZMA_UNSUPPORTED_CHECK) {
       throwFileError(FileErrorKind::Unsupported, name + " archive uses unsupported compression or integrity checks.");
