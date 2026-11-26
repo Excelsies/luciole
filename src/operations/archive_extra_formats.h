@@ -19,6 +19,10 @@ namespace luciole::archive_work {
   void enableExtraFormats(struct archive* reader, Input& input, Work& work);
   // Whether a stream behind this filter can end its framing after the TAR does, so only a pass over all of it checks.
   bool extraFilterNeedsRawPass(int filterCode);
+  // libarchive reads a gzip stream's CRC32 and length trailers and never compares them, so data that still inflates
+  // passes as it is. When the file is gzip, inflates all of it again with zlib, which checks every member. A member
+  // may follow another; bytes after the last one are refused. Cancellable, and held to the decoded-container budget.
+  void requireGzipTrailers(struct archive* reader, const Location& source, Work& work);
   // The next header; the symbol-table members of ar archives are consumed here and never reach the catalog.
   int nextHeader(struct archive* reader, struct archive_entry** entry, const Work& work);
   // In cpio, a hard link names data another member holds. One that carries data of its own, which newc does for a

@@ -8,7 +8,10 @@
 #include <array>
 #include <charconv>
 #include <limits>
+#include <memory>
 #include <string_view>
+#include <vector>
+#include <zlib.h>
 
 namespace {
   using namespace luciole;
@@ -97,7 +100,103 @@ namespace {
       throwFileError(FileErrorKind::Unsupported, "Archive has too many entries.");
     }
   }
+
+  // zlib's gzip framing: a 10-byte member header at the least.
+  constexpr std::size_t kGzipHeaderBytes = 10;
+  constexpr int kGzipWindowBits = 15 + 16;
+  constexpr std::size_t kGzipChunk = 64U * 1024U;
+
+  struct Inflater {
+    z_stream stream{};
+    Inflater() {
+      const auto status = inflateInit2(&stream, kGzipWindowBits);
+      if (status == Z_MEM_ERROR) {
+        throwFileError(FileErrorKind::Other, "Could not allocate memory for the gzip decoder.");
+      }
+      if (status != Z_OK) {
+        throwFileError(FileErrorKind::Other, "Could not start the gzip decoder.");
+      }
+    }
+    ~Inflater() { inflateEnd(&stream); }
+    Inflater(const Inflater&) = delete;
+    Inflater& operator=(const Inflater&) = delete;
+  };
+
+  // A failure in the header of a member after the first is data past the end; anywhere else the stream is damaged.
+  [[noreturn]] void gzipFailed(std::size_t members, const z_stream& stream, bool truncated) {
+    if (members > 0 && stream.total_in < kGzipHeaderBytes) {
+      throwFileError(FileErrorKind::InvalidArgument, "The gzip file has data after its end.");
+    }
+    throwFileError(
+        FileErrorKind::InvalidArgument,
+        truncated ? "The gzip file is truncated."
+                  : std::string("The gzip file is corrupt (") + (stream.msg ? stream.msg : "inflate failed") + ")."
+    );
+  }
 } // namespace
+
+void luciole::archive_work::requireGzipTrailers(struct archive* reader, const Location& source, Work& work) {
+  bool gzip = false;
+  for (int i = 0; i < archive_filter_count(reader); ++i) {
+    if (archive_filter_code(reader, i) != ARCHIVE_FILTER_GZIP) {
+      continue;
+    }
+    if (i != 0) {
+      throwFileError(FileErrorKind::Unsupported, "A gzip stream inside another compression cannot be verified.");
+    }
+    gzip = true;
+  }
+  if (!gzip) {
+    return;
+  }
+  const auto budget = decodedContainerBudget(work.limits);
+  Input input(source, work);
+  Inflater inflater;
+  auto& stream = inflater.stream;
+  std::vector<char> in(kGzipChunk), out(kGzipChunk);
+  std::uint64_t total = 0;
+  std::size_t members = 0;
+  bool open = false;
+  // Each pass takes input or yields output, so the loops end with the file and the bytes it inflates to.
+  for (;;) {
+    work.check();
+    const auto count = input.read(in);
+    if (count == 0) {
+      break;
+    }
+    stream.next_in = reinterpret_cast<Bytef*>(in.data());
+    stream.avail_in = static_cast<uInt>(count);
+    while (stream.avail_in > 0) {
+      work.check();
+      stream.next_out = reinterpret_cast<Bytef*>(out.data());
+      stream.avail_out = static_cast<uInt>(out.size());
+      const auto before = stream.avail_in;
+      const auto status = inflate(&stream, Z_NO_FLUSH);
+      const auto produced = out.size() - stream.avail_out;
+      if (produced > budget - total) {
+        throwFileError(FileErrorKind::Unsupported, "Compressed archive exceeds its decoded-container limit.");
+      }
+      total += produced;
+      if (status == Z_MEM_ERROR) {
+        throwFileError(FileErrorKind::Other, "Could not allocate memory for the gzip decoder.");
+      }
+      if ((status != Z_OK && status != Z_STREAM_END) || (stream.avail_in == before && produced == 0)) {
+        gzipFailed(members, stream, false);
+      }
+      open = true;
+      if (status == Z_STREAM_END) {
+        ++members;
+        open = false;
+        if (inflateReset(&stream) != Z_OK) {
+          throwFileError(FileErrorKind::Other, "Could not continue the gzip decoder.");
+        }
+      }
+    }
+  }
+  if (open) {
+    gzipFailed(members, stream, true);
+  }
+}
 
 void luciole::archive_work::enableExtraFilters(struct archive* reader, Work& work) {
   if (archiveExtraNeedAvailable(ArchiveExtraNeed::Lz4)) {

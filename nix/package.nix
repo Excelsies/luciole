@@ -28,6 +28,7 @@
   libpng,
   libarchive,
   xz,
+  zlib,
   acl,
   libwebp,
   librsvg,
@@ -160,6 +161,7 @@ stdenv.mkDerivation (finalAttrs: {
     libpng
     libarchive
     xz
+    zlib
     acl
     libwebp
     pixbufWithGlycin

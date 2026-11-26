@@ -264,6 +264,7 @@ event_loop_dep = declare_dependency(link_with: event_loop_lib, include_directori
 
 libarchive = dependency('libarchive')
 liblzma = dependency('liblzma', version: '>=5.4.0')
+zlib = dependency('zlib')
 fs_lib = static_library('luciole-fs',
   files(
     'src/fs/archive_container.cpp',
@@ -423,10 +424,10 @@ operations_lib = static_library('luciole-operations',
     'src/operations/trash_service.cpp',
   ),
   include_directories: src_inc,
-  dependencies: [fs_dep, libacl, libarchive, liblzma, dependency('threads')],
+  dependencies: [fs_dep, libacl, libarchive, liblzma, zlib, dependency('threads')],
 )
 operations_dep = declare_dependency(link_with: operations_lib, include_directories: src_inc,
-  dependencies: [fs_dep, libacl, libarchive, liblzma, dependency('threads')],
+  dependencies: [fs_dep, libacl, libarchive, liblzma, zlib, dependency('threads')],
 )
 
 libpng = dependency('libpng')
