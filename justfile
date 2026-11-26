@@ -253,5 +253,5 @@ clean m=mode:
 rebuild m=mode: (clean m) (build m)
 
 # Regenerate the user-guide screenshots in a nested compositor (needs grim, wtype, wlrctl, umbriel).
-screenshots theme="light":
-    tools/screenshots.sh {{theme}}
+screenshots:
+    tools/screenshots.sh

@@ -1,40 +1,39 @@
 #!/usr/bin/env bash
 # Regenerate the user-guide screenshots in docs/user/assets/.
 #
-# Usage: tools/screenshots.sh [dark|light] [luciole-binary]
+# Usage: tools/screenshots.sh [luciole-binary]
 #
 # Runs the binary inside a nested Umbriel session with a throwaway home, config
 # and D-Bus session, so nothing of the user's desktop or settings is touched.
-# Needs: umbriel, grim, wtype, wlrctl, magick, cwebp, and a running Wayland
-# session to nest in. ICON_THEME overrides the default Rose-Pine-Plus-<Theme>. Timing based: raise PAUSE if a shot comes out half drawn.
+# Shots use the Ayu dark palette (tools/screenshots/ayu-dark.json), rendered into
+# luciole's colors.toml by `noctalia theme`, so they stand out from the docs site's
+# own Noctalia palette. Needs: noctalia, umbriel, grim, wtype, wlrctl, magick, cwebp,
+# and a running Wayland session to nest in. ICON_THEME overrides Rose-Pine-Plus-Dark.
+# Timing based: raise PAUSE if a shot comes out half drawn.
 set -euo pipefail
 
-theme=${1:-dark}
-bin=${2:-build-debug/luciole}
+bin=${1:-build-debug/luciole}
 PAUSE=${PAUSE:-2}
-# Published width; the window is trimmed from the black output background.
+# Published width of the cropped window.
 WIDTH=${WIDTH:-1000}
-
-case $theme in dark | light) ;; *)
-  echo "theme must be dark or light" >&2
-  exit 2
-  ;;
-esac
 
 if [[ ${SHOTS_INNER:-} ]]; then
   # Inside the nested compositor: WAYLAND_DISPLAY is the nested socket.
   # shellcheck disable=SC2329
   press() { wtype -d 80 "$@"; }
-  shot() { # name; recapture while the window is still missing from the output
-    local try
+  shot() { # name; crop to the window's geometry (global layout) on the capture output
+    local try geom size x y outx
     for try in 1 2 3 4 5; do
       sleep "$PAUSE"
-      grim -o shots "$SHOTS_TMP/raw.png"
-      magick "$SHOTS_TMP/raw.png" -fuzz 1% -trim +repage "$SHOTS_TMP/trim.png"
-      [[ $(magick identify -format %w "$SHOTS_TMP/trim.png") -gt 300 ]] && break
-      [[ $try -lt 5 ]] || { echo "$1: no window captured, raise PAUSE" >&2; exit 1; }
+      geom=$(umbriel windows | grep -o '[0-9]*x[0-9]*+[0-9]*+[0-9]*' | head -1)
+      [[ ${geom%%x*} -gt 300 ]] 2>/dev/null && break # a window that is still opening reports a tiny size
+      [[ $try -lt 5 ]] || { echo "$1: no window found, raise PAUSE" >&2; touch "$SHOTS_TMP/failed"; exit 1; }
     done
-    magick "$SHOTS_TMP/trim.png" -resize "${WIDTH}x" "$SHOTS_TMP/$1.png"
+    outx=$(umbriel outputs | awk '/^shots/ {f = 1} f && /Position:/ {split($2, a, ","); print a[1]; exit}')
+    size=${geom%%+*}
+    IFS=+ read -r _ x y <<<"$geom"
+    grim -o shots "$SHOTS_TMP/raw.png"
+    magick "$SHOTS_TMP/raw.png" -crop "$size+$((x - outx))+$y" +repage -resize "${WIDTH}x" "$SHOTS_TMP/$1.png"
     cwebp -quiet -q 85 "$SHOTS_TMP/$1.png" -o "$SHOTS_OUT/$1.webp"
     echo "wrote $SHOTS_OUT/$1.webp"
   }
@@ -51,6 +50,7 @@ if [[ ${SHOTS_INNER:-} ]]; then
 
   # A fixed-size virtual output makes every shot the same size; windows open on the focused output.
   umbriel output-create shots "${OUTPUT:-1280x800@60}"
+  sleep 1 # the new output must exist before it can take focus
   umbriel msg output-focus-right
   trap 'pkill -x luciole; kill "$PPID"' EXIT # always end the nested compositor, even on failure
   pictures=$HOME/Pictures
@@ -112,15 +112,21 @@ XDG_VIDEOS_DIR="\$HOME/Videos"
 EOF
 mkdir -p "$tmp/config/gtk-3.0"
 printf 'file://%s/Projects Projects\nfile://%s/Reports Reports\n' "$home" "$home" >"$tmp/config/gtk-3.0/bookmarks"
-printf '[browser]\nview_mode = "grid"\ncolor_scheme = "%s"\n' "$theme" >"$tmp/config/luciole/config.toml"
+printf '[browser]\nview_mode = "grid"\n' >"$tmp/config/luciole/config.toml"
+
+# Render luciole/colors.toml from the Ayu dark palette into the throwaway config.
+HOME=$home XDG_CONFIG_HOME="$tmp/config" XDG_DATA_HOME="$tmp/data" XDG_STATE_HOME="$tmp/state" \
+  XDG_CACHE_HOME="$tmp/cache" noctalia theme --theme-json "$root/tools/screenshots/ayu-dark.json" \
+  --builtin-config --default-mode dark >/dev/null 2>&1
+[[ -f $tmp/config/luciole/colors.toml ]] || { echo "noctalia theme did not write luciole/colors.toml" >&2; exit 1; }
 
 # The icon theme comes from the desktop settings (GSettings, here a plain key file); the theme
 # itself is found through the real data dir.
 real_data=${XDG_DATA_HOME:-$HOME/.local/share}
-icons=${ICON_THEME:-Rose-Pine-Plus-${theme^}}
+icons=${ICON_THEME:-Rose-Pine-Plus-Dark}
 if [[ -d $real_data/icons/$icons || -d /usr/share/icons/$icons ]]; then
   mkdir -p "$tmp/config/glib-2.0/settings"
-  printf "[org/gnome/desktop/interface]\nicon-theme='%s'\n" "$icons" >"$tmp/config/glib-2.0/settings/keyfile"
+  printf "[org/gnome/desktop/interface]\nicon-theme='%s'\ncolor-scheme='prefer-dark'\n" "$icons" >"$tmp/config/glib-2.0/settings/keyfile"
 fi
 
 printf '[general]\nshow_cheatsheet = false\n' >"$tmp/umbriel.toml"
@@ -135,5 +141,7 @@ env -i PATH="$PATH" WAYLAND_DISPLAY="$parent" HOME="$home" \
   SHOTS_INNER=1 SHOTS_TMP="$tmp" SHOTS_OUT="$out" SHOTS_BIN="$bin" \
   PAUSE="$PAUSE" WIDTH="$WIDTH" \
   dbus-run-session -- bash -c '
-    umbriel -c "'"$tmp"'/umbriel.toml" -s "'"$0"' '"$theme"'"
-  '
+    umbriel -c "'"$tmp"'/umbriel.toml" -s "'"$0"'"
+  ' || true # killed by the driver on exit, so its status says nothing
+# The nested compositor's exit status does not carry the driver's, so check the marker.
+[[ ! -e $tmp/failed ]]
