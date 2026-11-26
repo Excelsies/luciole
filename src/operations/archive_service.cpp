@@ -4,6 +4,7 @@
 #include "fs/system_mounts.h"
 #include "operations/archive_icons.h"
 #include "operations/archive_work.h"
+#include "operations/transfer_writeback.h"
 
 #include <filesystem>
 #include <glib.h>
@@ -40,6 +41,7 @@ struct luciole::ArchiveService::State : std::enable_shared_from_this<State> {
   std::shared_ptr<State> transferLifetime;
   std::vector<TransferResult> results;
   explicit State(ArchiveLimits value) : limits(value) {}
+  State(transfer::WritebackOps ops, ArchiveLimits value) : limits(value), transfers(std::move(ops)) {}
   ~State() {
     if (timer) {
       g_source_destroy(timer);
@@ -106,6 +108,17 @@ struct luciole::ArchiveService::State : std::enable_shared_from_this<State> {
         }
     );
     notify();
+  }
+  // Returns whether a pending password prompt was cancelled and cleaned up.
+  bool cancelPassword() {
+    if (phase != ArchivePhase::WaitingPassword) {
+      return false;
+    }
+    request.reset();
+    password.reset();
+    error = FileError{FileErrorKind::Cancelled, "Archive operation cancelled."};
+    clean({});
+    return true;
   }
   void transferChanged() {
     if (transfers.busy()) {
@@ -285,6 +298,15 @@ luciole::ArchiveService::ArchiveService(ArchiveLimits limits) : m_state(std::mak
     }
   });
 }
+luciole::ArchiveService::ArchiveService(transfer::WritebackOps ops, ArchiveLimits limits)
+    : m_state(std::make_shared<State>(std::move(ops), limits)) {
+  const std::weak_ptr<State> weak = m_state;
+  m_state->transfers.setChangedCallback([weak] {
+    if (const auto owner = weak.lock()) {
+      owner->transferChanged();
+    }
+  });
+}
 luciole::ArchiveService::~ArchiveService() {
   m_state->changed = {};
   shutdown();
@@ -326,26 +348,26 @@ bool luciole::ArchiveService::openMember(const std::string& path) {
   );
 }
 void luciole::ArchiveService::cancel() {
+  if (flushPhase() == TransferFlush::Final) {
+    return;
+  }
   m_state->cancel.cancel();
   m_state->transfers.cancel();
-  if (m_state->phase == ArchivePhase::WaitingPassword) {
-    m_state->request.reset();
-    m_state->password.reset();
-    m_state->error = FileError{FileErrorKind::Cancelled, "Archive operation cancelled."};
-    m_state->clean({});
-  }
+  m_state->cancelPassword();
 }
 void luciole::ArchiveService::shutdown() {
   if (m_state->closing) {
     return;
   }
   m_state->closing = true;
-  cancel();
-  if (!busy()) {
+  m_state->cancel.cancel();
+  m_state->transfers.shutdown();
+  if (!m_state->cancelPassword() && !busy()) {
     m_state->clean({});
   }
 }
 bool luciole::ArchiveService::busy() const { return m_state->phase != ArchivePhase::Idle; }
+luciole::TransferFlush luciole::ArchiveService::flushPhase() const { return m_state->transfers.flushPhase(); }
 luciole::ArchivePhase luciole::ArchiveService::phase() const { return m_state->phase; }
 std::uint64_t luciole::ArchiveService::bytes() const {
   return m_state->phase == ArchivePhase::Transferring ? m_state->transfers.bytes() : m_state->progress.bytes.load();
