@@ -347,7 +347,8 @@ namespace {
   // scrolling view.
   const Node* sidePageCard(const FilePreviewView& side, const Label& text) {
     for (const Node* node = text.parent(); node != nullptr && node != &side; node = node->parent()) {
-      if (node->clipChildren() && dynamic_cast<const Flex*>(node) != nullptr
+      if (node->clipChildren()
+          && dynamic_cast<const Flex*>(node) != nullptr
           && dynamic_cast<const ScrollView*>(node) == nullptr) {
         return node;
       }

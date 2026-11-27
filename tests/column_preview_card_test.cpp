@@ -43,8 +43,8 @@ namespace {
     // The outline is Style::borderWidth wide, which at a fractional scale or position blends into two pixels: one of
     // the two at the edge is the outline's color.
     const auto on = [&](int side, int px, int py, int inwardX, int inwardY) {
-      const bool found = distance(pixels.at(px, py), outline) < 30
-          || distance(pixels.at(px + inwardX, py + inwardY), outline) < 30;
+      const bool found =
+          distance(pixels.at(px, py), outline) < 30 || distance(pixels.at(px + inwardX, py + inwardY), outline) < 30;
       missing.at(static_cast<std::size_t>(side)) += found ? 0 : 1;
     };
     for (int column = left + corner; column < right - corner; ++column) {

@@ -173,7 +173,9 @@ namespace {
     Flex root;
     root.setDirection(FlexDirection::Vertical);
     root.setAnimationManager(&animations);
-    auto* view = static_cast<MediaView*>(root.addChild(std::make_unique<MediaView>(ColorRole::SurfaceContainerLow, AudioOutput::Silent)));
+    auto* view = static_cast<MediaView*>(
+        root.addChild(std::make_unique<MediaView>(ColorRole::SurfaceContainerLow, AudioOutput::Silent))
+    );
     view->setFlexGrow(1);
     view->setVisible(false);
     view->setPoster(solidPoster(4, 4));

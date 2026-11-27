@@ -84,9 +84,10 @@ namespace {
   };
 
   // A PreviewFrame in a box of kBox by kBoxHeight showing a `width` by `height` picture at x, y within it.
-  std::unique_ptr<Flex>
-  framed(::test::SceneCapture& capture, Picture& picture, float x, float y, float width, float height,
-         ColorRole surface = kLow) {
+  std::unique_ptr<Flex> framed(
+      ::test::SceneCapture& capture, Picture& picture, float x, float y, float width, float height,
+      ColorRole surface = kLow
+  ) {
     auto root = stage(surface);
     auto frame = std::make_unique<luciole::PreviewFrame>(surface);
     picture.frame = frame.get();

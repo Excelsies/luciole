@@ -71,9 +71,9 @@ namespace {
     explicit Rig(std::unique_ptr<test::SceneCapture> rig, luciole::AnimationLimits limits = {})
         : capture(std::move(rig)) {
       parent = root.addChild(std::make_unique<Node>());
-      view = static_cast<AnimatedImageView*>(
-          parent->addChild(std::make_unique<AnimatedImageView>(ColorRole::SurfaceContainerLow, [this] { return now; }, limits))
-      );
+      view = static_cast<AnimatedImageView*>(parent->addChild(
+          std::make_unique<AnimatedImageView>(ColorRole::SurfaceContainerLow, [this] { return now; }, limits)
+      ));
       view->onStateChanged = [this](AnimationState state) { reported.push_back(state); };
       dispatcher.setSceneRoot(&root);
     }
@@ -230,7 +230,9 @@ namespace {
     rig.waitUntil([&] { return rig.view->frameIndex() == 0U; });
     const auto texture = rig.view->image().textureId();
     rig.parent->removeChild(rig.view);
-    rig.view = static_cast<AnimatedImageView*>(rig.parent->addChild(std::make_unique<AnimatedImageView>(ColorRole::SurfaceContainerLow)));
+    rig.view = static_cast<AnimatedImageView*>(
+        rig.parent->addChild(std::make_unique<AnimatedImageView>(ColorRole::SurfaceContainerLow))
+    );
     TEST_CHECK(!textureAlive(texture));
     TEST_CHECK(TimerManager::instance().pollTimeoutMs() < 0);
     // A view destroyed while its first frames decode publishes nothing.
@@ -238,7 +240,9 @@ namespace {
     rig.draw(200, 200, 1);
     rig.waitUntil([&] { return rig.view->decoding(); });
     rig.parent->removeChild(rig.view);
-    rig.view = static_cast<AnimatedImageView*>(rig.parent->addChild(std::make_unique<AnimatedImageView>(ColorRole::SurfaceContainerLow)));
+    rig.view = static_cast<AnimatedImageView*>(
+        rig.parent->addChild(std::make_unique<AnimatedImageView>(ColorRole::SurfaceContainerLow))
+    );
     for (int i = 0; i < 40; ++i) {
       runFor(rig.glib, 5);
     }
@@ -351,7 +355,9 @@ namespace {
     TEST_CHECK(callbackOutlivedTheView);
     TEST_CHECK(liveCallbackCopies == 0);
     TEST_CHECK(TimerManager::instance().pollTimeoutMs() < 0);
-    rig.view = static_cast<AnimatedImageView*>(rig.parent->addChild(std::make_unique<AnimatedImageView>(ColorRole::SurfaceContainerLow)));
+    rig.view = static_cast<AnimatedImageView*>(
+        rig.parent->addChild(std::make_unique<AnimatedImageView>(ColorRole::SurfaceContainerLow))
+    );
   }
 
   double processorSeconds() {
@@ -366,7 +372,9 @@ namespace {
     Rig rig(std::move(capture));
     // This view reads the real clock.
     rig.parent->removeChild(rig.view);
-    rig.view = static_cast<AnimatedImageView*>(rig.parent->addChild(std::make_unique<AnimatedImageView>(ColorRole::SurfaceContainerLow)));
+    rig.view = static_cast<AnimatedImageView*>(
+        rig.parent->addChild(std::make_unique<AnimatedImageView>(ColorRole::SurfaceContainerLow))
+    );
     std::vector<FlatFrame> frames;
     frames.reserve(20);
     for (int i = 0; i < 20; ++i) {

@@ -70,7 +70,9 @@ namespace {
 
     explicit Rig(::test::SceneCapture& rig) : capture(rig) {
       root.setAnimationManager(&animations);
-      view = static_cast<MediaView*>(root.addChild(std::make_unique<MediaView>(ColorRole::SurfaceContainerLow, AudioOutput::Silent)));
+      view = static_cast<MediaView*>(
+          root.addChild(std::make_unique<MediaView>(ColorRole::SurfaceContainerLow, AudioOutput::Silent))
+      );
       view->audioVisual().onChosen = [this](const AudioVisualChoice& choice) { chosen.push_back(choice); };
       view->audioVisual().setModifiers([this] { return modifiers; });
       dispatcher.setSceneRoot(&root);

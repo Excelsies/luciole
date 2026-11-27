@@ -69,7 +69,8 @@ namespace test::media {
     explicit ViewRig(::test::SceneCapture& rig, AudioOutput audio = AudioOutput::Silent) : capture(rig) {
       root.setAnimationManager(&animations);
       middle = static_cast<Holder*>(root.addChild(std::make_unique<Holder>()));
-      view = static_cast<MediaView*>(middle->addChild(std::make_unique<MediaView>(ColorRole::SurfaceContainerLow, audio)));
+      view =
+          static_cast<MediaView*>(middle->addChild(std::make_unique<MediaView>(ColorRole::SurfaceContainerLow, audio)));
       dispatcher.setSceneRoot(&root);
       frame();
     }

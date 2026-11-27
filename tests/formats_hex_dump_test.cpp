@@ -107,7 +107,9 @@ namespace {
   void testRowFitting() {
     using luciole::formats::hexDumpRowsFitting;
     using luciole::formats::hexDumpRowWidth;
-    TEST_CHECK(hexDumpRowWidth(16) == 78 && hexDumpRowWidth(12) == 62 && hexDumpRowWidth(8) == 45 && hexDumpRowWidth(4) == 29);
+    TEST_CHECK(
+        hexDumpRowWidth(16) == 78 && hexDumpRowWidth(12) == 62 && hexDumpRowWidth(8) == 45 && hexDumpRowWidth(4) == 29
+    );
     TEST_CHECK(joinedText(line(hexDump(std::string(16, 'a')), 0)).size() == hexDumpRowWidth(16));
     TEST_CHECK(hexDumpRowsFitting(78) == 16 && hexDumpRowsFitting(500) == 16);
     TEST_CHECK(hexDumpRowsFitting(77.9) == 12 && hexDumpRowsFitting(62) == 12);

@@ -46,9 +46,9 @@ namespace {
   using luciole::ColumnPreviewKind;
   using luciole::ColumnPreviewStatus;
   using luciole::WorkbenchPreview;
+  using luciole::test::preview::Rig;
   using luciole::test::tiles::bytesOf;
   using luciole::test::tiles::distance;
-  using luciole::test::preview::Rig;
   using Clock = std::chrono::steady_clock;
   using Pixel = std::array<std::uint8_t, 4>;
 
