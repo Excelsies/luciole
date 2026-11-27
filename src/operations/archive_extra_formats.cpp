@@ -156,7 +156,7 @@ void luciole::archive_work::requireGzipTrailers(struct archive* reader, const Lo
   std::vector<char> in(kGzipChunk), out(kGzipChunk);
   std::uint64_t total = 0;
   std::size_t members = 0;
-  bool open = false;
+  bool open = false, padded = false;
   // Each pass takes input or yields output, so the loops end with the file and the bytes it inflates to.
   for (;;) {
     work.check();
@@ -168,6 +168,19 @@ void luciole::archive_work::requireGzipTrailers(struct archive* reader, const Lo
     stream.avail_in = static_cast<uInt>(count);
     while (stream.avail_in > 0) {
       work.check();
+      // After a member only NUL padding may follow, up to the end of the file; a member after padding would be
+      // dropped by every other reader, so it is refused with the rest.
+      if (members > 0 && !open) {
+        if (*stream.next_in == 0) {
+          padded = true;
+          ++stream.next_in;
+          --stream.avail_in;
+          continue;
+        }
+        if (padded) {
+          gzipFailed(members, stream, false);
+        }
+      }
       stream.next_out = reinterpret_cast<Bytef*>(out.data());
       stream.avail_out = static_cast<uInt>(out.size());
       const auto before = stream.avail_in;

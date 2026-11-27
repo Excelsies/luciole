@@ -21,7 +21,8 @@ namespace luciole::archive_work {
   bool extraFilterNeedsRawPass(int filterCode);
   // libarchive reads a gzip stream's CRC32 and length trailers and never compares them, so data that still inflates
   // passes as it is. When the file is gzip, inflates all of it again with zlib, which checks every member. A member
-  // may follow another; bytes after the last one are refused. Cancellable, and held to the decoded-container budget.
+  // may follow another; NUL padding after the last one is accepted, any other byte after it is refused. Cancellable,
+  // and held to the decoded-container budget.
   void requireGzipTrailers(struct archive* reader, const Location& source, Work& work);
   // The next header; the symbol-table members of ar archives are consumed here and never reach the catalog.
   int nextHeader(struct archive* reader, struct archive_entry** entry, const Work& work);

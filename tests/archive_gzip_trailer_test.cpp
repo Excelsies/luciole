@@ -153,8 +153,21 @@ namespace {
   void limitsAndShapes(const Folder& folder) {
     const Subject tar{"pack.tar.gz", "data.txt", content()};
     const auto good = compressed(folder, ARCHIVE_FILTER_GZIP, sampleTar());
-    check(folder, tar, "zero padding after member", good + std::string(512, '\0'), true);
+    const Subject single{"notes.txt.gz", "notes.txt", content()};
+    const auto alone = compressed(folder, ARCHIVE_FILTER_GZIP, content());
+    // NUL padding up to the end of the file is accepted, as gzip and libarchive do; nothing else after the end is.
+    for (const auto& [subject, stream] : {std::pair{tar, good}, std::pair{single, alone}}) {
+      for (const std::size_t zeros : {1U, 512U, 1U << 20}) {
+        check(folder, subject, std::to_string(zeros) + " NULs after member", stream + std::string(zeros, '\0'), false);
+      }
+      check(folder, subject, "NULs then one byte", stream + std::string(512, '\0') + "x", true);
+      check(folder, subject, "NULs then a member", stream + std::string(512, '\0') + stream, true);
+      check(folder, subject, "one non-NUL byte", stream + "x", true);
+    }
     check(folder, tar, "another gzip around it", compressed(folder, ARCHIVE_FILTER_GZIP, good), true);
+    const auto twice = compressed(folder, ARCHIVE_FILTER_GZIP, good);
+    check(folder, Subject{"x.tar.gz.gz", "x.tar.gz", good}, "gz of a .tar.gz", twice, true);
+    check(folder, Subject{"x.gz", "x", good}, "single gz of a gzip", twice, true);
     // The TAR ends in the first bytes; the zeros after it still count against the decoded-container budget.
     const auto path = folder.root / "bomb.tar.gz";
     write(path, compressed(folder, ARCHIVE_FILTER_GZIP, plainTar({{"file", "abc"}}) + std::string(4U << 20, '\0')));
