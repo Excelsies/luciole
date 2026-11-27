@@ -14,6 +14,7 @@
 #include "ui/browser/preview_layout.h"
 #include "ui/builders.h"
 #include "ui/controls/file_preview_view.h"
+#include "ui/workbench/column_preview_layout.h"
 #include "ui/workbench/column_preview_page.h"
 #include "wayland/popup_surface.h"
 #include "wayland/wayland_seat.h"
@@ -67,9 +68,10 @@ void PreviewController::sync() {
   const auto rect = target ? m_target->bounds : m_bounds.value_or(LayoutRect{});
   const auto size = quick ? quickPreviewSize() : std::pair{rect.width, rect.height};
   const auto& renderer = quick ? surface->renderTarget().renderer() : m_page.surface().renderTarget().renderer();
-  const int pixelSide = luciole::previewImagePixels(
-      pixels ? pixels->width : 0, pixels ? pixels->height : 0, size.first, size.second, renderer.renderScale(), quick
-  );
+  const int sourceWidth = pixels ? pixels->width : 0, sourceHeight = pixels ? pixels->height : 0;
+  const int pixelSide = target
+      ? luciole::columnImageLayout(sourceWidth, sourceHeight, size.first, size.second, renderer.renderScale()).pixels
+      : luciole::previewImagePixels(sourceWidth, sourceHeight, size.first, size.second, renderer.renderScale(), quick);
   m_preview.show(entry ? std::optional(*entry) : std::nullopt, pixelSide, prepared);
 }
 

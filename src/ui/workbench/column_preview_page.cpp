@@ -7,6 +7,7 @@
 #include "ui/controls/scroll_view.h"
 #include "ui/palette.h"
 #include "ui/style.h"
+#include "ui/workbench/column_preview_layout.h"
 
 #include <algorithm>
 #include <cmath>
@@ -21,22 +22,6 @@ namespace luciole {
     constexpr int kTextLines = 400;
     constexpr int kKeyLines = 2;
     constexpr int kValueLines = 3;
-
-    // The picture's box: the column's width, its height following the picture's shape within what the slot allows.
-    struct ImageBox {
-      float width, height;
-    };
-
-    ImageBox imageBox(int sourceWidth, int sourceHeight, float width, float height) {
-      const float budget = std::max(40.0F, width - Style::spaceMd * 2 - Style::scrollbarWidth - Style::scrollbarGap);
-      const float maximumHeight = std::max(80.0F, height - 250.0F);
-      const bool known = sourceWidth > 0 && sourceHeight > 0;
-      const float imageHeight = std::clamp(
-          known ? budget * static_cast<float>(sourceHeight) / static_cast<float>(sourceWidth) : 96.0F, 48.0F,
-          maximumHeight
-      );
-      return {budget, imageHeight};
-    }
 
     void show(Node& node, bool shown) {
       node.setVisible(shown);
@@ -60,7 +45,7 @@ namespace luciole {
     content->setGap(Style::spaceSm);
     auto image = std::make_unique<FileIcon>(icons, kFallbackIconSize);
     m_image = image.get();
-    content->addChild(ui::row({.justify = FlexJustify::Center}, std::move(image)));
+    content->addChild(ui::row({.justify = FlexJustify::Center, .paddingV = kColumnImageInset}, std::move(image)));
     content->addChild(ui::label({.out = &m_message, .maxLines = kMessageLines, .configure = literal}));
     content->addChild(ui::label({.out = &m_text, .maxLines = kTextLines, .configure = [](Label& label) {
                                    label.setUseMarkup(false);
@@ -125,7 +110,7 @@ namespace luciole {
     }
     const auto* pixels = snapshot.image && snapshot.image->pixels ? &*snapshot.image->pixels : nullptr;
     if (pixels != nullptr) {
-      const auto image = imageBox(pixels->width, pixels->height, width, height);
+      const auto image = columnImageLayout(pixels->width, pixels->height, width, height, 1);
       m_image->setIconSize(image.width);
       m_image->setPreviewHeight(image.height);
       m_image->setPreparedImage(snapshot.image);
