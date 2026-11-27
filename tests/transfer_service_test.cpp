@@ -15,12 +15,14 @@
 #include <condition_variable>
 #include <fcntl.h>
 #include <filesystem>
+#include <format>
 #include <fstream>
 #include <iostream>
 #include <linux/fs.h>
 #include <linux/mman.h>
 #include <mutex>
 #include <print>
+#include <ranges>
 #include <sched.h>
 #include <semaphore>
 #include <stdexcept>
@@ -4081,6 +4083,91 @@ namespace {
     );
     fixture.clean();
   }
+  void testParallelFolderCopy(Pump& pump) {
+    Fixture fixture;
+    luciole::TransferService service;
+    const auto tree = fixture.source("tree");
+    const std::vector<std::string> folders{"a", "b", "c", "c/deep", "c/deep/deeper"};
+    for (const auto& folder : folders) {
+      fs::create_directories(tree / folder);
+    }
+    for (const auto* folder : {"a", "b", "c/deep/deeper"}) {
+      const auto path = tree / folder;
+      for (int i = 0; i < 50; ++i) {
+        write(path / std::format("file-{:02}.txt", i), std::format("{}-{:02}", path.filename().string(), i));
+      }
+    }
+    TEST_CHECK(::chmod((tree / "a/file-00.txt").c_str(), 0640) == 0);
+    const bool attributes = ::setxattr((tree / "a/file-00.txt").c_str(), "user.luciole-test", "metadata", 8, 0) == 0;
+    fs::create_symlink("a/file-01.txt", tree / "link");
+    const timespec times[]{{.tv_sec = 1'000'000'000, .tv_nsec = 0}, {.tv_sec = 1'000'000'000, .tv_nsec = 0}};
+    for (const auto& folder : std::views::reverse(folders)) {
+      TEST_CHECK(::utimensat(AT_FDCWD, (tree / folder).c_str(), times, 0) == 0);
+    }
+    TEST_CHECK(::chmod((tree / "b").c_str(), 0555) == 0);
+
+    pump.run(service, {location(tree)}, fixture.destination(""), TransferAction::Copy);
+    TEST_CHECK(
+        service.results().size() == 1
+        && service.results()[0].outcome == TransferOutcome::Copied
+        && !service.results()[0].error
+    );
+    const auto copy = fixture.destination("tree");
+    const auto listing = [](const fs::path& root) {
+      std::vector<fs::path> paths;
+      for (const auto& entry : fs::recursive_directory_iterator(root)) {
+        paths.push_back(fs::relative(entry.path(), root));
+      }
+      std::ranges::sort(paths);
+      return paths;
+    };
+    const auto paths = listing(tree);
+    TEST_CHECK(paths.size() == 156 && paths == listing(copy));
+    for (const auto& relative : paths) {
+      struct stat original{};
+      struct stat copied{};
+      TEST_CHECK(
+          ::lstat((tree / relative).c_str(), &original) == 0 && ::lstat((copy / relative).c_str(), &copied) == 0
+      );
+      TEST_CHECK((original.st_mode & 07777) == (copied.st_mode & 07777));
+      if (S_ISREG(original.st_mode)) {
+        TEST_CHECK(read(copy / relative) == read(tree / relative));
+      } else if (S_ISDIR(original.st_mode)) {
+        TEST_CHECK(copied.st_mtim.tv_sec == 1'000'000'000);
+      }
+    }
+    TEST_CHECK(fs::read_symlink(copy / "link") == "a/file-01.txt");
+    if (attributes) {
+      char value[16]{};
+      TEST_CHECK(
+          ::getxattr((copy / "a/file-00.txt").c_str(), "user.luciole-test", value, sizeof(value)) == 8
+          && std::string(value, 8) == "metadata"
+      );
+    }
+
+    // One unreadable file fails its folder; the next item of the same job still copies.
+    if (::geteuid() != 0) {
+      const auto broken = fixture.source("broken");
+      fs::create_directory(broken);
+      for (int i = 0; i < 200; ++i) {
+        write(broken / std::format("file-{:03}.txt", i), "x");
+      }
+      TEST_CHECK(::chmod((broken / "file-150.txt").c_str(), 0) == 0);
+      const auto second = fixture.destination("second");
+      fs::create_directory(second);
+      pump.run(service, {location(broken), location(tree)}, second, TransferAction::Copy);
+      const auto results = service.results();
+      TEST_CHECK(results.size() == 2);
+      TEST_CHECK(
+          results[0].outcome == TransferOutcome::Failed
+          && results[0].error
+          && results[0].error->kind == luciole::FileErrorKind::Denied
+      );
+      TEST_CHECK(!fs::exists(second / "broken"));
+      TEST_CHECK(results[1].outcome == TransferOutcome::Copied && read(second / "tree/a/file-02.txt") == "a-02");
+    }
+    fixture.clean();
+  }
   void testConflicts(Pump& pump) {
     Fixture fixture;
     luciole::TransferService service;
@@ -6004,6 +6091,7 @@ int main(int argc, char** argv) {
     testMoveHistoryInterruption(pump);
     testTransferHistoryBounds(pump);
     testMoveAndCopy(pump);
+    testParallelFolderCopy(pump);
     testConflicts(pump);
     testGuardsAndRaces(pump);
     testCancellationAndNumbering(pump);

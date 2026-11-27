@@ -440,14 +440,13 @@ namespace {
       write(sub / "destination/lnk", "old-link");
 
       unsigned calls = 0;
-      auto fixedWork = [&] {
-        transfer::Work w({}, bytes, {});
+      const auto useFixedDisk = [&](transfer::Work& w) {
         w.writeback.ops.removable = [](int, dev_t) { return false; };
         w.writeback.ops.sync = [&](int) { ++calls; };
-        return w;
       };
       {
-        auto work = fixedWork();
+        transfer::Work work({}, bytes, {});
+        useFixedDisk(work);
         ProviderTransfer plain(
             {{Location::fromPath((sub / "source/plain").native())},
              Location::fromPath((sub / "destination").native()),
@@ -457,7 +456,8 @@ namespace {
         TEST_CHECK(res[0].outcome == Copied && calls == 0);
       }
       {
-        auto work = fixedWork();
+        transfer::Work work({}, bytes, {});
+        useFixedDisk(work);
         ProviderTransfer replacing(
             {{Location::fromPath((sub / "source/rep").native())},
              Location::fromPath((sub / "destination").native()),
@@ -469,7 +469,8 @@ namespace {
       }
       {
         calls = 0;
-        auto work = fixedWork();
+        transfer::Work work({}, bytes, {});
+        useFixedDisk(work);
         ProviderTransfer linkReplace(
             {{Location::fromPath((sub / "source/lnk").native())},
              Location::fromPath((sub / "destination").native()),
