@@ -352,15 +352,17 @@ namespace luciole {
   }
 
   void TableCanvas::showBars(const TableFrame& frame) {
-    // The bars lie over the cells, so the content reaches one bar width further to let its end clear them.
+    // The bars lie over the cells, so the content reaches one bar width further, where the other bar shows, to let
+    // its end clear it.
     const float thickness = Style::scrollbarWidth;
     const float contentWidth = m_edges.empty() ? 0 : m_edges.back();
     const float contentHeight =
         frame.table == nullptr ? 0 : static_cast<float>(frame.table->rowCount) * frame.rowHeight;
+    const auto reach = tableReach(contentWidth, contentHeight, bodyWidth(), bodyHeight(), thickness);
     m_vertical->setPosition(width() - thickness, frame.headerHeight);
-    m_vertical->update(bodyHeight(), contentHeight + thickness, frame.scrollY);
+    m_vertical->update(bodyHeight(), reach.y, frame.scrollY);
     m_horizontal->setPosition(frame.gutterWidth, height() - thickness);
-    m_horizontal->update(bodyWidth(), contentWidth + thickness, frame.scrollX);
+    m_horizontal->update(bodyWidth(), reach.x, frame.scrollX);
   }
 
   // Frames the fills, rules and clips around the header and gutter at the current size.

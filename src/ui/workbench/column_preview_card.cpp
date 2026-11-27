@@ -16,7 +16,7 @@ namespace luciole {
     setPadding(Style::spaceSm, m_paddingH);
   }
 
-  void PageCard::setContentHeight(std::function<float(Renderer&, float)> height) {
+  void PageCard::setContentHeight(std::function<std::optional<float>(Renderer&, float)> height) {
     m_contentHeight = std::move(height);
     markLayoutDirty();
   }
@@ -26,7 +26,11 @@ namespace luciole {
       return Flex::doMeasure(renderer, constraints);
     }
     const float inner = std::max(0.0F, (constraints.hasMaxWidth ? constraints.maxWidth : width()) - (2 * m_paddingH));
-    const float wanted = m_contentHeight(renderer, inner) + (2 * Style::spaceSm);
+    const auto content = m_contentHeight(renderer, inner);
+    if (!content) {
+      return Flex::doMeasure(renderer, constraints);
+    }
+    const float wanted = *content + (2 * Style::spaceSm);
     auto hugging = constraints;
     hugging.setExactHeight(std::min(constraints.maxHeight, wanted));
     return Flex::doMeasure(renderer, hugging);

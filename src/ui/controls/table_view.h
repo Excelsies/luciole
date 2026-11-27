@@ -16,6 +16,7 @@
 #include <vector>
 
 class Label;
+class Renderer;
 class ScrollView;
 class Segmented;
 
@@ -74,6 +75,11 @@ namespace luciole {
     // Shows the grid the owner made after a change: the selection and the scroll position stay on the same source
     // cell, or move to the nearest cell where it is gone. An open cell field closes without a commit.
     void replaceTable(std::shared_ptr<const formats::TableGrid> table);
+    // The height the view takes at `width` in logical pixels, which a card around it hugs: the sheet list, the notice,
+    // a header row and every row, and a sideways bar when the columns are wider than the view. The width never depends
+    // on the height, and a vertical bar, which only shows when the room is shorter than this, is not counted. None
+    // while nothing is loaded and while editing: the view then takes all the room it is given.
+    std::optional<float> naturalHeight(Renderer& renderer, float width);
     // Offers a key before the page's own shortcuts; true when the table took it, and the page then does nothing more
     // with it. While the cell field is open every key but Ctrl+S is delivered to it here, Tab and Shift+Tab
     // included; while the grid shows and has focus in editing mode the editing keys are the table's. Every other key

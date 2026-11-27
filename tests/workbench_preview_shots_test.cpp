@@ -92,6 +92,27 @@ namespace {
     TEST_CHECK(luciole::rowOf(rig.browser.model(), location).has_value());
   }
 
+  // Texts of several shapes to look at beside the fixture's tables and listings.
+  void addReadables(Rig& rig) {
+    std::string essay;
+    for (int sentence = 0; sentence < 14; ++sentence) {
+      essay += std::format(
+          "Sentence {} of a long paragraph that is written to be read and has to wrap at the words of the column. ",
+          sentence + 1
+      );
+    }
+    addFile(rig, "essay.txt", essay + "\n\nA second, shorter paragraph follows the first one.\n");
+    std::string readme = "Luciole\n=======\n\n";
+    for (int line = 0; line < 6; ++line) {
+      readme += std::format(
+          "Line {} of the readme is long enough that it does not fit one row of the column, so it wraps in the "
+          "middle of the sentence, near https://example.org/a/very/long/address/that/has/no/spaces/{}.\n",
+          line + 1, line
+      );
+    }
+    addFile(rig, "README", readme);
+  }
+
   void addPicture(Rig& rig, std::string_view name, int width, int height, std::array<std::uint8_t, 4> color) {
     const auto bytes = ::test::stillPng(width, height, color);
     addFile(rig, name, std::string_view(reinterpret_cast<const char*>(bytes.data()), bytes.size()));
@@ -221,6 +242,7 @@ int main(int argc, char** argv) {
     addPicture(rig, "portrait.png", 240, 400, {60, 160, 220, 255});
     addPicture(rig, "tiny.png", 24, 16, {120, 200, 90, 255});
     addFile(rig, "empty.txt", "");
+    addReadables(rig);
     addFile(rig, "short-note.txt", "Hello from the short note.\nSecond line here.\nThird line is the last one.\n");
     std::string many;
     for (int line = 0; line < 2600; ++line) {
@@ -260,6 +282,11 @@ int main(int argc, char** argv) {
         {"short-note.txt", "short-note", ""},
         {"blob.bin", "hex", "Not UTF-8 text", false},
         {"data.csv", "table", "", false},
+        {"essay.txt", "essay", "", false},
+        {"README", "readme", "", false},
+        {"tiny.csv", "table-small", "", false},
+        {"wide-long.csv", "table-wide", "", false},
+        {"large.zip", "archive-large", "", false},
         {"empty.txt", "empty-file", "Empty"},
         {"many-lines.txt", "truncated-text", "Truncated"},
         {"pack.zip", "archive-listing", ""},

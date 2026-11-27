@@ -54,6 +54,23 @@ namespace luciole::test::preview {
     return text;
   }
 
+  // A table of `columns` columns with long names, `rows` rows of numbers under them.
+  inline std::string wideCsv(std::size_t rows, std::size_t columns) {
+    std::string text = "id";
+    for (std::size_t column = 0; column < columns; ++column) {
+      text += std::format(",column-{:02}-with-a-long-name", column);
+    }
+    text += "\n";
+    for (std::size_t row = 0; row < rows; ++row) {
+      text += std::to_string(row);
+      for (std::size_t column = 0; column < columns; ++column) {
+        text += std::format(",{}", (row * 31) + column);
+      }
+      text += "\n";
+    }
+    return text;
+  }
+
   // An ASCII STL of a tetrahedron, Z up.
   inline std::string_view stlText() {
     return "solid tetra\n"
@@ -114,6 +131,9 @@ namespace luciole::test::preview {
       writeFile(m_folder / "notes.md", markdownText());
       writeFile(m_folder / "data.csv", csvText(40));
       writeFile(m_folder / "data.tsv", "a\tb\n1\t2\n3\t4\n");
+      writeFile(m_folder / "tiny.csv", "name,size\nalpha.txt,12\nbeta.txt,340\ngamma.txt,5600\ndelta.txt,78000\n");
+      writeFile(m_folder / "wide-short.csv", wideCsv(4, 30));
+      writeFile(m_folder / "wide-long.csv", wideCsv(300, 30));
       writeFile(
           m_folder / "data.json",
           R"({"name": "luciole", "sizes": [1, 2, 3], "ok": true})"
@@ -153,6 +173,13 @@ namespace luciole::test::preview {
            {"src/main.cpp", std::string(5000, 'c')},
            {"data.bin", std::string(70000, 'd')}}
       );
+      std::vector<table::ZipMember> many;
+      for (int entry = 0; entry < 150; ++entry) {
+        many.emplace_back(
+            std::format("src/module-{:03}/file-{:03}.cpp", entry / 10, entry), std::string(100 + entry, 'x')
+        );
+      }
+      table::writeZip(m_folder / "large.zip", many);
       const std::vector<::test::FlatFrame> frames{
           {.rgba = {224, 27, 36, 255}, .delayMs = 80},
           {.rgba = {53, 132, 228, 255}, .delayMs = 80},

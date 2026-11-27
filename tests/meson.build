@@ -81,6 +81,7 @@ test_table = [
   {'name': 'pane-shell-titles', 'deps': [ui_dep]},
   {'name': 'workbench-chrome', 'deps': [ui_dep]},
   {'name': 'table-view', 'cpu_budget': true, 'deps': [ui_dep]},
+  {'name': 'table-view-height', 'deps': [ui_dep]},
   {'name': 'table-view-editing', 'deps': [ui_dep]},
   {'name': 'table-view-editing-focus', 'deps': [ui_dep]},
   {'name': 'table-view-editing-pixels', 'deps': [ui_dep, dependency('zlib')],

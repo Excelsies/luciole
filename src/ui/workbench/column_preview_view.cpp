@@ -18,6 +18,7 @@
 #include <array>
 #include <cmath>
 #include <format>
+#include <optional>
 #include <tuple>
 #include <utility>
 
@@ -74,10 +75,14 @@ namespace luciole {
       content->setFlexGrow(1);
       auto card = makePageCard(0.0F);
       card->setFlexGrow(1);
-      // Read text hugs its lines; an editor and a table take the whole pane.
+      // Read text, tables and listings hug their content; an editor takes the whole pane.
       if (auto* tiles = dynamic_cast<TextTileView*>(content.get())) {
-        card->setContentHeight([tiles](Renderer& renderer, float width) {
+        card->setContentHeight([tiles](Renderer& renderer, float width) -> std::optional<float> {
           return tiles->naturalHeight(renderer, width);
+        });
+      } else if (auto* table = dynamic_cast<TableView*>(content.get())) {
+        card->setContentHeight([table](Renderer& renderer, float width) {
+          return table->naturalHeight(renderer, width);
         });
       }
       card->addChild(std::move(content));

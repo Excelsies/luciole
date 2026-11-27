@@ -5,6 +5,7 @@
 
 #include <functional>
 #include <memory>
+#include <optional>
 
 namespace luciole {
   // The surface the Workbench preview sits on: its header, its page cards and the frames of its pictures round into
@@ -20,16 +21,17 @@ namespace luciole {
   public:
     explicit PageCard(float paddingH);
 
-    // `height(renderer, width)` is the height of the content at `width`, in logical pixels. The card is as tall as
-    // that and its insets, and no taller than the room it is given; the content scrolls in it when it is longer.
-    void setContentHeight(std::function<float(Renderer&, float)> height);
+    // `height(renderer, width)` is the height of the content at `width`, in logical pixels, or none for content that
+    // takes all the room. The card is as tall as that and its insets, and no taller than the room it is given; the
+    // content scrolls in it when it is longer.
+    void setContentHeight(std::function<std::optional<float>(Renderer&, float)> height);
 
   protected:
     LayoutSize doMeasure(Renderer& renderer, const LayoutConstraints& constraints) override;
 
   private:
     float m_paddingH;
-    std::function<float(Renderer&, float)> m_contentHeight;
+    std::function<std::optional<float>(Renderer&, float)> m_contentHeight;
   };
 
   std::unique_ptr<PageCard> makePageCard(float paddingH);

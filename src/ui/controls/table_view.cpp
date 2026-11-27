@@ -263,6 +263,26 @@ namespace luciole {
     }
   }
 
+  std::optional<float> TableView::naturalHeight(Renderer& renderer, float width) {
+    if (m_editable || (m_table == nullptr && m_message.empty())) {
+      return std::nullopt;
+    }
+    auto constraints = LayoutConstraints::unconstrained();
+    constraints.setMaxWidth(width);
+    float height = 0;
+    for (Node* part : {static_cast<Node*>(m_sheetBar), static_cast<Node*>(m_noticeRow)}) {
+      height += part->participatesInLayout() ? part->measure(renderer, constraints).height : 0.0F;
+    }
+    if (!m_message.empty() || m_table == nullptr) {
+      return height;
+    }
+    const float rows = static_cast<float>(m_table->rowCount + 1) * std::ceil(m_textSize * kTableRowEm);
+    // Until the columns are planned their widths are not known and no sideways bar is counted.
+    const float contentW = m_planned && m_edges.size() > 1 ? m_edges.back() : 0.0F;
+    const auto reach = tableReach(contentW, rows, std::max(0.0F, width - m_gutterWidth), rows, Style::scrollbarWidth);
+    return height + reach.y;
+  }
+
   void TableView::setEditable(bool editable) {
     if (editable == m_editable) {
       return;
@@ -338,6 +358,7 @@ namespace luciole {
     }
     const auto last = workbench::countText(static_cast<double>(m_table->firstRowNumber + m_table->rowCount));
     m_gutterWidth = std::max(m_textSize * kMinGutterEm, std::ceil(advances.width(last, false, most) + (2 * m_padding)));
+    markLayoutDirty(); // a card around the view takes its height from the widths
   }
 
   // Scrolls the least that brings the selected cell into the viewport.
@@ -364,8 +385,10 @@ namespace luciole {
   bool TableView::scrollTo(float x, float y) {
     const float contentW = m_edges.empty() ? 0 : m_edges.back();
     const float contentH = m_table == nullptr ? 0 : static_cast<float>(m_table->rowCount) * m_rowHeight;
-    const float maxX = std::max(0.0F, contentW + Style::scrollbarWidth - m_canvas->bodyWidth());
-    const float maxY = std::max(0.0F, contentH + Style::scrollbarWidth - m_canvas->bodyHeight());
+    const auto reach =
+        tableReach(contentW, contentH, m_canvas->bodyWidth(), m_canvas->bodyHeight(), Style::scrollbarWidth);
+    const float maxX = std::max(0.0F, reach.x - m_canvas->bodyWidth());
+    const float maxY = std::max(0.0F, reach.y - m_canvas->bodyHeight());
     x = std::isfinite(x) ? std::clamp(x, 0.0F, maxX) : m_scrollX;
     y = std::isfinite(y) ? std::clamp(y, 0.0F, maxY) : m_scrollY;
     if (x == m_scrollX && y == m_scrollY) {
