@@ -136,12 +136,21 @@ namespace {
 } // namespace
 
 void luciole::archive_work::requireGzipTrailers(struct archive* reader, const Location& source, Work& work) {
+  // Filter 0 is applied last, next to the archive format; the file's own layer has the highest index but the
+  // final none entry, the file source.
+  const int count = archive_filter_count(reader);
+  int own = -1;
+  for (int i = 0; i < count; ++i) {
+    if (archive_filter_code(reader, i) != ARCHIVE_FILTER_NONE) {
+      own = i;
+    }
+  }
   bool gzip = false;
-  for (int i = 0; i < archive_filter_count(reader); ++i) {
+  for (int i = 0; i < count; ++i) {
     if (archive_filter_code(reader, i) != ARCHIVE_FILTER_GZIP) {
       continue;
     }
-    if (i != 0) {
+    if (i != own) {
       throwFileError(FileErrorKind::Unsupported, "A gzip stream inside another compression cannot be verified.");
     }
     gzip = true;

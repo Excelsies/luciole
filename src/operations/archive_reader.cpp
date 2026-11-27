@@ -428,6 +428,7 @@ namespace {
       result->compression = archive_filter_name(reader.value.get(), 0);
     }
     result->single = reader.single.has_value();
+    // libarchive does not check gzip trailers; a second pass over the file does.
     requireGzipTrailers(reader.value.get(), Location::fromPath(reader.filename), reader.work);
     std::error_code failed;
     const auto archiveBytes = fs::file_size(reader.filename, failed);
