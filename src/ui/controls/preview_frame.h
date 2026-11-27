@@ -2,6 +2,7 @@
 
 #include "render/core/texture_handle.h"
 #include "render/scene/node.h"
+#include "ui/palette.h"
 #include "ui/signal.h"
 
 class ImageNode;
@@ -16,7 +17,8 @@ namespace luciole {
   // the outline above it, so rounded corners never scroll with the picture.
   class PreviewFrame final : public Node {
   public:
-    PreviewFrame();
+    // `surface` is the role of the background the frame sits on; the mask over a cut picture's corners is that color.
+    explicit PreviewFrame(ColorRole surface);
     ~PreviewFrame() override;
     PreviewFrame(const PreviewFrame&) = delete;
     PreviewFrame& operator=(const PreviewFrame&) = delete;
@@ -50,6 +52,7 @@ namespace luciole {
     float m_x = 0, m_y = 0, m_width = 0, m_height = 0;
     Visible m_visible{};
     bool m_cut = false;
+    ColorRole m_surface;
     Signal<>::ScopedConnection m_paletteConn;
   };
 } // namespace luciole

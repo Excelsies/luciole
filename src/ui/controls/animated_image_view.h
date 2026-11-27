@@ -5,6 +5,7 @@
 #include "imaging/animation_frames.h"
 #include "render/core/texture_handle.h"
 #include "render/scene/node.h"
+#include "ui/palette.h"
 
 #include <chrono>
 #include <cstddef>
@@ -35,8 +36,9 @@ public:
   static constexpr float kMaxScale = 4.0F;
 
   // `clock` gives the time frames are shown at; `limits` bound the decoded frames.
+  // `surface` is the role of the background the view sits on; the picture's frame rounds into it.
   explicit AnimatedImageView(
-      std::function<Clock::time_point()> clock = Clock::now, luciole::AnimationLimits limits = {}
+      ColorRole surface, std::function<Clock::time_point()> clock = Clock::now, luciole::AnimationLimits limits = {}
   );
   ~AnimatedImageView() override;
 

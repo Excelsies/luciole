@@ -3,6 +3,7 @@
 #include "model/thumbnail_options.h"
 #include "thumbnails/thumbnail_service.h"
 #include "ui/controls/animated_image_view.h"
+#include "ui/workbench/column_preview_card.h"
 #include "ui/workbench/column_preview_view.h"
 
 #include <algorithm>
@@ -21,7 +22,7 @@ namespace luciole {
           : ColumnPreviewLoad(view, std::move(frameNeeded)), m_entry(request.entry), m_thumbnails(thumbnails),
             m_slotPixels(request.posterPixels), m_scale(request.scale),
             m_vector(request.entry.contentType.value_or("").starts_with("image/svg")) {
-        auto made = std::make_unique<AnimatedImageView>();
+        auto made = std::make_unique<AnimatedImageView>(kColumnPreviewSurface);
         m_image = made.get();
         m_image->setPreviewScale(m_scale);
         m_view.setContent(std::move(made));

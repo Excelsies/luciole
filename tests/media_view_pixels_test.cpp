@@ -85,7 +85,7 @@ namespace {
       root.setAlign(FlexAlign::Stretch);
       root.setFill(colorSpecFromRole(ColorRole::SurfaceContainerLow));
       root.setAnimationManager(&animations);
-      auto media = std::make_unique<MediaView>(audio);
+      auto media = std::make_unique<MediaView>(ColorRole::SurfaceContainerLow, audio);
       media->setFlexGrow(1);
       view = static_cast<MediaView*>(root.addChild(std::move(media)));
     }

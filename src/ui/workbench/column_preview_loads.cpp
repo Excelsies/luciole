@@ -11,6 +11,7 @@
 #include "ui/controls/mesh_view.h"
 #include "ui/controls/table_view.h"
 #include "ui/controls/text_tile_view.h"
+#include "ui/workbench/column_preview_card.h"
 #include "ui/workbench/column_preview_picture.h"
 #include "ui/workbench/column_preview_view.h"
 
@@ -339,7 +340,7 @@ namespace luciole {
           std::function<void()> frameNeeded
       )
           : ColumnPreviewLoad(view, std::move(frameNeeded)) {
-        auto made = std::make_unique<MediaView>();
+        auto made = std::make_unique<MediaView>(kColumnPreviewSurface);
         m_media = made.get();
         m_media->onFactsChanged = [this] {
           factsChanged();

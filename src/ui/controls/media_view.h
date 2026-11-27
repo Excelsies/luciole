@@ -7,6 +7,7 @@
 #include "render/scene/node.h"
 #include "ui/controls/audio_visual_view.h"
 #include "ui/controls/media_bar_keys.h"
+#include "ui/palette.h"
 #include "ui/signal.h"
 
 #include <chrono>
@@ -53,7 +54,8 @@ public:
   // A video that sits paused or ended this long gives its pipeline back; its last frame, time and bar stay.
   static constexpr std::chrono::milliseconds kIdleRelease{30'000};
 
-  explicit MediaView(luciole::AudioOutput audio = luciole::AudioOutput::System);
+  // `surface` is the role of the background the view sits on; the picture's frame rounds into it.
+  explicit MediaView(ColorRole surface, luciole::AudioOutput audio = luciole::AudioOutput::System);
   ~MediaView() override;
 
   MediaView(const MediaView&) = delete;

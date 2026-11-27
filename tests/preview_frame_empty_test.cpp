@@ -59,7 +59,7 @@ namespace {
   void framesWithoutATextureDrawNothing(::test::SceneCapture& capture) {
     Style::setPopupShadowsEnabled(true);
     auto root = stage();
-    auto frame = std::make_unique<luciole::PreviewFrame>();
+    auto frame = std::make_unique<luciole::PreviewFrame>(ColorRole::SurfaceContainerLow);
     frame->setPicture(0, 0, 120, 90);
     frame->setFlexGrow(1);
     auto* shown = frame.get();
@@ -78,7 +78,7 @@ namespace {
     const std::vector<::test::FlatFrame> frames{{{255, 0, 0, 255}, 20}, {{0, 255, 0, 255}, 30}};
     TEST_CHECK(::test::writeBytes(path, ::test::animatedGif(160, 90, frames, 0)));
     auto root = stage();
-    auto view = std::make_unique<AnimatedImageView>();
+    auto view = std::make_unique<AnimatedImageView>(ColorRole::SurfaceContainerLow);
     view->setFlexGrow(1);
     auto* shown = view.get();
     root->addChild(std::move(view));

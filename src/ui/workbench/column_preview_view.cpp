@@ -8,6 +8,7 @@
 #include "ui/controls/text_tile_view.h"
 #include "ui/palette.h"
 #include "ui/style.h"
+#include "ui/workbench/column_preview_card.h"
 #include "ui/workbench/column_preview_header.h"
 #include "ui/workbench/list_rows.h"
 #include "ui/workbench/workbench_preferences.h"
@@ -69,21 +70,10 @@ namespace luciole {
     // draws its own margin at the sides.
     std::unique_ptr<Flex> pageAround(std::unique_ptr<Node> content) {
       content->setFlexGrow(1);
-      return ui::column(
-          {.align = FlexAlign::Stretch, .padding = Style::spaceSm, .flexGrow = 1},
-          ui::column(
-              {.align = FlexAlign::Stretch,
-               .clipChildren = true,
-               .flexGrow = 1,
-               .configure =
-                   [](Flex& page) {
-                     page.setCardStyle();
-                     page.setFill(colorSpecFromRole(ColorRole::SurfaceContainerLow));
-                     page.setPadding(Style::spaceSm, 0.0F);
-                   }},
-              std::move(content)
-          )
-      );
+      auto card = makePageCard(0.0F);
+      card->setFlexGrow(1);
+      card->addChild(std::move(content));
+      return ui::column({.align = FlexAlign::Stretch, .padding = Style::spaceSm, .flexGrow = 1}, std::move(card));
     }
   } // namespace
 
@@ -91,7 +81,7 @@ namespace luciole {
       : m_textSize(quietTextSize(Style::fontSizeBody, 0)), m_previewSize(kDefaultPreviewSize) {
     setDirection(FlexDirection::Vertical);
     setAlign(FlexAlign::Stretch);
-    setFill(colorSpecFromRole(ColorRole::SurfaceContainerLow));
+    setFill(colorSpecFromRole(kColumnPreviewSurface));
     setClipChildren(true);
     const auto literal = [](Label& label) { label.setUseMarkup(false); };
     const auto quiet = colorSpecFromRole(ColorRole::OnSurfaceVariant);

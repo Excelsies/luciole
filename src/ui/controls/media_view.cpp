@@ -62,10 +62,10 @@ namespace {
   }
 } // namespace
 
-MediaView::MediaView(luciole::AudioOutput audio)
+MediaView::MediaView(ColorRole surface, luciole::AudioOutput audio)
     : m_audio(audio), m_barKeys([this](const InputArea::KeyData& key) { onKey(key); }),
       m_textSize(Style::fontSizeCaption) {
-  m_frame = static_cast<luciole::PreviewFrame*>(addChild(std::make_unique<luciole::PreviewFrame>()));
+  m_frame = static_cast<luciole::PreviewFrame*>(addChild(std::make_unique<luciole::PreviewFrame>(surface)));
   m_picture = &m_frame->image();
   m_visual = static_cast<AudioVisualView*>(addChild(std::make_unique<AudioVisualView>()));
   m_visual->onActiveChanged = [this] { refreshControls(); };

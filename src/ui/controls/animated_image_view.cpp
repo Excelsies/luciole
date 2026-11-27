@@ -35,10 +35,12 @@ namespace {
   }
 } // namespace
 
-AnimatedImageView::AnimatedImageView(std::function<Clock::time_point()> clock, luciole::AnimationLimits limits)
+AnimatedImageView::AnimatedImageView(
+    ColorRole surface, std::function<Clock::time_point()> clock, luciole::AnimationLimits limits
+)
     : m_clock(std::move(clock)), m_limits(limits) {
   setClipChildren(true);
-  m_frame = static_cast<luciole::PreviewFrame*>(addChild(std::make_unique<luciole::PreviewFrame>()));
+  m_frame = static_cast<luciole::PreviewFrame*>(addChild(std::make_unique<luciole::PreviewFrame>(surface)));
   m_image = &m_frame->image();
   m_area = static_cast<InputArea*>(addChild(std::make_unique<InputArea>()));
   m_area->setAcceptedButtons(InputArea::buttonMask({BTN_LEFT}));

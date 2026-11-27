@@ -9,6 +9,7 @@
 #include "ui/controls/scroll_view.h"
 #include "ui/palette.h"
 #include "ui/style.h"
+#include "ui/workbench/column_preview_card.h"
 #include "ui/workbench/column_preview_layout.h"
 
 #include <algorithm>
@@ -33,7 +34,7 @@ namespace luciole {
   ColumnPreviewPage::ColumnPreviewPage(FileIconCache& icons) : m_textSize(Style::fontSizeCaption) {
     setDirection(FlexDirection::Vertical);
     setAlign(FlexAlign::Stretch);
-    setFill(colorSpecFromRole(ColorRole::SurfaceContainerLow));
+    setFill(colorSpecFromRole(kColumnPreviewSurface));
     setClipChildren(true);
     const auto literal = [](Label& label) { label.setUseMarkup(false); };
     const auto quiet = colorSpecFromRole(ColorRole::OnSurfaceVariant);
@@ -48,22 +49,13 @@ namespace luciole {
     m_image = image.get();
     content->addChild(ui::row({.justify = FlexJustify::Center, .paddingV = kColumnImageInset}, std::move(image)));
     // The text reads as a page, styled like the side preview's text page and Details card.
-    content->addChild(
-        ui::column(
-            {.out = &m_pageCard,
-             .align = FlexAlign::Stretch,
-             .configure =
-                 [](Flex& page) {
-                   page.setCardStyle();
-                   page.setFill(colorSpecFromRole(ColorRole::SurfaceContainerLow));
-                   page.setPadding(Style::spaceSm);
-                 }},
-            ui::label({.out = &m_text, .maxLines = kTextLines, .configure = [](Label& label) {
-                         label.setUseMarkup(false);
-                         label.setFontFamily("monospace");
-                       }})
-        )
-    );
+    auto pageCard = makePageCard(Style::spaceSm);
+    m_pageCard = pageCard.get();
+    pageCard->addChild(ui::label({.out = &m_text, .maxLines = kTextLines, .configure = [](Label& label) {
+                                    label.setUseMarkup(false);
+                                    label.setFontFamily("monospace");
+                                  }}));
+    content->addChild(std::move(pageCard));
     Flex* facts = nullptr;
     auto detailsCard = luciole::card({}, &facts);
     m_detailsCard = detailsCard.get();

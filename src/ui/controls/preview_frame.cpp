@@ -14,12 +14,10 @@ namespace luciole {
   namespace {
     // A picture within this of the box's edge is not cut by it.
     constexpr float kFits = 0.01F;
-    // What the mask paints over the corners: the Workbench preview's own surface.
-    constexpr ColorRole kSurface = ColorRole::SurfaceContainerLow;
 
-    RoundedRectStyle maskStyle() {
+    RoundedRectStyle maskStyle(ColorRole surface) {
       RoundedRectStyle style;
-      style.fill = resolveColorSpec(colorSpecFromRole(kSurface));
+      style.fill = resolveColorSpec(colorSpecFromRole(surface));
       style.radius = Radii(Style::radiusMd);
       style.invertFill = true;
       return style;
@@ -31,7 +29,7 @@ namespace luciole {
     }
   } // namespace
 
-  PreviewFrame::PreviewFrame() {
+  PreviewFrame::PreviewFrame(ColorRole surface) : m_surface(surface) {
     m_shadow = static_cast<RectNode*>(addChild(std::make_unique<RectNode>()));
     m_shadow->setVisible(false);
     m_clip = addChild(std::make_unique<Node>());
@@ -100,7 +98,7 @@ namespace luciole {
       node->setVisible(m_cut);
     }
     if (m_cut) {
-      m_mask->setStyle(maskStyle());
+      m_mask->setStyle(maskStyle(m_surface));
       m_outline->setStyle(preview_picture::outline());
       place(*m_mask, m_visible);
       place(*m_outline, m_visible);

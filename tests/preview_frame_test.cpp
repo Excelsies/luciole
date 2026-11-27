@@ -65,12 +65,16 @@ namespace {
     std::println("wrote {}", path.string());
   }
 
-  std::unique_ptr<Flex> stage() {
+  constexpr auto kLow = ColorRole::SurfaceContainerLow;
+
+  Pixel surfaceOf(ColorRole role) { return bytesOf(resolveColorSpec(colorSpecFromRole(role))); }
+
+  std::unique_ptr<Flex> stage(ColorRole role) {
     auto root = std::make_unique<Flex>();
     root->setDirection(FlexDirection::Vertical);
     root->setAlign(FlexAlign::Start);
     root->setPadding(kMargin);
-    root->setFill(colorSpecFromRole(ColorRole::SurfaceContainerLow));
+    root->setFill(colorSpecFromRole(role));
     return root;
   }
 
@@ -81,9 +85,10 @@ namespace {
 
   // A PreviewFrame in a box of kBox by kBoxHeight showing a `width` by `height` picture at x, y within it.
   std::unique_ptr<Flex>
-  framed(::test::SceneCapture& capture, Picture& picture, float x, float y, float width, float height) {
-    auto root = stage();
-    auto frame = std::make_unique<luciole::PreviewFrame>();
+  framed(::test::SceneCapture& capture, Picture& picture, float x, float y, float width, float height,
+         ColorRole surface = kLow) {
+    auto root = stage(surface);
+    auto frame = std::make_unique<luciole::PreviewFrame>(surface);
     picture.frame = frame.get();
     const auto pixels = halves(32, 24);
     picture.texture = capture.textureManager().loadFromPixels(
@@ -157,35 +162,38 @@ namespace {
     capture.textureManager().unload(picture.texture);
   }
 
-  // A picture larger than the box is clipped to it and rounded at the box's corners, not its own.
+  // A picture larger than the box is clipped to it and rounded at the box's corners, not its own, over the surface
+  // role the frame is given.
   void roundsTheVisibleFrameOfAZoomedPicture(::test::SceneCapture& capture) {
-    const auto surface = bytesOf(palette.surfaceContainerLow);
-    for (const float panX : {0.0F, -90.0F}) {
-      Picture picture;
-      auto root = framed(capture, picture, panX, -30, 240, 180);
-      const auto pixels = draw(capture, *root);
-      keep(pixels, std::format("zoomed-pan-{}", static_cast<int>(panX)));
-      TEST_CHECK(picture.frame->cut());
-      TEST_CHECK(picture.frame->visible().width == kBox && picture.frame->visible().height == kBoxHeight);
-      // The box's corners are rounded: bare surface at the very corner pixel.
-      for (const auto& [x, y] :
-           {std::pair{kMargin, kMargin}, std::pair{kMargin + kBox - 1, kMargin},
-            std::pair{kMargin, kMargin + kBoxHeight - 1}, std::pair{kMargin + kBox - 1, kMargin + kBoxHeight - 1}}) {
-        TEST_CHECK(distance(pixels.at(x, y), surface) < 30);
+    for (const auto role : {kLow, ColorRole::SurfaceContainerHigh}) {
+      const auto surface = surfaceOf(role);
+      for (const float panX : {0.0F, -90.0F}) {
+        Picture picture;
+        auto root = framed(capture, picture, panX, -30, 240, 180, role);
+        const auto pixels = draw(capture, *root);
+        keep(pixels, std::format("zoomed-pan-{}-role-{}", static_cast<int>(panX), static_cast<int>(role)));
+        TEST_CHECK(picture.frame->cut());
+        TEST_CHECK(picture.frame->visible().width == kBox && picture.frame->visible().height == kBoxHeight);
+        // The box's corners are rounded: bare surface at the very corner pixel.
+        for (const auto& [x, y] :
+             {std::pair{kMargin, kMargin}, std::pair{kMargin + kBox - 1, kMargin},
+              std::pair{kMargin, kMargin + kBoxHeight - 1}, std::pair{kMargin + kBox - 1, kMargin + kBoxHeight - 1}}) {
+          TEST_CHECK(distance(pixels.at(x, y), surface) < 30);
+        }
+        // The outline runs along the box's edge, over the picture.
+        TEST_CHECK(onOutline(pixels.at(kMargin + 40, kMargin), {255, 0, 0, 255}));
+        TEST_CHECK(onOutline(pixels.at(kMargin, kMargin + 40), {255, 0, 0, 255}));
+        // Inside is the picture, outside the box (in the margin) is not.
+        const auto inside = pixels.at(kMargin + 60, kMargin + 45);
+        TEST_CHECK(distance(inside, surface) > 100);
+        for (const auto& [x, y] :
+             {std::pair{kMargin - 4, kMargin + 40}, std::pair{kMargin + kBox + 3, kMargin + 40},
+              std::pair{kMargin + 40, kMargin - 4}}) {
+          const auto outside = pixels.at(x, y);
+          TEST_CHECK(distance(outside, {255, 0, 0, 255}) > 150 && distance(outside, {0, 0, 255, 255}) > 150);
+        }
+        capture.textureManager().unload(picture.texture);
       }
-      // The outline runs along the box's edge, over the picture.
-      TEST_CHECK(onOutline(pixels.at(kMargin + 40, kMargin), {255, 0, 0, 255}));
-      TEST_CHECK(onOutline(pixels.at(kMargin, kMargin + 40), {255, 0, 0, 255}));
-      // Inside is the picture, outside the box (in the margin) is not.
-      const auto inside = pixels.at(kMargin + 60, kMargin + 45);
-      TEST_CHECK(distance(inside, surface) > 100);
-      for (const auto& [x, y] :
-           {std::pair{kMargin - 4, kMargin + 40}, std::pair{kMargin + kBox + 3, kMargin + 40},
-            std::pair{kMargin + 40, kMargin - 4}}) {
-        const auto outside = pixels.at(x, y);
-        TEST_CHECK(distance(outside, {255, 0, 0, 255}) > 150 && distance(outside, {0, 0, 255, 255}) > 150);
-      }
-      capture.textureManager().unload(picture.texture);
     }
   }
 } // namespace
