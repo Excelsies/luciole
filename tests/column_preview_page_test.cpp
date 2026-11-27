@@ -2,10 +2,12 @@
 #include "scene_capture.h"
 #include "test_check.h"
 #include "text_tile_view_rig.h"
+#include "ui/palette.h"
 #include "thumbnails/file_icon_cache.h"
 #include "thumbnails/preview_service.h"
 #include "ui/browser/file_icon.h"
 #include "ui/controls/button.h"
+#include "ui/controls/flex.h"
 #include "ui/controls/label.h"
 #include "ui/style.h"
 #include "ui/workbench/column_preview_page.h"
@@ -19,6 +21,7 @@
 #include <print>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <vector>
 
 // The page's own preview as a column slot shows it, laid out with the toolkit's text shaping and drawn offscreen:
@@ -117,6 +120,9 @@ namespace {
       }
     }
 
+    const Label* badge = nullptr; // the status badge's label, when its badge shows
+    const Flex* badgePill = nullptr;
+
     const Label* find(std::string_view text) const {
       for (const auto* label : labels) {
         if (label->text() == text) {
@@ -135,6 +141,10 @@ namespace {
       keepForViewing(shown.pixels, std::format("column-preview-page-{}-{}x.png", name, scale));
     }
     shown.collect(page);
+    if (page.statusBadge().pill->visible()) {
+      shown.badge = page.statusBadge().label;
+      shown.badgePill = page.statusBadge().pill;
+    }
     return shown;
   }
 
@@ -154,8 +164,11 @@ namespace {
       TEST_NEAR(label->fontSize(), slotTextSize(), 0.001F);
       TEST_CHECK(label->fontSize() < kListTextSize);
     }
-    // The facts the preview found, under a heading of the same size; facts meant for Properties stay out.
+    // The facts the preview found, under a heading of the same size; facts meant for Properties stay out. The file's
+    // place is the last, as in the side preview's Details.
     TEST_CHECK(shown.find("Details") != nullptr);
+    TEST_CHECK(shown.find("Location") != nullptr && shown.find("/nowhere/page.pdf") != nullptr);
+    TEST_CHECK(shown.badge == nullptr); // a file without a status shows no badge
     TEST_CHECK(shown.find("Pages") != nullptr && shown.find("1") != nullptr);
     TEST_CHECK(shown.find("Format") != nullptr && shown.find("PDF 1.4") != nullptr);
     TEST_CHECK(shown.find("Producer") == nullptr && shown.find("a writer") == nullptr);
@@ -185,17 +198,19 @@ namespace {
     auto snapshot = pdfSnapshot();
     snapshot.image = nullptr;
     snapshot.metadata.clear();
-    snapshot.message = "Preview truncated";
+    snapshot.message = "Truncated";
     snapshot.text = "first line\nsecond line";
     page.sync(snapshot, kWidth, kHeight);
     const auto shown = show(capture, page, 1, "words");
-    const auto* message = shown.find("Preview truncated");
+    const auto* message = shown.find("Truncated");
     const auto* text = shown.find("first line\nsecond line");
     TEST_CHECK(message != nullptr && text != nullptr);
     TEST_NEAR(message->fontSize(), 12, 0.001F);
     TEST_NEAR(text->fontSize(), 12, 0.001F);
-    // Without facts the heading goes too.
-    TEST_CHECK(shown.find("Details") == nullptr);
+    // The status is the badge in the Details heading, not a line of its own; the file's place keeps the card.
+    TEST_CHECK(shown.badge == message && shown.badgePill != nullptr);
+    TEST_CHECK(shown.find("Details") != nullptr && shown.find("Location") != nullptr);
+    TEST_CHECK(shown.find("Format") == nullptr);
 
     // A later size reaches every label.
     page.setTextSize(11);
@@ -206,7 +221,7 @@ namespace {
         TEST_NEAR(label->fontSize(), 11, 0.001F);
       }
     }
-    TEST_CHECK(again.find("Preview truncated") == nullptr);
+    TEST_CHECK(again.find("Truncated") == nullptr && again.badge == nullptr);
   }
 
   // More facts than rows: the first ones show and the view does not grow past its slot.
@@ -225,6 +240,40 @@ namespace {
     TEST_CHECK(shown.find(std::format("Fact {}", ColumnPreviewPage::kMaxFacts)) == nullptr);
     TEST_NEAR(page.height(), kHeight, 0.01F);
   }
+
+  // Each status is the badge in the Details heading, an error one in the error color; the heading keeps its room.
+  void statusBadges(::test::SceneCapture& capture, luciole::FileIconCache& icons) {
+    Palette colors = luciole::test::tiles::testPalette();
+    setPalette(colors);
+    ColumnPreviewPage page(icons);
+    page.setTextSize(slotTextSize());
+    for (const auto& [message, status, problem] :
+         {std::tuple<std::string_view, luciole::PreviewStatus, bool>{"Remote file", luciole::PreviewStatus::Unavailable, false},
+          {"No text preview", luciole::PreviewStatus::Unavailable, false},
+          {"Not UTF-8 text", luciole::PreviewStatus::Unavailable, false},
+          {"Low resolution", luciole::PreviewStatus::Ready, false},
+          {"File changed", luciole::PreviewStatus::Unavailable, false},
+          {"Empty", luciole::PreviewStatus::Ready, false},
+          {"Read error", luciole::PreviewStatus::Error, true}}) {
+      auto snapshot = pdfSnapshot();
+      snapshot.message = std::string(message);
+      snapshot.status = status;
+      page.sync(snapshot, kWidth, kHeight);
+      const auto shown = show(capture, page, 1, std::format("badge-{}", message));
+      TEST_CHECK(shown.badge != nullptr && shown.badge->text() == message);
+      const auto expected = problem ? colors.error : colors.onSurfaceVariant;
+      TEST_NEAR(shown.badge->color().r, expected.r, 0.001F);
+      TEST_NEAR(shown.badge->color().g, expected.g, 0.001F);
+      // The pill is in the Details heading's row, right of the heading, inside the page.
+      const auto* heading = shown.find("Details");
+      TEST_CHECK(heading != nullptr);
+      float hx = 0, hy = 0, bx = 0, by = 0;
+      Node::absolutePosition(heading, hx, hy);
+      Node::absolutePosition(shown.badgePill, bx, by);
+      TEST_CHECK(bx >= hx + heading->width() - 0.5F && std::abs(by - hy) < 14);
+      TEST_CHECK(bx + shown.badgePill->width() <= kWidth);
+    }
+  }
 } // namespace
 
 int main() {
@@ -240,6 +289,7 @@ int main() {
     textBelowTheList(*capture, icons, scale);
   }
   followsTheTextSize(*capture, icons);
+  statusBadges(*capture, icons);
   manyFacts(*capture, icons);
   std::println("column-preview-page: all checks passed");
   return 0;

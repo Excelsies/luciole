@@ -1,8 +1,10 @@
 #include "ui/workbench/column_preview_page.h"
 
+#include "browser/location_presentation.h"
 #include "fs/file_icon_source.h"
 #include "ui/browser/file_icon.h"
 #include "ui/builders.h"
+#include "ui/controls/card_style.h"
 #include "ui/controls/label.h"
 #include "ui/controls/scroll_view.h"
 #include "ui/palette.h"
@@ -18,7 +20,6 @@ namespace luciole {
     constexpr float kFallbackIconSize = 96; // the type icon in place of a picture that is loading or cannot render
     constexpr float kKeyShare = 0.36F;      // of the width, for a fact's name
     constexpr float kLongestKey = 88;
-    constexpr int kMessageLines = 3;
     constexpr int kTextLines = 400;
     constexpr int kKeyLines = 2;
     constexpr int kValueLines = 3;
@@ -46,19 +47,45 @@ namespace luciole {
     auto image = std::make_unique<FileIcon>(icons, kFallbackIconSize);
     m_image = image.get();
     content->addChild(ui::row({.justify = FlexJustify::Center, .paddingV = kColumnImageInset}, std::move(image)));
-    content->addChild(ui::label({.out = &m_message, .maxLines = kMessageLines, .configure = literal}));
-    content->addChild(ui::label({.out = &m_text, .maxLines = kTextLines, .configure = [](Label& label) {
-                                   label.setUseMarkup(false);
-                                   label.setFontFamily("monospace");
-                                 }}));
-    Flex* facts = nullptr;
+    // The text reads as a page, styled like the side preview's text page and Details card.
     content->addChild(
         ui::column(
-            {.out = &facts, .align = FlexAlign::Stretch, .gap = Style::spaceXs},
-            ui::label({.out = &m_details, .text = "Details", .fontWeight = FontWeight::SemiBold, .maxLines = 1})
+            {.out = &m_pageCard,
+             .align = FlexAlign::Stretch,
+             .configure =
+                 [](Flex& page) {
+                   page.setCardStyle();
+                   page.setFill(colorSpecFromRole(ColorRole::SurfaceContainerLow));
+                   page.setPadding(Style::spaceSm);
+                 }},
+            ui::label({.out = &m_text, .maxLines = kTextLines, .configure = [](Label& label) {
+                         label.setUseMarkup(false);
+                         label.setFontFamily("monospace");
+                       }})
         )
     );
-    m_facts.resize(kMaxFacts);
+    Flex* facts = nullptr;
+    auto detailsCard = luciole::card({}, &facts);
+    m_detailsCard = detailsCard.get();
+    // The heading keeps the page's one text size, so the side preview's larger title is not used; its badge is the
+    // side preview's own.
+    detailsCard->insertChildAt(
+        0, ui::row(
+               {.align = FlexAlign::Center, .gap = Style::spaceSm},
+               ui::label(
+                   {.out = &m_details,
+                    .text = "Details",
+                    .fontWeight = FontWeight::SemiBold,
+                    .color = colorSpecFromRole(ColorRole::OnSurface),
+                    .maxLines = 1,
+                    .flexGrow = 1}
+               ),
+               makeStatusBadge(m_badge)
+           )
+    );
+    facts->setGap(Style::spaceXs);
+    content->addChild(std::move(detailsCard));
+    m_facts.resize(kMaxFacts + 1);
     // Bounded by kMaxFacts.
     for (auto& fact : m_facts) {
       facts->addChild(
@@ -70,9 +97,8 @@ namespace luciole {
       );
       show(*fact.row, false);
     }
-    show(*m_message, false);
-    show(*m_text, false);
-    show(*facts, false);
+    show(*m_pageCard, false);
+    show(*m_detailsCard, false);
     addChild(std::move(body));
     applyTextSize();
   }
@@ -88,9 +114,10 @@ namespace luciole {
   }
 
   void ColumnPreviewPage::applyTextSize() {
-    for (auto* label : {m_message, m_text, m_details}) {
+    for (auto* label : {m_text, m_details}) {
       label->setFontSize(m_textSize);
     }
+    showStatusBadge(m_badge, m_badgeText, m_badgeProblem, m_textSize);
     for (const auto& fact : m_facts) {
       fact.key->setFontSize(m_textSize);
       fact.value->setFontSize(m_textSize);
@@ -105,9 +132,10 @@ namespace luciole {
       m_scroll->requestScrollToOffset(0);
     }
     const float budget = std::max(1.0F, width - (Style::spaceSm * 2) - Style::scrollbarWidth - Style::scrollbarGap);
-    for (auto* label : {m_message, m_text}) {
-      label->setMaxWidth(budget);
-    }
+    // The cards' own padding and outline come off the width of what they hold.
+    const float pageWidth = std::max(1.0F, budget - (2 * Style::spaceSm) - (2 * Style::borderWidth));
+    const float cardWidth = std::max(1.0F, budget - (2 * Style::spaceMd) - (2 * Style::borderWidth));
+    m_text->setMaxWidth(pageWidth);
     const auto* pixels = snapshot.image && snapshot.image->pixels ? &*snapshot.image->pixels : nullptr;
     if (pixels != nullptr) {
       const auto image = columnImageLayout(pixels->width, pixels->height, width, height, 1);
@@ -124,35 +152,40 @@ namespace luciole {
     }
     // A text speaks for itself; the icon would only push it down.
     show(*m_image->parent(), entry && (pixels != nullptr || snapshot.text.empty()));
-    m_message->setText(snapshot.message);
-    m_message->setColor(
-        colorSpecFromRole(snapshot.status == PreviewStatus::Error ? ColorRole::Error : ColorRole::OnSurfaceVariant)
-    );
-    show(*m_message, !snapshot.message.empty());
     m_text->setText(snapshot.text);
-    show(*m_text, !snapshot.text.empty());
-    const float keyWidth = std::min(kLongestKey, budget * kKeyShare);
+    show(*m_pageCard, !snapshot.text.empty());
+    m_badgeText = snapshot.message;
+    m_badgeProblem = snapshot.status == PreviewStatus::Error;
+    showStatusBadge(m_badge, m_badgeText, m_badgeProblem, m_textSize);
+    const float keyWidth = std::min(kLongestKey, cardWidth * kKeyShare);
     std::size_t count = 0;
     // Bounded by the snapshot's facts and kMaxFacts.
-    for (const auto& field : snapshot.metadata) {
-      if (count == m_facts.size()) {
-        break;
-      }
-      if (!field.preview) {
-        continue;
-      }
+    const auto put = [&](const MetadataField& field) {
       const auto& fact = m_facts[count++];
       fact.key->setText(field.label);
       fact.key->setMinWidth(keyWidth);
       fact.key->setMaxWidth(keyWidth);
       fact.value->setText(field.value);
-      fact.value->setMaxWidth(std::max(1.0F, budget - keyWidth - Style::spaceSm));
+      fact.value->setMaxLines(field.singleLine ? 1 : kValueLines);
+      fact.value->setEllipsize(field.singleLine ? TextEllipsize::Middle : TextEllipsize::End);
+      fact.value->setMaxWidth(std::max(1.0F, cardWidth - keyWidth - Style::spaceSm));
       show(*fact.row, true);
+    };
+    for (const auto& field : snapshot.metadata) {
+      if (count == kMaxFacts) {
+        break;
+      }
+      if (field.preview) {
+        put(field);
+      }
+    }
+    if (entry) {
+      put({.label = "Location", .value = locationEditText(entry->location()), .singleLine = true});
     }
     for (std::size_t i = count; i < m_facts.size(); ++i) {
       show(*m_facts[i].row, false);
     }
-    show(*m_details->parent(), count > 0);
+    show(*m_detailsCard, count > 0 || !snapshot.message.empty());
   }
 
   void ColumnPreviewPage::clear(Renderer& renderer) { m_image->releaseFile(renderer); }
