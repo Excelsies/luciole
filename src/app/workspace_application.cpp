@@ -63,6 +63,8 @@ namespace {
   // A tab being dragged fades in the strip while its copy follows the pointer.
   constexpr float kDraggedTabOpacity = 0.4F;
   constexpr float kTabGhostOpacity = 0.92F;
+  // Round close chip: tight around the glyph so the tab keeps no unused padding around it.
+  constexpr float kTabCloseSize = 16.0F;
   // Below this a dropped tab opens in a new window rather than moving within the strip.
   constexpr float kTabDetachY = kTabStripHeight + kNavigationToolbarHeight - Style::spaceXs;
   // Width of the zone at each end of the tab bar that scrolls it while a tab is dragged or the pointer rests there,
@@ -1886,7 +1888,10 @@ void WorkspaceApplication::rebuildStrip(Host& host, const luciole::TabWindow& wi
          .minWidth = 96.0F,
          .maxWidth = 200.0F,
          .paddingV = 0.0F,
-         .paddingH = Style::spaceXs,
+         // Equal margin above, below, and right of the round close chip, so it sits concentric with the tab corner.
+         .paddingRight =
+             Style::closeButtonsEnabled() ? (Style::controlHeightSm - kTabCloseSize) / 2.0F : Style::spaceMd,
+         .paddingLeft = Style::spaceMd,
          .gap = Style::spaceXs,
          .onClick = [this, windowId, id] { select(windowId, id); },
          .configure =
@@ -1904,14 +1909,15 @@ void WorkspaceApplication::rebuildStrip(Host& host, const luciole::TabWindow& wi
             {.out = &close,
              .glyph = "x",
              .glyphSize = Style::baseGlyphSize,
-             .controlHeight = 24.0F,
+             .controlHeight = kTabCloseSize,
              .variant = ButtonVariant::Ghost,
              .customPalette = closeTabPalette(foreground),
              .tooltip = "Close tab",
              .followsCloseButtons = true,
-             .minWidth = 24.0F,
-             .maxWidth = 24.0F,
+             .minWidth = kTabCloseSize,
+             .maxWidth = kTabCloseSize,
              .padding = 0.0F,
+             .radius = kTabCloseSize / 2.0F,
              .onClick = [this, windowId, id] { defer(windowId, id, WorkspaceCommand::Close); },
              .configure = [](Button& button) { button.setZIndex(2); }}
         )
