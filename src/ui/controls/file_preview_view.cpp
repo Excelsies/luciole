@@ -106,21 +106,11 @@ FilePreviewView::FilePreviewView(
            }},
       std::move(text)
   );
-  // Every file shows in the same fixed stage, so stepping through files never moves the name or Details. A status
-  // message about the preview sits in the stage as a pill under its content.
+  // Every file shows in the same fixed stage, so stepping through files never moves the name or Details.
   body->content()->addChild(
       ui::column(
-          {.out = &m_stage, .align = FlexAlign::Center, .justify = FlexJustify::Center, .gap = Style::spaceXs},
-          std::move(image), std::move(page),
-          ui::row(
-              {.out = &m_statusPill,
-               .align = FlexAlign::Center,
-               .paddingH = Style::spaceSm,
-               .fill = colorSpecFromRole(ColorRole::SurfaceContainerHigh),
-               .radius = kStatusPillHeight / 2.0F,
-               .height = kStatusPillHeight},
-              ui::label({.out = &m_status, .fontSize = Style::fontSizeCaption, .maxLines = 1, .configure = literal})
-          )
+          {.out = &m_stage, .align = FlexAlign::Center, .justify = FlexJustify::Center}, std::move(image),
+          std::move(page)
       )
   );
   body->content()->addChild(
@@ -129,7 +119,19 @@ FilePreviewView::FilePreviewView(
   auto details = std::make_unique<FileMetadataView>();
   m_metadata = details.get();
   Flex* card = nullptr;
-  auto detailsCard = luciole::card("Details", &card);
+  // A short preview status ("Truncated", "File changed") rides in the Details heading, taking no row of its own.
+  auto detailsCard = luciole::card(
+      "Details", &card,
+      ui::row(
+          {.out = &m_statusPill,
+           .align = FlexAlign::Center,
+           .paddingH = Style::spaceSm,
+           .fill = colorSpecFromRole(ColorRole::SurfaceContainerHigh),
+           .radius = kStatusPillHeight / 2.0F,
+           .height = kStatusPillHeight},
+          ui::label({.out = &m_status, .fontSize = Style::fontSizeCaption, .maxLines = 1, .configure = literal})
+      )
+  );
   m_details = detailsCard.get();
   card->addChild(std::move(details));
   body->content()->addChild(std::move(detailsCard));
@@ -193,17 +195,15 @@ void FilePreviewView::sync(
     button->setMaxWidth(std::max(40.0F, width - Style::spaceMd * 2));
   }
   m_name->setMaxWidth(budget);
-  m_status->setMaxWidth(std::max(40.0F, budget - Style::spaceSm * 2));
+  // Half the card: the "Details" heading keeps its room beside the badge.
+  m_status->setMaxWidth(std::max(40.0F, budget / 2.0F - Style::spaceSm * 2));
   const auto stage = luciole::previewStage(width, height, m_quick);
-  // The stage holds the image box plus room for its shadow; the text page fills all of it. A status pill takes a
-  // row from the content, never from what is below the stage.
-  const bool status = snapshot.entry.has_value() && !snapshot.message.empty();
-  const float statusRow = status ? kStatusPillHeight + Style::spaceXs : 0.0F;
+  // The stage holds the image box plus room for its shadow; the text page fills all of it.
   const float stageHeight = stage.height + luciole::kPreviewImageInset * 2;
   m_stage->setMinHeight(stageHeight);
   m_stage->setMaxHeight(stageHeight);
-  m_page->setMinHeight(stageHeight - statusRow);
-  m_page->setMaxHeight(stageHeight - statusRow);
+  m_page->setMinHeight(stageHeight);
+  m_page->setMaxHeight(stageHeight);
   m_text->setMaxWidth(std::max(40.0F, budget - Style::spaceSm * 2 - Style::scrollbarWidth - Style::scrollbarGap));
   const auto& entry = snapshot.entry;
   const std::string location = entry ? entry->location().uri() : "";
@@ -255,11 +255,11 @@ void FilePreviewView::sync(
   if (pixels) {
     // The image box is the whole stage; FileIcon contains the picture in it and rounds the fitted rect.
     m_image->setIconSize(stage.width);
-    m_image->setPreviewHeight(stage.height - statusRow);
+    m_image->setPreviewHeight(stage.height);
     m_image->setPreparedImage(snapshot.image);
   } else {
     // Shrinks with a short stage, like the image and text page, instead of overflowing it.
-    m_image->setIconSize(std::min(kFallbackIconSize, std::max(16.0F, stage.height - statusRow)));
+    m_image->setIconSize(std::min(kFallbackIconSize, std::max(16.0F, stage.height)));
     m_image->setPreviewHeight(0);
     m_image->setPreparedImage(nullptr);
   }
@@ -280,6 +280,7 @@ void FilePreviewView::sync(
   m_status->setColor(colorSpecFromRole(
       snapshot.status == luciole::PreviewStatus::Error ? ColorRole::Error : ColorRole::OnSurfaceVariant
   ));
+  const bool status = entry.has_value() && !snapshot.message.empty();
   m_statusPill->setVisible(status);
   m_statusPill->setParticipatesInLayout(status);
   m_text->setText(snapshot.text);

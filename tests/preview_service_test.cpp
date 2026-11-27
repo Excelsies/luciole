@@ -193,7 +193,7 @@ namespace {
     TEST_CHECK(
         preview.snapshot().status == luciole::PreviewStatus::Ready
         && preview.snapshot().text.size() < 9000
-        && preview.snapshot().message == "Preview truncated"
+        && preview.snapshot().message == "Truncated"
     );
     write(b, std::string("binary\0text", 11));
     preview.show(entry(b), 512);
@@ -203,7 +203,9 @@ namespace {
     stale.size = 3;
     preview.show(stale, 512);
     finish();
-    TEST_CHECK(preview.snapshot().status == luciole::PreviewStatus::Error);
+    TEST_CHECK(
+        preview.snapshot().status == luciole::PreviewStatus::Unavailable && preview.snapshot().message == "File changed"
+    );
     const auto link = root / "link.txt";
     std::filesystem::create_symlink(a, link);
     preview.show(entry(link), 512);
@@ -310,7 +312,7 @@ namespace {
         && preview.snapshot().image == fallback
         && preview.snapshot().image->pixels
         && preview.snapshot().image->pixels->width == 128
-        && preview.snapshot().message == "Larger preview unavailable."
+        && preview.snapshot().message == "Low resolution"
         && preview.snapshot().imageUpgradeFailed
     );
     preview.clear();
