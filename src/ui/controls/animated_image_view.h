@@ -14,12 +14,17 @@
 #include <utility>
 
 class ImageNode;
+namespace luciole {
+  class PreviewFrame;
+}
 class InputArea;
 struct LoadedImageFile;
 
-// Shows a picture in its box: an animated image it plays, or a still the owner decoded. At scale 1 the picture keeps
-// its aspect, fits the box and is never drawn larger than its own size in logical pixels; another scale draws it that
-// many times as large, centered while it fits. A picture larger than the box scrolls with the wheel and pans when
+// Shows a picture in its box: an animated image it plays, or a still the owner decoded. The picture is framed like
+// the side preview's: rounded, outlined and shadowed, with room for the shadow kept inside the view's own edge, and
+// the visible part stays rounded when the picture is cut. At scale 1 the picture keeps its aspect, fits the box and
+// is never drawn larger than its own size in logical pixels; another scale draws it that many times as large,
+// centered while it fits. A picture larger than the box scrolls with the wheel and pans when
 // dragged, and a new scale keeps the point at the box's center in place. Each frame replaces the texture in place on
 // a timer; a click pauses and resumes. Hidden by setShown(false) or by an invisible ancestor, or destroyed, it stops
 // its timer and decoding and frees its texture; shown again, it plays from the start.
@@ -89,6 +94,9 @@ private:
   void drag(float x, float y);
   bool onScreen() const;
   bool needsRestart() const;
+  // Room around the box for the picture's shadow, and the box the picture is seen in.
+  float inset() const noexcept;
+  std::pair<float, float> boxSize() const noexcept;
   // The picture's size in logical pixels at the current scale; the box until the source size is known.
   std::pair<float, float> shownSize() const;
 
@@ -99,6 +107,7 @@ private:
   std::shared_ptr<const luciole::AnimationFrame> m_current;
   std::shared_ptr<const LoadedImageFile> m_still;
   luciole::AnimationState m_reported = luciole::AnimationState::Opening;
+  luciole::PreviewFrame* m_frame = nullptr;
   ImageNode* m_image = nullptr;
   InputArea* m_area = nullptr;
   Renderer* m_renderer = nullptr;

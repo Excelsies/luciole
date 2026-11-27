@@ -8,6 +8,8 @@
 #include "scene_capture.h"
 #include "test_check.h"
 #include "ui/controls/animated_image_view.h"
+#include "ui/palette.h"
+#include "ui/style.h"
 
 #include <GLES2/gl2.h>
 #include <algorithm>
@@ -120,7 +122,9 @@ namespace {
     std::println("wrote {}", path.string());
   }
 
-  // A 160 by 90 image in a 200 by 200 box keeps its natural size, centered: columns 20 to 180 and rows 55 to 145.
+  // A 160 by 90 image in a 200 by 200 box keeps its natural size, centered: columns 20 to 180 and rows 55 to 145. Its
+  // corners are rounded, so the colors are read 8 pixels inside them; its shadow reaches 14 pixels past it, so the
+  // bare surface is read 18 pixels out, and its own width is the run of opaque pixels.
   void checkLetterbox(
       const test::GlPixels& pixels, float scale, const std::array<std::uint8_t, 4>& top,
       const std::array<std::uint8_t, 4>& bottom
@@ -128,13 +132,13 @@ namespace {
     const auto at = [&](float x, float y) {
       return pixels.at(static_cast<int>(x * scale), static_cast<int>(y * scale));
     };
-    TEST_CHECK(near(at(22, 57), top) && near(at(100, 95), top) && near(at(178, 57), top));
-    TEST_CHECK(near(at(22, 143), bottom) && near(at(100, 105), bottom) && near(at(178, 143), bottom));
-    TEST_CHECK(at(100, 52)[3] == 0 && at(100, 148)[3] == 0 && at(17, 100)[3] == 0 && at(183, 100)[3] == 0);
+    TEST_CHECK(near(at(28, 63), top) && near(at(100, 95), top) && near(at(172, 63), top));
+    TEST_CHECK(near(at(28, 137), bottom) && near(at(100, 105), bottom) && near(at(172, 137), bottom));
+    TEST_CHECK(at(100, 37)[3] == 0 && at(100, 163)[3] == 0 && at(2, 100)[3] == 0 && at(198, 100)[3] == 0);
     int drawn = 0;
     const int row = static_cast<int>(70 * scale);
     for (int x = 0; x < pixels.width; ++x) {
-      drawn += pixels.at(x, row)[3] > 0 ? 1 : 0;
+      drawn += pixels.at(x, row)[3] > 200 ? 1 : 0;
     }
     TEST_NEAR(drawn, static_cast<int>(160 * scale), 2);
   }
@@ -276,15 +280,16 @@ namespace {
 
   void largerBoxDecodesLargerFrames(std::unique_ptr<test::SceneCapture> capture) {
     Rig rig(std::move(capture));
+    // The picture's box is the view less the room for its shadow, 12 pixels on each side.
     rig.play("wide.gif", test::animatedGif(400, 200, kThree, 0));
-    rig.draw(100, 100, 1);
+    rig.draw(124, 124, 1);
     rig.waitUntil([&] { return rig.view->frameIndex() == 0U; });
     TEST_CHECK(rig.view->image().textureWidth() == 100 && rig.view->image().textureHeight() == 50);
-    rig.draw(300, 300, 1);
+    rig.draw(324, 324, 1);
     rig.waitUntil([&] { return rig.view->image().textureWidth() == 300; });
     TEST_CHECK(rig.view->image().textureHeight() == 150);
     // A slightly smaller box keeps the frames it has.
-    rig.draw(280, 280, 1);
+    rig.draw(304, 304, 1);
     for (int i = 0; i < 60; ++i) {
       runFor(rig.glib, 5);
     }
@@ -410,7 +415,8 @@ namespace {
     return still;
   }
 
-  // At scale 1 a still fits the box and is never enlarged; other scales draw it that many times as large, centered
+  // The box the picture is seen in is the view less 12 pixels of room for its shadow on each side: the 324 by 224
+  // view below has a 300 by 200 box. At scale 1 a still fits the box and is never enlarged; other scales draw it that many times as large, centered
   // while it fits and scrolled once it does not, with the wheel and a drag moving it and a new scale keeping the
   // point at the center.
   void scalesScrollsAndPans(std::unique_ptr<test::SceneCapture> capture) {
@@ -428,7 +434,7 @@ namespace {
          {Case{0.7F, 140, 84, 0, 0}, Case{1, 200, 120, 0, 0}, Case{1.5F, 300, 180, 0, 0},
           Case{3, 600, 360, 300, 160}}) {
       rig.view->setPreviewScale(item.scale);
-      const auto pixels = rig.draw(300, 200, 1);
+      const auto pixels = rig.draw(324, 224, 1);
       keep(pixels, std::format("picture-{}.png", static_cast<int>(std::lround(item.scale * 100))));
       TEST_NEAR(rig.view->image().width(), item.width, 0.01F);
       TEST_NEAR(rig.view->image().height(), item.height, 0.01F);
@@ -437,9 +443,9 @@ namespace {
       TEST_CHECK(rig.view->pictureShown());
       // The center of the box shows the picture's own center: where its halves meet.
       const int middle = static_cast<int>(item.width / 2);
-      TEST_CHECK(near(pixels.at(150 - std::min(middle, 150) + 3, 100), kRed));
-      TEST_CHECK(near(pixels.at(150 + std::min(middle, 149) - 3, 100), kBlue));
-      TEST_CHECK(!near(pixels.at(152, 100), pixels.at(147, 100))); // the halves meet at the center
+      TEST_CHECK(near(pixels.at(162 - std::min(middle, 150) + 3, 112), kRed));
+      TEST_CHECK(near(pixels.at(162 + std::min(middle, 149) - 3, 112), kBlue));
+      TEST_CHECK(!near(pixels.at(164, 112), pixels.at(159, 112))); // the halves meet at the center
     }
     // Scale 3: the picture was centered, so the scroll sits at the middle of its range.
     TEST_NEAR(rig.view->scrollX(), 150, 0.01F);
@@ -447,32 +453,32 @@ namespace {
     // A new scale keeps the picture's point at the box's center: 350 by 200 of 600 by 360 is 7/12 and 5/9 across.
     rig.view->scrollTo(200, 100);
     rig.view->setPreviewScale(2.5F);
-    (void)rig.draw(300, 200, 1);
+    (void)rig.draw(324, 224, 1);
     TEST_NEAR(rig.view->scrollX(), (500.0F * 7 / 12) - 150, 0.01F);
     TEST_NEAR(rig.view->scrollY(), (300.0F * 5 / 9) - 100, 0.01F);
     // The wheel scrolls down and back, held to the range.
     const float before = rig.view->scrollY();
-    TEST_CHECK(rig.dispatcher.pointerAxis(150, 100, WL_POINTER_AXIS_VERTICAL_SCROLL, 0, 15, 1, 120, 1, 1));
-    (void)rig.draw(300, 200, 1);
+    TEST_CHECK(rig.dispatcher.pointerAxis(162, 112, WL_POINTER_AXIS_VERTICAL_SCROLL, 0, 15, 1, 120, 1, 1));
+    (void)rig.draw(324, 224, 1);
     TEST_CHECK(rig.view->scrollY() > before && rig.view->scrollY() <= rig.view->maxScrollY());
     for (int i = 0; i < 20; ++i) {
-      (void)rig.dispatcher.pointerAxis(150, 100, WL_POINTER_AXIS_VERTICAL_SCROLL, 0, -15, -1, -120, -1, 1);
+      (void)rig.dispatcher.pointerAxis(162, 112, WL_POINTER_AXIS_VERTICAL_SCROLL, 0, -15, -1, -120, -1, 1);
     }
     TEST_NEAR(rig.view->scrollY(), 0, 0.01F);
     // A drag pans the other way from the pointer, and its release does not count as a click.
     const float x = rig.view->scrollX();
-    rig.dispatcher.pointerMotion(150, 100, 10);
-    rig.dispatcher.pointerButton(150, 100, BTN_LEFT, true, 11, 0, false);
-    rig.dispatcher.pointerMotion(110, 70, 12);
-    rig.dispatcher.pointerButton(110, 70, BTN_LEFT, false, 13, 0, false);
+    rig.dispatcher.pointerMotion(162, 112, 10);
+    rig.dispatcher.pointerButton(162, 112, BTN_LEFT, true, 11, 0, false);
+    rig.dispatcher.pointerMotion(122, 82, 12);
+    rig.dispatcher.pointerButton(122, 82, BTN_LEFT, false, 13, 0, false);
     TEST_NEAR(rig.view->scrollX(), x + 40, 0.01F);
     TEST_NEAR(rig.view->scrollY(), 30, 0.01F);
     TEST_CHECK(!rig.view->paused());
     // Back at scale 1 the picture fits and the wheel is left to the views around it.
     rig.view->setPreviewScale(1);
-    (void)rig.draw(300, 200, 1);
+    (void)rig.draw(324, 224, 1);
     TEST_CHECK(rig.view->scrollX() == 0 && rig.view->scrollY() == 0);
-    TEST_CHECK(!rig.dispatcher.pointerAxis(150, 100, WL_POINTER_AXIS_VERTICAL_SCROLL, 0, 15, 1, 120, 1, 1));
+    TEST_CHECK(!rig.dispatcher.pointerAxis(162, 112, WL_POINTER_AXIS_VERTICAL_SCROLL, 0, 15, 1, 120, 1, 1));
     // Scales out of range are clamped, and values that are not finite and positive are ignored.
     for (const float bad : {0.0F, -1.0F, std::numeric_limits<float>::quiet_NaN()}) {
       rig.view->setPreviewScale(bad);
@@ -483,11 +489,11 @@ namespace {
     // A larger picture fits the box at scale 1 and grows from there.
     rig.view->setStill(splitStill(1000, 500));
     rig.view->setPreviewScale(1);
-    (void)rig.draw(300, 200, 1);
+    (void)rig.draw(324, 224, 1);
     TEST_NEAR(rig.view->image().width(), 300, 0.01F);
     TEST_NEAR(rig.view->image().height(), 150, 0.01F);
     rig.view->setPreviewScale(1.5F);
-    (void)rig.draw(300, 200, 1);
+    (void)rig.draw(324, 224, 1);
     TEST_NEAR(rig.view->maxScrollX(), 150, 0.01F);
     TEST_NEAR(rig.view->maxScrollY(), 25, 0.01F);
     // Hidden, the still's texture goes; shown again, it comes back.
@@ -496,8 +502,62 @@ namespace {
     rig.view->setShown(false);
     TEST_CHECK(!rig.view->pictureShown() && !textureAlive(texture));
     rig.view->setShown(true);
-    (void)rig.draw(300, 200, 1);
+    (void)rig.draw(324, 224, 1);
     TEST_CHECK(rig.view->pictureShown());
+  }
+  // The picture is framed as the side preview frames one: rounded corners, an outline, a soft shadow that shows only
+  // while shadows are enabled, and room inside the view for it so the view's edge never cuts it.
+  void framesThePicture(std::unique_ptr<test::SceneCapture> capture) {
+    Rig rig(std::move(capture));
+    Palette colors{};
+    colors.outlineVariant = Color{0.55F, 0.55F, 0.6F, 1.0F};
+    colors.surfaceContainerLow = Color{0.1F, 0.12F, 0.16F, 1.0F};
+    setPalette(colors);
+    const auto surface = resolveColorSpec(colorSpecFromRole(ColorRole::SurfaceContainerLow));
+    // A 100 by 60 picture is shown at its own size, centered in 200 by 200: columns 50 to 150, rows 70 to 130.
+    rig.view->setStill(splitStill(100, 60));
+    for (const bool shadows : {true, false}) {
+      Style::setPopupShadowsEnabled(shadows);
+      const auto pixels = rig.draw(200, 200, 1);
+      keep(pixels, std::format("framed-small-shadow-{}.png", shadows));
+      TEST_CHECK(pixels.at(50, 70)[3] < 128 && pixels.at(149, 129)[3] < 128); // rounded corners
+      TEST_CHECK(near(pixels.at(56, 100), kRed) && near(pixels.at(144, 100), kBlue));
+      const auto edge = pixels.at(75, 70); // the outline over the picture's top row
+      TEST_CHECK(!near(edge, kRed) && edge[3] > 200);
+      const auto below = pixels.at(100, 134)[3];
+      TEST_CHECK(shadows ? below > 0 : below == 0);
+    }
+    Style::setPopupShadowsEnabled(true);
+    // A picture that fills the box keeps its shadow whole: it reaches into the room reserved inside the view.
+    rig.view->setStill(splitStill(1000, 500));
+    const auto wide = rig.draw(200, 200, 1);
+    keep(wide, "framed-wide.png");
+    TEST_NEAR(rig.view->image().width(), 176, 0.01F);
+    TEST_CHECK(wide.at(6, 100)[3] > 0 && wide.at(6, 100)[3] < wide.at(11, 100)[3] + 1);
+    TEST_CHECK(wide.at(0, 100)[3] <= wide.at(6, 100)[3]);
+    rig.view->setStill(splitStill(500, 1000));
+    const auto tall = rig.draw(200, 200, 1);
+    keep(tall, "framed-tall.png");
+    TEST_NEAR(rig.view->image().height(), 176, 0.01F);
+    TEST_CHECK(tall.at(100, 6)[3] > 0 && tall.at(100, 0)[3] <= tall.at(100, 6)[3]);
+    rig.view->setStill(splitStill(1000, 500));
+    // Zoomed past the box, the picture is clipped at the box and its visible corners are rounded, never the picture's.
+    for (const float scrolled : {0.0F, 1.0F}) {
+      rig.view->setPreviewScale(3);
+      (void)rig.draw(200, 200, 1);
+      rig.view->scrollTo(scrolled * rig.view->maxScrollX(), scrolled * rig.view->maxScrollY());
+      const auto cut = rig.draw(200, 200, 1);
+      keep(cut, std::format("framed-zoomed-{}.png", static_cast<int>(scrolled)));
+      const auto bare = [&](int x, int y) {
+        return std::abs(cut.at(x, y)[0] - static_cast<int>(std::lround(surface.r * 255))) <= 3
+            && cut.at(x, y)[3] == 255;
+      };
+      TEST_CHECK(bare(12, 12) && bare(187, 12) && bare(12, 187) && bare(187, 187));
+      TEST_CHECK(cut.at(100, 100)[3] == 255 && !bare(100, 100));
+      // Nothing of the picture shows in the room around the box.
+      TEST_CHECK(cut.at(6, 100)[3] < 128 && cut.at(100, 6)[3] < 128);
+      rig.view->setPreviewScale(1);
+    }
   }
 } // namespace
 
@@ -514,6 +574,7 @@ int main() {
       ownerMayDestroyTheViewFromItsCallback,
       playingCostsLittleAndHiddenNothing,
       scalesScrollsAndPans,
+      framesThePicture,
   };
   for (const auto suite : suites) {
     std::string reason;

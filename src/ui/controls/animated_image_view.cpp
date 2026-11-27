@@ -6,6 +6,8 @@
 #include "render/core/texture_manager.h"
 #include "render/scene/image_node.h"
 #include "render/scene/input_area.h"
+#include "ui/browser/preview_layout.h"
+#include "ui/controls/preview_frame.h"
 #include "ui/style.h"
 
 #include <algorithm>
@@ -36,9 +38,8 @@ namespace {
 AnimatedImageView::AnimatedImageView(std::function<Clock::time_point()> clock, luciole::AnimationLimits limits)
     : m_clock(std::move(clock)), m_limits(limits) {
   setClipChildren(true);
-  m_image = static_cast<ImageNode*>(addChild(std::make_unique<ImageNode>()));
-  m_image->setFitMode(ImageFitMode::Contain);
-  m_image->setHitTestVisible(false);
+  m_frame = static_cast<luciole::PreviewFrame*>(addChild(std::make_unique<luciole::PreviewFrame>()));
+  m_image = &m_frame->image();
   m_area = static_cast<InputArea*>(addChild(std::make_unique<InputArea>()));
   m_area->setAcceptedButtons(InputArea::buttonMask({BTN_LEFT}));
   m_area->setOnPress([this](const InputArea::PointerData& pointer) {
@@ -108,9 +109,10 @@ void AnimatedImageView::setPreviewScale(float scale) {
   const auto [shownWidth, shownHeight] = shownSize();
   if (shownWidth > 0 && shownHeight > 0 && !m_anchor) {
     // Where the center falls on the picture, as the scroll offsets place it now.
-    const float left = shownWidth <= width() ? (width() - shownWidth) / 2 : -m_scrollX;
-    const float top = shownHeight <= height() ? (height() - shownHeight) / 2 : -m_scrollY;
-    m_anchor = std::pair((width() / 2 - left) / shownWidth, (height() / 2 - top) / shownHeight);
+    const auto [boxWidth, boxHeight] = boxSize();
+    const float left = shownWidth <= boxWidth ? (boxWidth - shownWidth) / 2 : -m_scrollX;
+    const float top = shownHeight <= boxHeight ? (boxHeight - shownHeight) / 2 : -m_scrollY;
+    m_anchor = std::pair((boxWidth / 2 - left) / shownWidth, (boxHeight / 2 - top) / shownHeight);
   }
   m_scale = clamped;
   markLayoutDirty();
@@ -126,9 +128,9 @@ void AnimatedImageView::scrollTo(float x, float y) {
   }
 }
 
-float AnimatedImageView::maxScrollX() const noexcept { return std::max(0.0F, shownSize().first - width()); }
+float AnimatedImageView::maxScrollX() const noexcept { return std::max(0.0F, shownSize().first - boxSize().first); }
 
-float AnimatedImageView::maxScrollY() const noexcept { return std::max(0.0F, shownSize().second - height()); }
+float AnimatedImageView::maxScrollY() const noexcept { return std::max(0.0F, shownSize().second - boxSize().second); }
 
 luciole::AnimationState AnimatedImageView::state() const noexcept {
   return m_frames != nullptr ? m_frames->state() : AnimationState::Opening;
@@ -138,9 +140,16 @@ std::optional<std::size_t> AnimatedImageView::frameIndex() const noexcept {
   return m_current != nullptr ? std::optional(m_current->index) : std::nullopt;
 }
 
+float AnimatedImageView::inset() const noexcept {
+  return std::min(luciole::kPreviewImageInset, std::max(0.0F, std::min(width(), height())) / 4);
+}
+
+std::pair<float, float> AnimatedImageView::boxSize() const noexcept {
+  return {std::max(0.0F, width() - (2 * inset())), std::max(0.0F, height() - (2 * inset()))};
+}
+
 std::pair<float, float> AnimatedImageView::shownSize() const {
-  const float boxWidth = std::max(0.0F, width());
-  const float boxHeight = std::max(0.0F, height());
+  const auto [boxWidth, boxHeight] = boxSize();
   if (m_sourceWidth <= 0 || m_sourceHeight <= 0 || boxWidth <= 0 || boxHeight <= 0) {
     return {boxWidth, boxHeight};
   }
@@ -154,19 +163,19 @@ std::pair<float, float> AnimatedImageView::shownSize() const {
 void AnimatedImageView::doLayout(Renderer& renderer) {
   m_renderer = &renderer;
   const auto [shownWidth, shownHeight] = shownSize();
+  const auto [boxWidth, boxHeight] = boxSize();
   if (const auto anchor = std::exchange(m_anchor, std::nullopt)) {
-    m_scrollX = (anchor->first * shownWidth) - (width() / 2);
-    m_scrollY = (anchor->second * shownHeight) - (height() / 2);
+    m_scrollX = (anchor->first * shownWidth) - (boxWidth / 2);
+    m_scrollY = (anchor->second * shownHeight) - (boxHeight / 2);
   }
   m_scrollX = std::clamp(m_scrollX, 0.0F, maxScrollX());
   m_scrollY = std::clamp(m_scrollY, 0.0F, maxScrollY());
-  m_image->arrange(
-      renderer,
-      {.x = shownWidth <= width() ? (width() - shownWidth) / 2 : -m_scrollX,
-       .y = shownHeight <= height() ? (height() - shownHeight) / 2 : -m_scrollY,
-       .width = shownWidth,
-       .height = shownHeight}
+  // The frame's box leaves room around it for the picture's shadow; the picture lies in it, clipped at its edge.
+  m_frame->setPicture(
+      shownWidth <= boxWidth ? (boxWidth - shownWidth) / 2 : -m_scrollX,
+      shownHeight <= boxHeight ? (boxHeight - shownHeight) / 2 : -m_scrollY, shownWidth, shownHeight
   );
+  m_frame->arrange(renderer, {.x = inset(), .y = inset(), .width = boxWidth, .height = boxHeight});
   m_area->arrange(renderer, {.x = 0, .y = 0, .width = width(), .height = height()});
   if (m_still != nullptr) {
     if (onScreen()) {
@@ -175,8 +184,8 @@ void AnimatedImageView::doLayout(Renderer& renderer) {
     return;
   }
   const float scale = renderer.renderScale() * m_scale;
-  m_boxWidth = std::clamp(static_cast<int>(std::lround(width() * scale)), 0, luciole::kMaxImageSide);
-  m_boxHeight = std::clamp(static_cast<int>(std::lround(height() * scale)), 0, luciole::kMaxImageSide);
+  m_boxWidth = std::clamp(static_cast<int>(std::lround(boxWidth * scale)), 0, luciole::kMaxImageSide);
+  m_boxHeight = std::clamp(static_cast<int>(std::lround(boxHeight * scale)), 0, luciole::kMaxImageSide);
   if (!m_file || m_boxWidth == 0 || m_boxHeight == 0 || !onScreen()) {
     return;
   }

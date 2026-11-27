@@ -296,7 +296,9 @@ namespace {
     // A vector picture has no pixels of its own: it is drawn fitted to the slot and its facts name no pixel size.
     const auto* vector = rig.content<AnimatedImageView>();
     TEST_CHECK(!rig.slot().factsLabel().text().contains(" × "));
-    TEST_NEAR(vector->image().width(), std::min(vector->width(), vector->height() * 1.5F), 2.0F);
+    // The box is the slot less 12 pixels of room for the picture's shadow on each side.
+    constexpr float kRoom = 24;
+    TEST_NEAR(vector->image().width(), std::min(vector->width() - kRoom, (vector->height() - kRoom) * 1.5F), 2.0F);
     // A picture no decoder reads goes back to the page's own preview.
     times["broken.jpg"] = rig.visit("broken.jpg");
     TEST_CHECK(rig.preview->kind() == ColumnPreviewKind::Picture && rig.preview->overlaid());
@@ -666,8 +668,10 @@ namespace {
         // 96 by 64 fits the slot, so its own size times the step.
         TEST_NEAR(picture->image().width(), 96 * factor, 0.01F);
         TEST_NEAR(picture->image().height(), 64 * factor, 0.01F);
-        TEST_NEAR(picture->maxScrollX(), std::max(0.0F, (96 * factor) - picture->width()), 0.01F);
-        TEST_NEAR(picture->maxScrollY(), std::max(0.0F, (64 * factor) - picture->height()), 0.01F);
+        // The picture is seen in the slot less 12 pixels of room for its shadow on each side.
+        constexpr float kRoom = 24;
+        TEST_NEAR(picture->maxScrollX(), std::max(0.0F, (96 * factor) - (picture->width() - kRoom)), 0.01F);
+        TEST_NEAR(picture->maxScrollY(), std::max(0.0F, (64 * factor) - (picture->height() - kRoom)), 0.01F);
         std::println(
             "{} at {}%: {:.0f} by {:.0f} in {:.0f} by {:.0f}", name, percent, picture->image().width(),
             picture->image().height(), picture->width(), picture->height()
