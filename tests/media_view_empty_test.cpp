@@ -1,18 +1,56 @@
 #include "media_clips.h"
 #include "media_view_rig.h"
+#include "png_writer.h"
+#include "render/animation/animation_manager.h"
 #include "scene_capture.h"
 #include "test_check.h"
+#include "text_tile_view_rig.h"
+#include "ui/controls/flex.h"
 #include "ui/controls/media_view.h"
+#include "ui/palette.h"
 #include "ui/style.h"
 
+#include <cstdlib>
+#include <format>
 #include <memory>
 #include <print>
 #include <string>
+#include <string_view>
 
 // A media view with no picture yet draws no frame around an empty box: the stage looks the same with the soft shadow
 // on as with it off.
 namespace {
   using namespace test::media;
+
+  // The stage on the preview's surface, 460 by 420, written for looking at into the folder named by
+  // LUCIOLE_CAPTURE_DIR as <name>-<LUCIOLE_SHOT_SET, "after" by default>.png.
+  void keepStage(::test::SceneCapture& capture, const fs::path& source, std::string_view name) {
+    const char* dir = std::getenv("LUCIOLE_CAPTURE_DIR");
+    if (dir == nullptr || dir[0] == '\0') {
+      return;
+    }
+    const char* set = std::getenv("LUCIOLE_SHOT_SET");
+    AnimationManager animations;
+    Flex root;
+    root.setDirection(FlexDirection::Vertical);
+    root.setAlign(FlexAlign::Stretch);
+    root.setFill(colorSpecFromRole(ColorRole::SurfaceContainerLow));
+    root.setAnimationManager(&animations);
+    auto media = std::make_unique<MediaView>(ColorRole::SurfaceContainerLow, luciole::AudioOutput::Silent);
+    media->setFlexGrow(1);
+    auto* view = static_cast<MediaView*>(root.addChild(std::move(media)));
+    view->setSource(source.string());
+    Pump pump;
+    ::test::GlPixels pixels;
+    for (int i = 0; i < 40; ++i) {
+      pump.once();
+      animations.tick(16);
+      pixels = capture.capture(root, 460, 420, 1);
+    }
+    const auto path = fs::path(dir) / std::format("{}-{}.png", name, set != nullptr && set[0] != '\0' ? set : "after");
+    TEST_CHECK(::test::writePng(pixels, path));
+    std::println("wrote {}", path.string());
+  }
 
   // The stage's pixels, drawn with the popup shadows on and off, differ nowhere.
   void shadowsChangeNothing(ViewRig& rig) {
@@ -68,10 +106,13 @@ int main() {
     std::println("skipped: {}", reason);
     return ::test::kSkipExitCode;
   }
+  setPalette(luciole::test::tiles::testPalette());
   const auto tone = scratch.path("tone.wav");
   writeTone(tone, 2);
   const auto clip = scratch.path("bars.avi");
   TEST_CHECK(writeClip(clip, {.width = 160, .height = 120, .seconds = 8}));
+  keepStage(*capture, tone, "workbench-audio-no-cover");
+  keepStage(*capture, clip, "workbench-video-no-poster");
   soundWithoutACover(*capture, tone);
   videoWithoutAPoster(*capture, clip, false);
   videoWithoutAPoster(*capture, clip, true);

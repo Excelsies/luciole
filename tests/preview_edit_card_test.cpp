@@ -5,6 +5,7 @@
 #include "ui/controls/text_tile_view.h"
 #include "ui/style.h"
 
+#include <cstdlib>
 #include <format>
 #include <print>
 #include <string>
@@ -40,6 +41,24 @@ namespace {
     return {.card = card, .room = card->parent()->height() - (2 * Style::spaceSm)};
   }
 
+  // The window with the note read, then edited, written for looking at into the folder named by LUCIOLE_CAPTURE_DIR
+  // as <name>-<LUCIOLE_SHOT_SET, "after" by default>.png.
+  void keepNote(Rig& rig) {
+    const char* dir = std::getenv("LUCIOLE_CAPTURE_DIR");
+    if (dir == nullptr || dir[0] == '\0') {
+      return;
+    }
+    const char* set = std::getenv("LUCIOLE_SHOT_SET");
+    const std::string suffix = std::format("-{}.png", set != nullptr && set[0] != '\0' ? set : "after");
+    rig.visit("note.txt");
+    luciole::test::edit::keepForViewing(rig.pixels, "workbench-note-reading" + suffix);
+    rig.click(rig.slot().enableEditingButton());
+    rig.frames([&] { return rig.codeEditor() != nullptr && rig.codeEditor()->settled(); });
+    luciole::test::edit::keepForViewing(rig.pixels, "workbench-note-editing" + suffix);
+    rig.click(rig.slot().stopEditingButton());
+    rig.frames([&] { return rig.offered(); });
+  }
+
   void shortTextHugsItsLines(Rig& rig) {
     rig.visit("note.txt");
     const auto [card, room] = cardOf(rig.tiles());
@@ -50,6 +69,21 @@ namespace {
     TEST_CHECK(card->height() < 8 * line);
     TEST_CHECK(card->height() < room * 0.5F);
     TEST_CHECK(card->width() > 0 && card->height() > 0);
+  }
+
+  // A larger text size makes the card taller once the text is laid out again, and back to 100% shrinks it.
+  void theCardFollowsTheTextSize(Rig& rig) {
+    rig.visit("note.txt");
+    const float before = cardOf(rig.tiles()).card->height();
+    rig.preview->setPreviewSize(200);
+    rig.frames([&] {
+      return rig.tiles() != nullptr && rig.tiles()->settled() && cardOf(rig.tiles()).card->height() > before * 1.5F;
+    });
+    rig.preview->setPreviewSize(100);
+    rig.frames([&] {
+      return rig.tiles() != nullptr && rig.tiles()->settled() && cardOf(rig.tiles()).card->height() < before * 1.1F;
+    });
+    TEST_NEAR(cardOf(rig.tiles()).card->height(), before, 0.5F);
   }
 
   void emptyFileShowsItsWordsOnAtLeastOneLine(Rig& rig) {
@@ -89,9 +123,12 @@ int main() {
     std::println("skipped: {}", reason);
     return ::test::kSkipExitCode;
   }
+  setPalette(luciole::test::tiles::testPalette());
   const Folder folder;
   Rig rig(folder.files, *capture, folder.files.folder);
+  keepNote(rig);
   shortTextHugsItsLines(rig);
+  theCardFollowsTheTextSize(rig);
   emptyFileShowsItsWordsOnAtLeastOneLine(rig);
   longTextFillsThePane(rig);
   editingFillsThePaneAndStoppingHugsAgain(rig);
