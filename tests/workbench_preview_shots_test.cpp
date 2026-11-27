@@ -221,6 +221,7 @@ int main(int argc, char** argv) {
     addPicture(rig, "portrait.png", 240, 400, {60, 160, 220, 255});
     addPicture(rig, "tiny.png", 24, 16, {120, 200, 90, 255});
     addFile(rig, "empty.txt", "");
+    addFile(rig, "short-note.txt", "Hello from the short note.\nSecond line here.\nThird line is the last one.\n");
     std::string many;
     for (int line = 0; line < 2600; ++line) {
       many += std::format("line {}\n", line);
@@ -250,11 +251,15 @@ int main(int argc, char** argv) {
       std::string_view file;
       std::string_view shot;
       std::string_view status;
+      bool side = true;
     } cases[] = {
         {"landscape.png", "picture-landscape", ""},
         {"portrait.png", "picture-portrait", ""},
         {"tiny.png", "picture-tiny", ""},
         {"style.css", "text", ""},
+        {"short-note.txt", "short-note", ""},
+        {"blob.bin", "hex", "Not UTF-8 text", false},
+        {"data.csv", "table", "", false},
         {"empty.txt", "empty-file", "Empty"},
         {"many-lines.txt", "truncated-text", "Truncated"},
         {"pack.zip", "archive-listing", ""},
@@ -263,7 +268,9 @@ int main(int argc, char** argv) {
     };
     for (const auto& item : cases) {
       workbench(rig, item.file, item.shot);
-      sidePreview(*capture, icons, rig, item.file, item.status, item.shot);
+      if (item.side) {
+        sidePreview(*capture, icons, rig, item.file, item.status, item.shot);
+      }
     }
     pageShot(*capture, icons, rig);
   }

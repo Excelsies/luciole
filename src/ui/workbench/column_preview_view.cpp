@@ -5,6 +5,7 @@
 #include "ui/controls/button.h"
 #include "ui/controls/code_editor_view.h"
 #include "ui/controls/label.h"
+#include "ui/controls/table_view.h"
 #include "ui/controls/text_tile_view.h"
 #include "ui/palette.h"
 #include "ui/style.h"
@@ -63,7 +64,8 @@ namespace luciole {
 
     bool readsAsPage(const Node& content) {
       return dynamic_cast<const TextTileView*>(&content) != nullptr
-          || dynamic_cast<const CodeEditorView*>(&content) != nullptr;
+          || dynamic_cast<const CodeEditorView*>(&content) != nullptr
+          || dynamic_cast<const TableView*>(&content) != nullptr;
     }
 
     // The side preview's text page: its card, inset from the pane. The card holds the vertical inset; the content

@@ -12,9 +12,10 @@ namespace luciole {
   inline constexpr ColorRole kColumnPreviewSurface = ColorRole::SurfaceContainerLow;
 
   // The side preview's text page: a card of Style::radiusXl corners and an OutlineVariant outline on
-  // kColumnPreviewSurface, inset by Style::spaceSm above and below and by `paddingH` at the sides, clipping what it
-  // holds. Every card of the Workbench preview is made here, so it changes with the side preview's in one place.
-  // The card fills the room it is given until setContentHeight() makes it hug its content.
+  // kColumnPreviewSurface, clipping what it holds. It is inset by Style::spaceSm above and below, and by `paddingH`
+  // and the outline's width at the sides, so what it holds never covers the outline. Every card of the Workbench
+  // preview is made here, so it follows the side preview's in one place. The card fills the room it is given until
+  // setContentHeight() makes it hug its content.
   class PageCard final : public Flex {
   public:
     explicit PageCard(float paddingH);

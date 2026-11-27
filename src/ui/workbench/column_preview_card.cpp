@@ -7,13 +7,13 @@
 #include <utility>
 
 namespace luciole {
-  PageCard::PageCard(float paddingH) : m_paddingH(paddingH) {
+  PageCard::PageCard(float paddingH) : m_paddingH(paddingH + Style::borderWidth) {
     setDirection(FlexDirection::Vertical);
     setAlign(FlexAlign::Stretch);
     setClipChildren(true);
     setCardStyle();
     setFill(colorSpecFromRole(kColumnPreviewSurface));
-    setPadding(Style::spaceSm, paddingH);
+    setPadding(Style::spaceSm, m_paddingH);
   }
 
   void PageCard::setContentHeight(std::function<float(Renderer&, float)> height) {

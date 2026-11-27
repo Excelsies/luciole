@@ -9,8 +9,10 @@
 #include "ui/controls/file_preview_view.h"
 #include "ui/controls/flex.h"
 #include "ui/controls/label.h"
+#include "ui/controls/scroll_view.h"
 #include "ui/palette.h"
 #include "ui/style.h"
+#include "ui/workbench/column_preview_card.h"
 #include "ui/workbench/column_preview_page.h"
 #include "ui/workbench/list_rows.h"
 #include "ui/workbench/status_badge.h"
@@ -279,41 +281,43 @@ namespace {
     }
   }
 
-  // The badge mirrors the one the side preview builds inline: this fails when that one is restyled.
-  void badgeMatchesTheSidePreview(::test::SceneCapture& capture, luciole::FileIconCache& icons) {
-    setPalette(luciole::test::tiles::testPalette());
+  // The badge in the state `message` and `problem` say, at `scale`, drawn pixel for pixel as the side preview draws it.
+  void badgeMatches(
+      ::test::SceneCapture& capture, luciole::FileIconCache& icons, std::string_view message, bool problem, float scale
+  ) {
     FilePreviewView side(icons, false, [] {}, [] {}, [] {});
     auto snapshot = pdfSnapshot();
     snapshot.image = nullptr;
-    snapshot.message = "Truncated";
+    snapshot.message = std::string(message);
+    snapshot.status = problem ? luciole::PreviewStatus::Error : luciole::PreviewStatus::Ready;
     side.sync(snapshot, 300, 600);
-    const auto sidePixels = capture.capture(side, 300, 600, 1);
+    const auto sidePixels = capture.capture(side, 300, 600, scale);
     Shown sideShown;
     sideShown.collect(side);
-    const auto* text = sideShown.find("Truncated");
+    const auto* text = sideShown.find(message);
     TEST_CHECK(text != nullptr && text->parent() != nullptr);
     const Node* pill = text->parent();
     float x = 0;
     float y = 0;
     Node::absolutePosition(pill, x, y);
-    const int left = static_cast<int>(std::lround(x));
-    const int top = static_cast<int>(std::lround(y));
-    const int width = static_cast<int>(std::lround(pill->width()));
-    const int height = static_cast<int>(std::lround(pill->height()));
+    const int left = static_cast<int>(std::lround(x * scale));
+    const int top = static_cast<int>(std::lround(y * scale));
+    const int width = static_cast<int>(std::lround(pill->width() * scale));
+    const int height = static_cast<int>(std::lround(pill->height() * scale));
     TEST_NEAR(pill->height(), luciole::kStatusBadgeHeight, 0.01F);
     TEST_NEAR(text->fontSize(), Style::fontSizeCaption, 0.001F);
 
     auto root = std::make_unique<Flex>();
     root->setDirection(FlexDirection::Vertical);
     root->setAlign(FlexAlign::Start);
-    root->setPadding(static_cast<float>(top), 0, 0, static_cast<float>(left));
+    root->setPadding(y, 0, 0, x);
     root->setFill(colorSpecFromRole(ColorRole::SurfaceContainerLow));
     luciole::StatusBadge badge;
     root->addChild(luciole::makeStatusBadge(badge));
-    luciole::showStatusBadge(badge, "Truncated", false, Style::fontSizeCaption);
-    const auto mine = capture.capture(*root, 300, 600, 1);
-    TEST_NEAR(badge.pill->width(), static_cast<float>(width), 1.0F);
-    TEST_NEAR(badge.pill->height(), static_cast<float>(height), 0.5F);
+    luciole::showStatusBadge(badge, message, problem, Style::fontSizeCaption);
+    const auto mine = capture.capture(*root, 300, 600, scale);
+    TEST_NEAR(badge.pill->width(), pill->width(), 1.0F);
+    TEST_NEAR(badge.pill->height(), pill->height(), 0.5F);
     int differing = 0;
     for (int row = top; row < top + height; ++row) {
       for (int column = left; column < left + width; ++column) {
@@ -322,10 +326,81 @@ namespace {
         differing += std::abs(a[0] - b[0]) + std::abs(a[1] - b[1]) + std::abs(a[2] - b[2]) > 6 ? 1 : 0;
       }
     }
-    std::println("badge pixels differing from the side preview's: {}", differing);
+    std::println("badge '{}' at {}x: {} pixels differ from the side preview's", message, scale, differing);
     TEST_CHECK(differing == 0);
-    keepForViewing(sidePixels, "badge-side-preview.png");
-    keepForViewing(mine, "badge-workbench.png");
+    const auto name = std::format("badge-{}-{}x", problem ? "problem" : "neutral", scale);
+    keepForViewing(sidePixels, name + "-side-preview.png");
+    keepForViewing(mine, name + "-workbench.png");
+  }
+
+  // The badge mirrors the one the side preview builds inline: this fails when that one is restyled, in either state
+  // and at either scale.
+  void badgeMatchesTheSidePreview(::test::SceneCapture& capture, luciole::FileIconCache& icons) {
+    setPalette(luciole::test::tiles::testPalette());
+    for (const float scale : {1.0F, 1.5F}) {
+      badgeMatches(capture, icons, "Truncated", false, scale);
+      badgeMatches(capture, icons, "Read error", true, scale);
+    }
+  }
+
+  // The card around the text of the side preview's text page: the nearest clipping box above the text that is no
+  // scrolling view.
+  const Node* sidePageCard(const FilePreviewView& side, const Label& text) {
+    for (const Node* node = text.parent(); node != nullptr && node != &side; node = node->parent()) {
+      if (node->clipChildren() && dynamic_cast<const Flex*>(node) != nullptr
+          && dynamic_cast<const ScrollView*>(node) == nullptr) {
+        return node;
+      }
+    }
+    return nullptr;
+  }
+
+  // The Workbench's page card is drawn as the side preview's text page is: corners, outline and fill, pixel for pixel.
+  void pageCardMatchesTheSidePreview(::test::SceneCapture& capture, luciole::FileIconCache& icons) {
+    setPalette(luciole::test::tiles::testPalette());
+    for (const float scale : {1.0F, 1.5F}) {
+      FilePreviewView side(icons, false, [] {}, [] {}, [] {});
+      auto snapshot = pdfSnapshot();
+      snapshot.image = nullptr;
+      snapshot.text = " "; // a page with nothing drawn on it
+      side.sync(snapshot, 300, 600);
+      const auto sidePixels = capture.capture(side, 300, 600, scale);
+      Shown shown;
+      shown.collect(side);
+      const auto* text = shown.find(" ");
+      TEST_CHECK(text != nullptr);
+      const Node* page = sidePageCard(side, *text);
+      TEST_CHECK(page != nullptr);
+      float x = 0;
+      float y = 0;
+      Node::absolutePosition(page, x, y);
+      auto root = std::make_unique<Flex>();
+      root->setDirection(FlexDirection::Vertical);
+      root->setAlign(FlexAlign::Start);
+      root->setPadding(y, 0, 0, x);
+      root->setFill(colorSpecFromRole(ColorRole::Surface)); // the side preview's pane
+      auto card = luciole::makePageCard(0.0F);
+      card->setMinWidth(page->width());
+      card->setMaxWidth(page->width());
+      card->setMinHeight(page->height());
+      card->setMaxHeight(page->height());
+      root->addChild(std::move(card));
+      const auto mine = capture.capture(*root, 300, 600, scale);
+      int differing = 0;
+      const int left = static_cast<int>(std::lround(x * scale));
+      const int top = static_cast<int>(std::lround(y * scale));
+      for (int row = top; row < top + static_cast<int>(std::lround(page->height() * scale)); ++row) {
+        for (int column = left; column < left + static_cast<int>(std::lround(page->width() * scale)); ++column) {
+          const auto a = sidePixels.at(column, row);
+          const auto b = mine.at(column, row);
+          differing += std::abs(a[0] - b[0]) + std::abs(a[1] - b[1]) + std::abs(a[2] - b[2]) > 6 ? 1 : 0;
+        }
+      }
+      std::println("page card at {}x: {} pixels differ from the side preview's", scale, differing);
+      keepForViewing(sidePixels, std::format("card-{}x-side-preview.png", scale));
+      keepForViewing(mine, std::format("card-{}x-workbench.png", scale));
+      TEST_CHECK(differing == 0);
+    }
   }
 } // namespace
 
@@ -344,6 +419,7 @@ int main() {
   followsTheTextSize(*capture, icons);
   statusBadges(*capture, icons);
   badgeMatchesTheSidePreview(*capture, icons);
+  pageCardMatchesTheSidePreview(*capture, icons);
   manyFacts(*capture, icons);
   std::println("column-preview-page: all checks passed");
   return 0;

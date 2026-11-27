@@ -281,32 +281,28 @@ namespace {
     badge("notes.md", ""); // the next file drops it
   }
 
-  // Text sits on a page card like the side preview's: inset from the pane by 8 pixels, with an outline and rounded
-  // corners; a table does not.
-  void textSitsOnAPageCard(Rig& rig) {
+  // Text, a table and an archive's listing sit on a page card like the side preview's: inset from the pane by 8
+  // pixels, with an outline and rounded corners. A refused archive's sentence is plain centered text.
+  void pagesSitOnACard(Rig& rig) {
     const auto surface = bytesOf(palette.surfaceContainerLow);
     const auto outline = bytesOf(palette.outlineVariant);
-    rig.show("style.css");
-    const auto pixels = rig.settle(kWidth, kHeight, 1);
-    const Node* card = rig.view->content()->parent();
-    TEST_CHECK(card != nullptr && card->parent() != nullptr);
-    float x = 0;
-    float y = 0;
-    Node::absolutePosition(card, x, y);
-    TEST_NEAR(x, Style::spaceSm, 0.01F);
-    TEST_NEAR(card->width(), kWidth - (2 * Style::spaceSm), 0.01F);
-    const int top = static_cast<int>(y);
-    // The outline runs along the card's top edge; the corner pixel is the pane, rounded away.
-    const auto edge = pixels.at(kWidth / 2, top);
-    TEST_CHECK(distance(edge, outline) < distance(edge, surface));
-    TEST_CHECK(distance(pixels.at(static_cast<int>(x), top), surface) < 24);
-    TEST_CHECK(distance(pixels.at(static_cast<int>(x) + 40, top - 4), surface) == 0);
-    rig.show("data.csv");
-    (void)rig.settle(kWidth, kHeight, 1);
-    float tableX = 0;
-    float tableY = 0;
-    Node::absolutePosition(rig.view->content(), tableX, tableY);
-    TEST_NEAR(tableX, 0, 0.01F);
+    for (const auto* file : {"style.css", "data.csv", "pack.zip"}) {
+      rig.show(file);
+      const auto pixels = rig.settle(kWidth, kHeight, 1);
+      const Node* card = rig.view->content()->parent();
+      TEST_CHECK(card != nullptr && card->parent() != nullptr);
+      float x = 0;
+      float y = 0;
+      Node::absolutePosition(card, x, y);
+      TEST_NEAR(x, Style::spaceSm, 0.01F);
+      TEST_NEAR(card->width(), kWidth - (2 * Style::spaceSm), 0.01F);
+      const int top = static_cast<int>(y);
+      // The outline runs along the card's top edge; the corner pixel is the pane, rounded away.
+      const auto edge = pixels.at(kWidth / 2, top);
+      TEST_CHECK(distance(edge, outline) < distance(edge, surface));
+      TEST_CHECK(distance(pixels.at(static_cast<int>(x), top), surface) < 24);
+      TEST_CHECK(distance(pixels.at(static_cast<int>(x) + 40, top - 4), surface) == 0);
+    }
   }
 
   // At the default preview size the preview's text stays below the list's at narrow, middle and wide columns, and in
@@ -399,7 +395,7 @@ int main(int argc, char** argv) {
     archiveListsItsMembers(rig);
     failuresAreSentences(rig);
     badgesNameTheState(rig);
-    textSitsOnAPageCard(rig);
+    pagesSitOnACard(rig);
   }
   std::println("column-preview-pixels: all checks passed");
   return 0;
