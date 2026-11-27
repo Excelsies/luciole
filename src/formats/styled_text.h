@@ -81,6 +81,7 @@ namespace luciole::formats {
     std::uint8_t quoteDepth = 0;
     std::string marker;                // a list item's marker, on the item's first block: "•" or "3."
     bool framed = false;               // a code block drawn on its own background
+    bool monospace = false;            // plain text meant to be read: wraps like prose, drawn in the code family
     std::size_t columns = 0;           // Table
     std::vector<CellAlign> alignments; // Table: one per column
   };

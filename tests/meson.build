@@ -475,6 +475,7 @@ test_table = [
   {'name': 'text-line-strip-pixels', 'deps': [imaging_dep, dependency('zlib')], 'sources': files('png_writer.cpp'),
     'timeout': 120},
   {'name': 'text-tile-renderer', 'cpu_budget': true, 'deps': [imaging_dep], 'timeout': 120},
+  {'name': 'text-tile-plain-font', 'deps': [imaging_dep], 'timeout': 60},
   {'name': 'text-document-loader', 'deps': [imaging_dep], 'timeout': 60, 'env': gio_env},
   {'name': 'text-tile-service', 'deps': [imaging_dep], 'timeout': 120},
   {'name': 'text-tile-view', 'deps': [ui_dep, dependency('zlib')], 'sources': files('scene_capture.cpp', 'png_writer.cpp'),

@@ -110,6 +110,9 @@ namespace luciole {
       if (block.kind == BlockKind::Code) {
         return {.font = codeFont.get(), .em = codeEm, .wrapWidth = 0, .align = PANGO_ALIGN_LEFT};
       }
+      if (block.monospace) {
+        return {.font = codeFont.get(), .em = codeEm, .wrapWidth = wrap, .align = PANGO_ALIGN_LEFT};
+      }
       if (block.heading >= 1 && block.heading <= headingFonts.size()) {
         const auto level = static_cast<std::size_t>(block.heading - 1);
         return {.font = headingFonts[level].get(), .em = proseEm * text_tiles::kHeadingScale[level], .wrapWidth = wrap};

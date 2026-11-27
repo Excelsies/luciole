@@ -363,6 +363,7 @@ namespace luciole::formats {
     } else {
       StyledBlock block;
       block.kind = kind.prose ? BlockKind::Prose : BlockKind::Code;
+      block.monospace = kind.prose;
       styled::addCodeLines(builder, block, clean, kind, syntax);
       if (!block.lines.empty()) {
         document.blocks.push_back(std::move(block));

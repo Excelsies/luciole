@@ -197,6 +197,30 @@ namespace {
     TEST_CHECK(styledText("a\nb", fileKind("a.c")).blocks[0].kind == BlockKind::Code);
   }
 
+  // Plain text written to be read is drawn in the code family: its block says so. Nothing else is: not Markdown's
+  // paragraphs, headings, list text or quotes, and not the code blocks.
+  void testOnlyPlainTextIsMonospace() {
+    for (const auto* name : {"notes.txt", "a.text", "README", "LICENSE", "CHANGELOG"}) {
+      const auto document = styledText("one two\nthree\n", fileKind(name));
+      TEST_CHECK(document.blocks.size() == 1 && document.blocks[0].kind == BlockKind::Prose);
+      TEST_CHECK(document.blocks[0].monospace);
+    }
+    for (const auto* name : {"build.log", "a.c", "a.json", "a.rst"}) {
+      for (const auto& block : styledText("a\nb", fileKind(name)).blocks) {
+        TEST_CHECK(!block.monospace);
+      }
+    }
+    const auto notes = styledText(
+        "# Title\n\nA paragraph.\n\n- item\n- item\n\n> quoted\n\n```sh\nls\n```\n\n| a | b |\n|---|---|\n| 1 | 2 "
+        "|\n\n---\n",
+        fileKind("notes.md")
+    );
+    TEST_CHECK(notes.blocks.size() >= 6);
+    for (const auto& block : notes.blocks) {
+      TEST_CHECK(!block.monospace);
+    }
+  }
+
   std::string allText(const StyledBlock& block) {
     std::string out;
     for (const auto& line : block.lines) {
@@ -551,6 +575,7 @@ int main() {
   testLargeMinifiedJson();
   testPlainAndUnknownKinds();
   testProseAndCodeBlocks();
+  testOnlyPlainTextIsMonospace();
   testLongProseLinesAreSegmented();
   testLongMarkdownLinesAreSegmented();
   testSegmentsKeepClustersTogether();

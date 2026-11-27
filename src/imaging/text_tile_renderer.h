@@ -75,11 +75,11 @@ namespace luciole {
   };
 
   // One document at one width, scale and theme. Code lines keep their spacing in the monospace family and widen the
-  // layout up to kMaxTextTileWidth; prose wraps at the width in the interface family. Table columns narrow to fit the
-  // width, and a table that needs more at its narrowest widens the layout as code does. List item text sits past the
-  // widest marker of its nesting level. The layout's height stops at kMaxTextTiles tiles and at kMaxTextPixels, and
-  // truncated() says so, as it does for a table cut at kMaxTextTileWidth. Swatches sit in a gap the layout keeps
-  // before each color code; document columns do not count it.
+  // layout up to kMaxTextTileWidth; prose wraps at the width in the interface family, and plain text meant to be read
+  // in the code family. Table columns narrow to fit the width, and a table that needs more at its narrowest widens the
+  // layout as code does. List item text sits past the widest marker of its nesting level. The layout's height stops at
+  // kMaxTextTiles tiles and at kMaxTextPixels, and truncated() says so, as it does for a table cut at
+  // kMaxTextTileWidth. Swatches sit in a gap the layout keeps before each color code; document columns do not count it.
   //
   // A layout owns its own Pango font map and context. Use it from one thread at a time: two layouts may render on two
   // threads at once, but one layout must not be shared between threads without the caller serializing every call.
