@@ -67,8 +67,10 @@ namespace luciole {
   protected:
     ColumnPreviewLoad(ColumnPreviewView& view, std::function<void()> frameNeeded);
 
-    // Fails with `message` shown in place of the content.
-    void fail(std::string message);
+    // Fails with `message` shown in place of the content and `badge`, a short label, in the view's header.
+    void fail(std::string message, std::string_view badge);
+    // The short label in the view's header; empty clears it. The load's end clears it too.
+    void badge(std::string_view label);
     void needFrame() const;
     // Expires when the load goes: callbacks from workers check it before touching the load.
     std::weak_ptr<int> lifetime() const { return m_lifetime; }

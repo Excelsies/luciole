@@ -3,6 +3,7 @@
 #include "test_check.h"
 #include "ui/controls/button.h"
 #include "ui/controls/label.h"
+#include "ui/palette.h"
 #include "ui/style.h"
 #include "ui/workbench/column_preview_view.h"
 #include "ui/workbench/list_rows.h"
@@ -255,9 +256,49 @@ namespace {
     TEST_CHECK(full.height >= header.height + 199);
     TEST_CHECK(full.width >= 120);
   }
+
+  // A status shows as the side preview's badge beside the kind, in the view's one text size; a problem is red; the
+  // next file and clear() drop it, and a view without a status shows none.
+  void statusBadge() {
+    Palette colors{};
+    colors.error = Color{1.0F, 0.2F, 0.2F, 1.0F};
+    colors.onSurfaceVariant = Color{0.6F, 0.6F, 0.7F, 1.0F};
+    setPalette(colors);
+    Rig rig;
+    rig.view->setFile("notes.txt", "Plain text document");
+    rig.layout();
+    TEST_CHECK(!rig.view->statusBadge().pill->visible() && rig.view->statusBadge().label->text().empty());
+    rig.view->setStatus("Truncated", false);
+    rig.layout();
+    const auto& badge = rig.view->statusBadge();
+    TEST_CHECK(badge.pill->visible() && badge.label->text() == "Truncated");
+    TEST_CHECK(badge.label->fontSize() == rig.view->textSize());
+    TEST_CHECK(badge.pill->height() >= rig.view->textSize() && badge.pill->height() <= rig.view->textSize() * 2);
+    // Beside the kind, on its line, at its right end.
+    float kindX = 0, kindY = 0, badgeX = 0, badgeY = 0;
+    Node::absolutePosition(&rig.view->kindLabel(), kindX, kindY);
+    Node::absolutePosition(badge.pill, badgeX, badgeY);
+    TEST_CHECK(badgeX > kindX && badgeY < kindY + rig.view->kindLabel().height());
+    TEST_CHECK(badgeX + badge.pill->width() <= rig.width + 0.01F);
+    const auto quiet = badge.label->color();
+    rig.view->setStatus("Read error", true);
+    TEST_CHECK(badge.label->color() != quiet);
+    rig.view->setFile("other.txt", "Plain text document");
+    TEST_CHECK(!badge.pill->visible());
+    rig.view->setStatus("Empty", false);
+    rig.view->clear();
+    TEST_CHECK(!badge.pill->visible());
+    // A long kind gives way to the badge: both stay in view.
+    rig.view->setFile("a.txt", std::string(200, 'k'));
+    rig.view->setStatus("Not UTF-8 text", false);
+    rig.layout();
+    Node::absolutePosition(badge.pill, badgeX, badgeY);
+    TEST_CHECK(badgeX + badge.pill->width() <= rig.width + 0.01F);
+  }
 } // namespace
 
 int main() {
+  statusBadge();
   showsTheFile();
   contentNamesItsKind();
   oneTextSize();

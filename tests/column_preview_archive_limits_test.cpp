@@ -2,6 +2,7 @@
 #include "temp_folder.h"
 #include "test_check.h"
 #include "ui/workbench/column_preview_loads.h"
+#include "ui/controls/label.h"
 #include "ui/workbench/column_preview_view.h"
 
 #include <archive.h>
@@ -84,6 +85,7 @@ namespace {
     Loaded loaded(writeTar(folder, "small.tar.gz", 3));
     TEST_CHECK(loaded.settle() == ColumnPreviewStatus::Shown);
     TEST_CHECK(loaded.load->facts().entries == 3);
+    TEST_CHECK(!loaded.view.statusBadge().pill->visible());
   }
 
   // The preview lists at most 50000 entries.
@@ -92,6 +94,11 @@ namespace {
     TEST_CHECK(loaded.settle() == ColumnPreviewStatus::Failed);
     TEST_CHECK(loaded.view.message() == "This archive is too large to list.");
     TEST_CHECK(!loaded.load->facts().entries);
+    // The badge says it in a word; the sentence stays where the content would be.
+    TEST_CHECK(loaded.view.statusBadge().pill->visible() && loaded.view.statusBadge().label->text() == "Too large");
+    // Gone with the load.
+    loaded.load.reset();
+    TEST_CHECK(!loaded.view.statusBadge().pill->visible());
   }
 
   // The preview bounds an ar archive's long-name table by its 16 MiB metadata limit; the file is sparse.
@@ -112,6 +119,7 @@ namespace {
     Loaded loaded(path);
     TEST_CHECK(loaded.settle() == ColumnPreviewStatus::Failed);
     TEST_CHECK(loaded.view.message() == "This archive is too large to list.");
+    TEST_CHECK(loaded.view.statusBadge().label->text() == "Too large");
   }
 } // namespace
 

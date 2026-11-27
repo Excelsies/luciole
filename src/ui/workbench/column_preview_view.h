@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ui/controls/flex.h"
+#include "ui/workbench/status_badge.h"
 
 #include <functional>
 #include <memory>
@@ -45,6 +46,9 @@ namespace luciole {
     void setKind(std::string_view kind);
     // Empty hides the line.
     void setFacts(std::string_view facts);
+    // A short status badge at the right end of the kind's line, in the words of the side preview's badge; a problem
+    // shows in the error color. Empty hides it; the next file and clear() drop it.
+    void setStatus(std::string_view label, bool problem);
     // Ignores sizes that are not positive and finite.
     void setTextSize(float size);
     // Shows `content` below the facts and frees what was there; null leaves the area empty.
@@ -79,6 +83,7 @@ namespace luciole {
     const Label& kindLabel() const noexcept { return *m_kind; }
     const Label& factsLabel() const noexcept { return *m_facts; }
     const Label& messageLabel() const noexcept { return *m_messageLabel; }
+    const StatusBadge& statusBadge() const noexcept { return m_badge; }
     Button& openButton() const noexcept { return *m_open; }
     Button& smallerButton() const noexcept { return *m_smaller; }
     Button& sizeButton() const noexcept { return *m_size; }
@@ -115,6 +120,9 @@ namespace luciole {
     Button* m_larger = nullptr;
     Label* m_kind = nullptr;
     Label* m_facts = nullptr;
+    StatusBadge m_badge;
+    std::string m_badgeText;
+    bool m_badgeProblem = false;
     Flex* m_editRow = nullptr;
     Button* m_enable = nullptr;
     Button* m_save = nullptr;

@@ -335,11 +335,44 @@ namespace {
       std::println("{}: {}", name, text);
       TEST_CHECK(text.starts_with("This ") && text.ends_with('.'));
       TEST_CHECK(rig.view->content() == nullptr); // the sentence stands in place of the content
+      // The header's badge names it in the words of the side preview's badge.
+      TEST_CHECK(rig.view->statusBadge().pill->visible());
+      std::println("{}: badge {}", name, rig.view->statusBadge().label->text());
+      TEST_CHECK(rig.view->statusBadge().label->text() == "Read error");
       return text;
     };
     TEST_CHECK(failure("claims.stl") == "This file is damaged or is not an STL model.");
     TEST_CHECK(failure("broken.xlsx") == "This spreadsheet could not be read.");
     TEST_CHECK(failure("broken.zip").starts_with("This archive"));
+  }
+
+  // The badge beside the kind: "Empty" for an empty file, "Truncated" for text cut at its line limit, "Not UTF-8
+  // text" for hex, none for text shown whole; the sentence the content says stays.
+  void badgesNameTheState(Rig& rig) {
+    std::string many;
+    for (int line = 0; line < 2600; ++line) {
+      many += std::format("line {}\n", line);
+    }
+    addFile(rig, "empty.txt", "");
+    addFile(rig, "many-lines.txt", many);
+    const auto badge = [&](std::string_view name, std::string_view expected) {
+      rig.show(name);
+      const auto pixels = rig.settle(kWidth, kHeight, 1);
+      keep(pixels, std::format("badge-{}", name), 1);
+      TEST_CHECK(rig.view->statusBadge().pill->visible() == !expected.empty());
+      TEST_CHECK(rig.view->statusBadge().label->text() == expected);
+      if (!expected.empty()) { // the badge sits at the right end of the kind's line, inside the view
+        float x = 0;
+        float y = 0;
+        Node::absolutePosition(rig.view->statusBadge().pill, x, y);
+        TEST_CHECK(x > rig.view->kindLabel().x() && x + rig.view->statusBadge().pill->width() <= kWidth + 0.01F);
+      }
+    };
+    badge("notes.md", "");
+    badge("empty.txt", "Empty");
+    badge("many-lines.txt", "Truncated");
+    badge("blob.bin", "Not UTF-8 text");
+    badge("notes.md", ""); // the next file drops it
   }
 
   // At the default preview size the preview's text stays below the list's at narrow, middle and wide columns, and in
@@ -431,6 +464,7 @@ int main(int argc, char** argv) {
     hiddenCostsNothing(rig);
     archiveListsItsMembers(rig);
     failuresAreSentences(rig);
+    badgesNameTheState(rig);
   }
   std::println("column-preview-pixels: all checks passed");
   return 0;

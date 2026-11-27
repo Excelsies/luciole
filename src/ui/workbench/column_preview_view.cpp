@@ -83,8 +83,17 @@ namespace luciole {
              .paddingV = Style::spaceXs,
              .paddingH = Style::spaceSm},
             makeNameRow(),
-            ui::label(
-                {.out = &m_kind, .color = quiet, .maxLines = 1, .ellipsize = TextEllipsize::End, .configure = literal}
+            ui::row(
+                {.align = FlexAlign::Center, .gap = Style::spaceSm},
+                ui::label(
+                    {.out = &m_kind,
+                     .color = quiet,
+                     .maxLines = 1,
+                     .ellipsize = TextEllipsize::End,
+                     .flexGrow = 1,
+                     .configure = literal}
+                ),
+                makeStatusBadge(m_badge)
             ),
             ui::label(
                 {.out = &m_facts, .color = quiet, .maxLines = 1, .ellipsize = TextEllipsize::End, .configure = literal}
@@ -217,9 +226,16 @@ namespace luciole {
     }
     m_name->setText(name);
     m_kind->setText(kind);
+    setStatus({}, false);
   }
 
   void ColumnPreviewView::setKind(std::string_view kind) { m_kind->setText(kind); }
+
+  void ColumnPreviewView::setStatus(std::string_view label, bool problem) {
+    m_badgeText = label;
+    m_badgeProblem = problem;
+    showStatusBadge(m_badge, label, problem, m_textSize);
+  }
 
   void ColumnPreviewView::setFacts(std::string_view facts) {
     show(*m_facts, !facts.empty());
@@ -238,6 +254,7 @@ namespace luciole {
     for (auto* label : {m_name, m_kind, m_facts, m_messageLabel, m_unsaved, m_notice}) {
       label->setFontSize(m_textSize);
     }
+    showStatusBadge(m_badge, m_badgeText, m_badgeProblem, m_textSize);
     const float height = std::round(m_textSize * kButtonHeightPerText);
     for (auto* button : {m_open, m_smaller, m_size, m_larger, m_enable, m_save, m_stop}) {
       button->setFontSize(m_textSize);

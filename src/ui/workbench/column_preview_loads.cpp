@@ -25,6 +25,7 @@ namespace luciole {
     constexpr std::string_view kArchiveUnreadable = "This archive could not be read.";
     constexpr std::string_view kModelUnreadable = "This model could not be read.";
     constexpr std::string_view kModelKind = "3D model";
+    constexpr std::string_view kReadError = "Read error";
 
     // Bounds of a preview, which loads on its own as the cursor rests on a file; extraction has none.
     constexpr ArchiveLimits kArchiveLimits{
@@ -89,6 +90,7 @@ namespace luciole {
         const bool refused =
             document.state == TextDocumentState::PrivateKey || document.state == TextDocumentState::Container;
         const bool words = text || document.state == TextDocumentState::NotText || refused;
+        badge(textBadge(document));
         m_status = words ? ColumnPreviewStatus::Shown : ColumnPreviewStatus::Failed;
         m_showsText = text || refused;
         needFrame();
@@ -186,13 +188,15 @@ namespace luciole {
           } else {
             m_facts.cells.reset();
           }
+          badge(tableBadge(**result));
           view.setTable(std::move(*result));
           m_status = ColumnPreviewStatus::Shown;
           m_showsTable = true;
         } else if (hasTable()) {
           table().setMessage(result ? std::string("This table could not be read.") : result.error());
+          badge(kReadError);
         } else {
-          fail(result ? std::string("This table could not be read.") : result.error());
+          fail(result ? std::string("This table could not be read.") : result.error(), kReadError);
         }
         needFrame();
       }
@@ -213,7 +217,7 @@ namespace luciole {
         });
         if (!m_service->inspect(request.entry.location())) {
           m_service.reset();
-          fail(std::string(kArchiveUnreadable));
+          fail(std::string(kArchiveUnreadable), kReadError);
         }
       }
       ~ArchiveLoad() override { m_token.cancel(); }
@@ -234,7 +238,7 @@ namespace luciole {
       void read() {
         if (m_service->phase() == ArchivePhase::WaitingPassword) {
           m_service.reset();
-          fail("This archive asks for a password, so its entries are not listed.");
+          fail("This archive asks for a password, so its entries are not listed.", "Password needed");
           return;
         }
         if (m_service->busy()) {
@@ -244,7 +248,7 @@ namespace luciole {
         const auto error = m_service->error();
         m_service.reset();
         if (!catalog) {
-          fail(error ? archiveRefusal(*error) : std::string(kArchiveUnreadable));
+          fail(error ? archiveRefusal(*error) : std::string(kArchiveUnreadable), error ? archiveBadge(*error) : kReadError);
           return;
         }
         runJob<ArchiveListing>(
@@ -254,9 +258,10 @@ namespace luciole {
                 return;
               }
               if (!listing) {
-                fail(std::string(kArchiveUnreadable));
+                fail(std::string(kArchiveUnreadable), kReadError);
               } else {
                 m_facts.entries = listing->members;
+                badge(listing->members == 0 ? "Empty" : "");
                 table().setTable(std::make_shared<const formats::TableGrid>(std::move(listing->grid)));
                 m_status = ColumnPreviewStatus::Shown;
               }
@@ -302,9 +307,9 @@ namespace luciole {
     private:
       void arrived(JobResult<MeshPreview> mesh) {
         if (!mesh) {
-          fail(std::string(kModelUnreadable));
+          fail(std::string(kModelUnreadable), kReadError);
         } else if (!*mesh) {
-          fail(mesh->error());
+          fail(mesh->error(), kReadError);
         } else {
           auto made = std::make_unique<MeshView>();
           m_mesh = made.get();
@@ -396,12 +401,18 @@ namespace luciole {
   ColumnPreviewLoad::ColumnPreviewLoad(ColumnPreviewView& view, std::function<void()> frameNeeded)
       : m_view(view), m_frameNeeded(std::move(frameNeeded)) {}
 
-  ColumnPreviewLoad::~ColumnPreviewLoad() { m_view.setContent(nullptr); }
+  ColumnPreviewLoad::~ColumnPreviewLoad() {
+    m_view.setContent(nullptr);
+    m_view.setStatus({}, false);
+  }
 
-  void ColumnPreviewLoad::fail(std::string message) {
+  void ColumnPreviewLoad::fail(std::string message, std::string_view label) {
     m_view.showMessage(std::move(message));
+    badge(label);
     m_status = ColumnPreviewStatus::Failed;
   }
+
+  void ColumnPreviewLoad::badge(std::string_view label) { m_view.setStatus(label, isProblemBadge(label)); }
 
   void ColumnPreviewLoad::needFrame() const {
     if (m_frameNeeded) {
