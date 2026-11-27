@@ -36,7 +36,7 @@ From top to bottom:
 - **Location bar**: breadcrumbs for the current folder. Click it or press `Ctrl+L` to type an address.
 - **Sidebar**: Places, pinned folders and Drives.
 - **File area**: the folder contents in grid, list, column or Workbench view.
-- **Preview**: details of the selected file; toggle it with `F8`.
+- **Preview**: details of the selected file; toggle it with `F8`; Workbench shows its preview in the view instead.
 - **Status bar**: action messages, search and selection results. **Settings → Appearance → Always Show Status Bar** keeps it visible when idle.
 
 ## Learn the essential shortcuts
@@ -50,7 +50,7 @@ From top to bottom:
 | `Ctrl+T` | New tab |
 | `F3` | Split view |
 | `Ctrl+1`, `Ctrl+2`, `Ctrl+3`, `Ctrl+4` | Grid, list, column, Workbench view |
-| `F8` | Toggle the preview |
+| `F8` | Toggle the preview (not in Workbench) |
 | `Ctrl+,` | Open Settings |
 | `F1` | Show all keyboard shortcuts |
 

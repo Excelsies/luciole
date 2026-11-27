@@ -6,6 +6,8 @@ See what a file contains and inspect its details without opening it.
 
 The side preview is on by default. `F8` toggles it, and **Settings → Appearance → Show Preview** controls it too. Drag its divider to change the saved width. Small windows collapse it temporarily when there is no room.
 
+Workbench has no side preview: `F8` does nothing there, and a file's preview, which can play video and sound, shows in the view itself; see [Preview a file](workbench.md#preview-a-file).
+
 ![The side preview of an image with its details](assets/preview-side.webp)
 
 It shows essential facts such as size, dimensions, format and duration when available. Selecting a folder shows its calculated size and how many files and folders it holds. Large folders may take a moment or report a partial result.
