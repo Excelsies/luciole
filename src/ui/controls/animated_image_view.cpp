@@ -170,6 +170,9 @@ void AnimatedImageView::doLayout(Renderer& renderer) {
   }
   m_scrollX = std::clamp(m_scrollX, 0.0F, maxScrollX());
   m_scrollY = std::clamp(m_scrollY, 0.0F, maxScrollY());
+  if (m_still != nullptr && onScreen()) {
+    showStill(); // before the frame is arranged, which draws nothing until it has a texture
+  }
   // The frame's box leaves room around it for the picture's shadow; the picture lies in it, clipped at its edge.
   m_frame->setPicture(
       shownWidth <= boxWidth ? (boxWidth - shownWidth) / 2 : -m_scrollX,
@@ -178,9 +181,6 @@ void AnimatedImageView::doLayout(Renderer& renderer) {
   m_frame->arrange(renderer, {.x = inset(), .y = inset(), .width = boxWidth, .height = boxHeight});
   m_area->arrange(renderer, {.x = 0, .y = 0, .width = width(), .height = height()});
   if (m_still != nullptr) {
-    if (onScreen()) {
-      showStill();
-    }
     return;
   }
   const float scale = renderer.renderScale() * m_scale;
@@ -199,7 +199,7 @@ void AnimatedImageView::doLayout(Renderer& renderer) {
 void AnimatedImageView::doInvalidateGpuResources(Renderer& renderer) {
   m_renderer = &renderer;
   m_texture = {};
-  m_image->setTextureId({});
+  m_frame->setTexture({});
   if (m_current != nullptr) {
     show(std::exchange(m_current, nullptr));
   } else if (m_still != nullptr && onScreen()) {
@@ -246,7 +246,7 @@ void AnimatedImageView::clearFrame() {
     m_renderer->textureManager().unload(m_texture);
   }
   m_texture = {};
-  m_image->setTextureId({});
+  m_frame->setTexture({});
 }
 
 // A still or failed file keeps its finished frames object, so state() reports it and layout does not reopen it.
@@ -319,7 +319,7 @@ void AnimatedImageView::show(std::shared_ptr<const luciole::AnimationFrame> fram
     m_texture = textures.loadFromPixels(pixels, frame->width, frame->height, TextureDataFormat::Rgba);
   }
   m_current = std::move(frame);
-  m_image->setTextureId(m_texture.id);
+  m_frame->setTexture(m_texture.id);
   m_image->setTextureSize(m_current->width, m_current->height);
   m_image->markPaintDirty();
 }
@@ -332,7 +332,7 @@ void AnimatedImageView::showStill() {
   m_texture = m_renderer->textureManager().loadFromPixels(
       m_still->rgba.data(), m_still->width, m_still->height, TextureDataFormat::Rgba
   );
-  m_image->setTextureId(m_texture.id);
+  m_frame->setTexture(m_texture.id);
   m_image->setTextureSize(m_still->width, m_still->height);
   m_image->markPaintDirty();
 }

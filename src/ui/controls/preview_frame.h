@@ -1,5 +1,6 @@
 #pragma once
 
+#include "render/core/texture_handle.h"
 #include "render/scene/node.h"
 #include "ui/signal.h"
 
@@ -24,6 +25,8 @@ namespace luciole {
 
     ImageNode& image() noexcept { return *m_image; }
     const ImageNode& image() const noexcept { return *m_image; }
+    // Sets the picture's texture. Until it has one nothing is drawn: no shadow, outline or mask around an empty box.
+    void setTexture(TextureId id);
     // Where the picture lies, relative to this node's box; it may reach past the box.
     void setPicture(float x, float y, float width, float height);
     // The picture is cut by the box, so the mask and the outline overlay round it.

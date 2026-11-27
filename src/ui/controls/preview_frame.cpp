@@ -51,6 +51,14 @@ namespace luciole {
 
   PreviewFrame::~PreviewFrame() = default;
 
+  void PreviewFrame::setTexture(TextureId id) {
+    const bool changes = m_image->textureId().valid() != id.valid();
+    m_image->setTextureId(id);
+    if (changes) {
+      markLayoutDirty();
+    }
+  }
+
   void PreviewFrame::setPicture(float x, float y, float width, float height) {
     if (x == m_x && y == m_y && width == m_width && height == m_height) {
       return;
@@ -77,7 +85,7 @@ namespace luciole {
     const float top = std::max(m_y, 0.0F);
     const float right = std::min(m_x + m_width, boxWidth);
     const float bottom = std::min(m_y + m_height, boxHeight);
-    const bool seen = right > left && bottom > top;
+    const bool seen = m_image->textureId().valid() && right > left && bottom > top;
     m_visible = seen ? Visible{left, top, right - left, bottom - top} : Visible{};
     m_cut = seen
         && (m_x < -kFits || m_y < -kFits || m_x + m_width > boxWidth + kFits || m_y + m_height > boxHeight + kFits);

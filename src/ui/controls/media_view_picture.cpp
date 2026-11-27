@@ -28,7 +28,7 @@ void MediaView::doInvalidateGpuResources(Renderer& /*renderer*/) {
   m_posterTexture = {};
   m_frameTexture = {};
   m_showingFrame = false;
-  m_picture->setTextureId({});
+  m_frame->setTexture({});
   m_posterPending = m_poster != nullptr && m_shown;
   scheduleCatchUp();
 }
@@ -71,13 +71,13 @@ void MediaView::showFrame(const luciole::MediaFrame& frame) {
     }
   }
   m_showingFrame = true;
-  m_picture->setTextureId(m_frameTexture.id);
+  m_frame->setTexture(m_frameTexture.id);
   m_picture->setTextureSize(frame.width, frame.height);
   m_picture->markPaintDirty();
 }
 
 void MediaView::showPoster() {
-  m_picture->setTextureId(m_posterTexture.id);
+  m_frame->setTexture(m_posterTexture.id);
   m_picture->setTextureSize(m_posterTexture.width, m_posterTexture.height);
 }
 
