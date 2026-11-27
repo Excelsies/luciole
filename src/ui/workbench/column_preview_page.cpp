@@ -70,18 +70,19 @@ namespace luciole {
     // The heading keeps the page's one text size, so the side preview's larger title is not used; its badge is the
     // side preview's own.
     detailsCard->insertChildAt(
-        0, ui::row(
-               {.align = FlexAlign::Center, .gap = Style::spaceSm},
-               ui::label(
-                   {.out = &m_details,
-                    .text = "Details",
-                    .fontWeight = FontWeight::SemiBold,
-                    .color = colorSpecFromRole(ColorRole::OnSurface),
-                    .maxLines = 1,
-                    .flexGrow = 1}
-               ),
-               makeStatusBadge(m_badge)
-           )
+        0,
+        ui::row(
+            {.align = FlexAlign::Center, .gap = Style::spaceSm},
+            ui::label(
+                {.out = &m_details,
+                 .text = "Details",
+                 .fontWeight = FontWeight::SemiBold,
+                 .color = colorSpecFromRole(ColorRole::OnSurface),
+                 .maxLines = 1,
+                 .flexGrow = 1}
+            ),
+            makeStatusBadge(m_badge)
+        )
     );
     facts->setGap(Style::spaceXs);
     content->addChild(std::move(detailsCard));

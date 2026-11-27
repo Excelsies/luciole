@@ -2,7 +2,6 @@
 #include "scene_capture.h"
 #include "test_check.h"
 #include "text_tile_view_rig.h"
-#include "ui/palette.h"
 #include "thumbnails/file_icon_cache.h"
 #include "thumbnails/preview_service.h"
 #include "ui/browser/file_icon.h"
@@ -10,10 +9,11 @@
 #include "ui/controls/file_preview_view.h"
 #include "ui/controls/flex.h"
 #include "ui/controls/label.h"
+#include "ui/palette.h"
 #include "ui/style.h"
 #include "ui/workbench/column_preview_page.h"
-#include "ui/workbench/status_badge.h"
 #include "ui/workbench/list_rows.h"
+#include "ui/workbench/status_badge.h"
 
 #include <cstdlib>
 #include <filesystem>
@@ -250,7 +250,9 @@ namespace {
     ColumnPreviewPage page(icons);
     page.setTextSize(slotTextSize());
     for (const auto& [message, status, problem] :
-         {std::tuple<std::string_view, luciole::PreviewStatus, bool>{"Remote file", luciole::PreviewStatus::Unavailable, false},
+         {std::tuple<std::string_view, luciole::PreviewStatus, bool>{
+              "Remote file", luciole::PreviewStatus::Unavailable, false
+          },
           {"No text preview", luciole::PreviewStatus::Unavailable, false},
           {"Not UTF-8 text", luciole::PreviewStatus::Unavailable, false},
           {"Low resolution", luciole::PreviewStatus::Ready, false},

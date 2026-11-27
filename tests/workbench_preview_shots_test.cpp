@@ -4,31 +4,28 @@
 #include "imaging/text_tile_service.h"
 #include "png_writer.h"
 #include "render/animation/animation_manager.h"
+#include "render/core/image_decoder.h"
 #include "render/scene/image_node.h"
 #include "scene_capture.h"
 #include "test_check.h"
 #include "text_tile_view_rig.h"
+#include "thumbnails/file_icon_cache.h"
 #include "thumbnails/mesh_preview.h"
 #include "thumbnails/sheet_preview.h"
 #include "thumbnails/thumbnail_service.h"
 #include "thumbnails/thumbnail_worker.h"
-#include "thumbnails/file_icon_cache.h"
-#include "ui/controls/file_preview_view.h"
-#include "ui/controls/media_view.h"
-#include "ui/workbench/column_preview_page.h"
-#include "ui/controls/flex.h"
-#include <fstream>
-#include <filesystem>
-#include <array>
-#include "render/core/image_decoder.h"
 #include "ui/controls/animated_image_view.h"
 #include "ui/controls/button.h"
+#include "ui/controls/file_preview_view.h"
+#include "ui/controls/flex.h"
 #include "ui/controls/label.h"
+#include "ui/controls/media_view.h"
 #include "ui/controls/mesh_view.h"
 #include "ui/controls/table_view.h"
 #include "ui/controls/text_tile_view.h"
 #include "ui/palette.h"
 #include "ui/style.h"
+#include "ui/workbench/column_preview_page.h"
 #include "ui/workbench/column_preview_view.h"
 #include "ui/workbench/list_rows.h"
 
@@ -37,7 +34,9 @@
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
+#include <filesystem>
 #include <format>
+#include <fstream>
 #include <functional>
 #include <glib.h>
 #include <memory>
@@ -157,7 +156,6 @@ namespace {
       return pixels;
     }
   };
-
 
   const std::string& shotSet() {
     static const std::string set = [] {
@@ -346,10 +344,14 @@ int main(int argc, char** argv) {
       std::string_view shot;
       std::string_view status;
     } cases[] = {
-        {"landscape.png", "picture-landscape", ""}, {"portrait.png", "picture-portrait", ""},
-        {"tiny.png", "picture-tiny", ""},           {"style.css", "text", ""},
-        {"empty.txt", "empty-file", "Empty"},       {"many-lines.txt", "truncated-text", "Truncated"},
-        {"pack.zip", "archive-listing", ""},        {"huge-table.a", "archive-too-large", "Too large"},
+        {"landscape.png", "picture-landscape", ""},
+        {"portrait.png", "picture-portrait", ""},
+        {"tiny.png", "picture-tiny", ""},
+        {"style.css", "text", ""},
+        {"empty.txt", "empty-file", "Empty"},
+        {"many-lines.txt", "truncated-text", "Truncated"},
+        {"pack.zip", "archive-listing", ""},
+        {"huge-table.a", "archive-too-large", "Too large"},
         {"broken.zip", "archive-damaged", "Read error"},
     };
     for (const auto& item : cases) {

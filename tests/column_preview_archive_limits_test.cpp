@@ -1,8 +1,8 @@
 #include "browser/workbench_services.h"
 #include "temp_folder.h"
 #include "test_check.h"
-#include "ui/workbench/column_preview_loads.h"
 #include "ui/controls/label.h"
+#include "ui/workbench/column_preview_loads.h"
 #include "ui/workbench/column_preview_view.h"
 
 #include <archive.h>

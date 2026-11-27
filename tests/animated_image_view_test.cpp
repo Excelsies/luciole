@@ -416,9 +416,9 @@ namespace {
   }
 
   // The box the picture is seen in is the view less 12 pixels of room for its shadow on each side: the 324 by 224
-  // view below has a 300 by 200 box. At scale 1 a still fits the box and is never enlarged; other scales draw it that many times as large, centered
-  // while it fits and scrolled once it does not, with the wheel and a drag moving it and a new scale keeping the
-  // point at the center.
+  // view below has a 300 by 200 box. At scale 1 a still fits the box and is never enlarged; other scales draw it that
+  // many times as large, centered while it fits and scrolled once it does not, with the wheel and a drag moving it and
+  // a new scale keeping the point at the center.
   void scalesScrollsAndPans(std::unique_ptr<test::SceneCapture> capture) {
     Rig rig(std::move(capture));
     rig.view->setStill(splitStill(200, 120));

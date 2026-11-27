@@ -18,12 +18,9 @@ namespace luciole {
          .height = kStatusBadgeHeight,
          .visible = false,
          .participatesInLayout = false},
-        ui::label(
-            {.out = &out.label,
-             .fontSize = Style::fontSizeCaption,
-             .maxLines = 1,
-             .configure = [](Label& label) { label.setUseMarkup(false); }}
-        )
+        ui::label({.out = &out.label, .fontSize = Style::fontSizeCaption, .maxLines = 1, .configure = [](Label& label) {
+                     label.setUseMarkup(false);
+                   }})
     );
     return pill;
   }

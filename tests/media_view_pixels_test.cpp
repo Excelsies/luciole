@@ -5,8 +5,8 @@
 #include "render/scene/input_dispatcher.h"
 #include "scene_capture.h"
 #include "test_check.h"
-#include "ui/browser/preview_layout.h"
 #include "text_clear.h"
+#include "ui/browser/preview_layout.h"
 #include "ui/controls/button.h"
 #include "ui/controls/flex.h"
 #include "ui/controls/label.h"
@@ -327,7 +327,17 @@ int main(int argc, char** argv) {
     constexpr int kSmallW = 200;
     constexpr int kSmallH = 100;
     TEST_CHECK(scene.until(
-        *capture, [&] { return view.framePixels().second == static_cast<int>(std::lround(view.stageArea().height() - (2 * std::min(luciole::kPreviewImageInset, std::min(view.stageArea().width(), view.stageArea().height()) / 4)))); },
+        *capture,
+        [&] {
+          return view.framePixels().second
+              == static_cast<int>(std::lround(
+                  view.stageArea().height()
+                  - (2
+                     * std::min(
+                         luciole::kPreviewImageInset, std::min(view.stageArea().width(), view.stageArea().height()) / 4
+                     ))
+              ));
+        },
         kSmallW, kSmallH
     ));
     const auto pixels = scene.frame(*capture, 1, kSmallW, kSmallH);

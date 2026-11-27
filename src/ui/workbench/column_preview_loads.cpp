@@ -248,7 +248,10 @@ namespace luciole {
         const auto error = m_service->error();
         m_service.reset();
         if (!catalog) {
-          fail(error ? archiveRefusal(*error) : std::string(kArchiveUnreadable), error ? archiveBadge(*error) : kReadError);
+          fail(
+              error ? archiveRefusal(*error) : std::string(kArchiveUnreadable),
+              error ? archiveBadge(*error) : kReadError
+          );
           return;
         }
         runJob<ArchiveListing>(

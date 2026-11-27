@@ -380,7 +380,9 @@ namespace luciole {
     if (content) {
       content->setFlexGrow(1);
       m_content = content.get();
-      m_held = m_body->addChild(readsAsPage(*content) ? std::unique_ptr<Node>(pageAround(std::move(content))) : std::move(content));
+      m_held = m_body->addChild(
+          readsAsPage(*content) ? std::unique_ptr<Node>(pageAround(std::move(content))) : std::move(content)
+      );
     }
   }
 

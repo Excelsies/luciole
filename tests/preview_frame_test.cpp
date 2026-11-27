@@ -1,5 +1,5 @@
-#include "render/core/image_decoder.h"
 #include "png_writer.h"
+#include "render/core/image_decoder.h"
 #include "render/core/texture_manager.h"
 #include "render/scene/image_node.h"
 #include "scene_capture.h"
@@ -80,9 +80,8 @@ namespace {
   };
 
   // A PreviewFrame in a box of kBox by kBoxHeight showing a `width` by `height` picture at x, y within it.
-  std::unique_ptr<Flex> framed(
-      ::test::SceneCapture& capture, Picture& picture, float x, float y, float width, float height
-  ) {
+  std::unique_ptr<Flex>
+  framed(::test::SceneCapture& capture, Picture& picture, float x, float y, float width, float height) {
     auto root = stage();
     auto frame = std::make_unique<luciole::PreviewFrame>();
     picture.frame = frame.get();
@@ -92,7 +91,7 @@ namespace {
     );
     frame->image().setTextureId(picture.texture.id);
     frame->image().setTextureSize(pixels->width, pixels->height);
-    
+
     frame->setPicture(x, y, width, height);
     frame->setFlexGrow(1);
     auto slot = std::make_unique<Flex>();
@@ -169,9 +168,9 @@ namespace {
       TEST_CHECK(picture.frame->cut());
       TEST_CHECK(picture.frame->visible().width == kBox && picture.frame->visible().height == kBoxHeight);
       // The box's corners are rounded: bare surface at the very corner pixel.
-      for (const auto& [x, y] : {std::pair{kMargin, kMargin}, std::pair{kMargin + kBox - 1, kMargin},
-                                 std::pair{kMargin, kMargin + kBoxHeight - 1},
-                                 std::pair{kMargin + kBox - 1, kMargin + kBoxHeight - 1}}) {
+      for (const auto& [x, y] :
+           {std::pair{kMargin, kMargin}, std::pair{kMargin + kBox - 1, kMargin},
+            std::pair{kMargin, kMargin + kBoxHeight - 1}, std::pair{kMargin + kBox - 1, kMargin + kBoxHeight - 1}}) {
         TEST_CHECK(distance(pixels.at(x, y), surface) < 30);
       }
       // The outline runs along the box's edge, over the picture.
@@ -180,8 +179,9 @@ namespace {
       // Inside is the picture, outside the box (in the margin) is not.
       const auto inside = pixels.at(kMargin + 60, kMargin + 45);
       TEST_CHECK(distance(inside, surface) > 100);
-      for (const auto& [x, y] : {std::pair{kMargin - 4, kMargin + 40}, std::pair{kMargin + kBox + 3, kMargin + 40},
-                                 std::pair{kMargin + 40, kMargin - 4}}) {
+      for (const auto& [x, y] :
+           {std::pair{kMargin - 4, kMargin + 40}, std::pair{kMargin + kBox + 3, kMargin + 40},
+            std::pair{kMargin + 40, kMargin - 4}}) {
         const auto outside = pixels.at(x, y);
         TEST_CHECK(distance(outside, {255, 0, 0, 255}) > 150 && distance(outside, {0, 0, 255, 255}) > 150);
       }
