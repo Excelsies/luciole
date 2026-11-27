@@ -4,6 +4,7 @@
 #include "fs/archive_container_types.h"
 #include "fs/file_error.h"
 #include "fs/location.h"
+#include "imaging/text_document_loader.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -73,4 +74,15 @@ namespace luciole {
   // what the archive needs (the 7-Zip command, or a multipart or encrypted RAR), "This archive is too large to
   // list." for a limit, and otherwise what went wrong by kind, in the words of the other previews.
   std::string archiveRefusal(const FileError& error);
+
+  // The short label the preview's header shows for what archiveRefusal says in a sentence, in the words of the side
+  // preview's status badge: "Too large", "Needs a tool", "Unsupported", "Read error", "Missing part", "No access",
+  // "File changed" or "Damaged".
+  std::string archiveBadge(const FileError& error);
+  // The label for a text document that is cut, empty, not text, refused or unread; empty for text shown whole.
+  std::string textBadge(const TextDocument& document);
+  // "Empty" for a table without cells, "Truncated" for one cut short; otherwise empty.
+  std::string tableBadge(const formats::TableGrid& table);
+  // The labels that say something went wrong show in the error color.
+  bool isProblemBadge(std::string_view badge);
 } // namespace luciole

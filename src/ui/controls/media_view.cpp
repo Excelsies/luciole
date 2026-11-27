@@ -8,6 +8,7 @@
 #include "ui/controls/flex.h"
 #include "ui/controls/label.h"
 #include "ui/controls/media_position_bar.h"
+#include "ui/controls/preview_frame.h"
 #include "ui/palette.h"
 #include "ui/style.h"
 
@@ -64,8 +65,8 @@ namespace {
 MediaView::MediaView(luciole::AudioOutput audio)
     : m_audio(audio), m_barKeys([this](const InputArea::KeyData& key) { onKey(key); }),
       m_textSize(Style::fontSizeCaption) {
-  m_picture = static_cast<ImageNode*>(addChild(std::make_unique<ImageNode>()));
-  m_picture->setFitMode(ImageFitMode::Contain);
+  m_frame = static_cast<luciole::PreviewFrame*>(addChild(std::make_unique<luciole::PreviewFrame>()));
+  m_picture = &m_frame->image();
   m_visual = static_cast<AudioVisualView*>(addChild(std::make_unique<AudioVisualView>()));
   m_visual->onActiveChanged = [this] { refreshControls(); };
   m_notice = static_cast<Label*>(addChild(std::make_unique<Label>()));
@@ -196,8 +197,7 @@ void MediaView::doLayout(Renderer& renderer) {
   const float w = width();
   const float controls = m_controls->participatesInLayout() ? m_controls->maxHeight() : 0;
   const float stage = std::max(0.0F, height() - controls);
-  m_picture->setPosition(0, 0);
-  m_picture->setFrameSize(w, stage);
+  const auto [boxWidth, boxHeight] = placePicture(renderer, w, stage);
   m_stageArea->setPosition(0, 0);
   m_stageArea->setFrameSize(w, stage);
   m_visual->arrange(renderer, {0, 0, w, stage});
@@ -212,7 +212,7 @@ void MediaView::doLayout(Renderer& renderer) {
     m_barKeys.fit();
   }
   const float scale = renderer.renderScale();
-  m_stagePixels = {static_cast<int>(std::lround(w * scale)), static_cast<int>(std::lround(stage * scale))};
+  m_stagePixels = {static_cast<int>(std::lround(boxWidth * scale)), static_cast<int>(std::lround(boxHeight * scale))};
   if (m_posterPending || (m_player && m_stagePixels != m_askedPixels)) {
     scheduleCatchUp();
   }
@@ -352,7 +352,7 @@ void MediaView::refreshControls() {
   m_visual->follow(m_player.get(), m_choiceWanted);
   showTimes();
   m_visual->showGlyph(soundOnly() && !failed && !m_showingFrame && !m_posterTexture.valid());
-  m_picture->setVisible(!m_visual->active() && !soundFailed); // the visual and the notice cover the stage
+  m_frame->setVisible(!m_visual->active() && !soundFailed); // the visual and the notice cover the stage
   refreshPosition();
 }
 

@@ -2,8 +2,11 @@
 #include "render/core/renderer.h"
 #include "render/core/texture_manager.h"
 #include "render/scene/image_node.h"
+#include "ui/browser/preview_layout.h"
 #include "ui/controls/media_view.h"
+#include "ui/controls/preview_frame.h"
 
+#include <algorithm>
 #include <cstddef>
 
 namespace {
@@ -76,6 +79,24 @@ void MediaView::showFrame(const luciole::MediaFrame& frame) {
 void MediaView::showPoster() {
   m_picture->setTextureId(m_posterTexture.id);
   m_picture->setTextureSize(m_posterTexture.width, m_posterTexture.height);
+}
+
+std::pair<float, float> MediaView::placePicture(Renderer& renderer, float width, float stage) {
+  const float inset = std::min(luciole::kPreviewImageInset, std::max(0.0F, std::min(width, stage)) / 4);
+  const float boxWidth = std::max(0.0F, width - (2 * inset));
+  const float boxHeight = std::max(0.0F, stage - (2 * inset));
+  float shownWidth = boxWidth;
+  float shownHeight = boxHeight;
+  const auto textureWidth = static_cast<float>(m_picture->textureWidth());
+  const auto textureHeight = static_cast<float>(m_picture->textureHeight());
+  if (textureWidth > 0 && textureHeight > 0) {
+    const float fit = std::min(boxWidth / textureWidth, boxHeight / textureHeight);
+    shownWidth = textureWidth * fit;
+    shownHeight = textureHeight * fit;
+  }
+  m_frame->setPicture((boxWidth - shownWidth) / 2, (boxHeight - shownHeight) / 2, shownWidth, shownHeight);
+  m_frame->arrange(renderer, {.x = inset, .y = inset, .width = boxWidth, .height = boxHeight});
+  return {boxWidth, boxHeight};
 }
 
 void MediaView::releaseFrame() {

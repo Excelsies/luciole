@@ -227,4 +227,66 @@ namespace luciole {
       return std::string(kArchiveUnreadable);
     }
   }
+
+  std::string archiveBadge(const FileError& error) {
+    switch (error.kind) {
+    case FileErrorKind::Unsupported:
+    case FileErrorKind::Unavailable:
+      if (error.message.starts_with(kArchiveNeeds[0])) {
+        return "Needs a tool";
+      }
+      if (std::ranges::any_of(kArchiveNeeds, [&](std::string_view head) { return error.message.starts_with(head); })) {
+        return "Unsupported";
+      }
+      if (std::ranges::any_of(kTooLarge, [&](std::string_view part) { return error.message.contains(part); })) {
+        return "Too large";
+      }
+      return "Read error";
+    case FileErrorKind::Missing:
+      return "Missing part";
+    case FileErrorKind::Denied:
+      return "No access";
+    case FileErrorKind::Changed:
+      return "File changed";
+    case FileErrorKind::InvalidArgument:
+    case FileErrorKind::NameTooLong:
+      return "Damaged";
+    default:
+      return "Read error";
+    }
+  }
+
+  std::string textBadge(const TextDocument& document) {
+    switch (document.state) {
+    case TextDocumentState::Shown:
+      return document.facts.bytes == 0 ? "Empty" : "";
+    case TextDocumentState::Cut:
+      return "Truncated";
+    case TextDocumentState::NotText:
+      return "Not UTF-8 text";
+    case TextDocumentState::PrivateKey:
+      return "Private key";
+    case TextDocumentState::Container:
+      return "Key container";
+    case TextDocumentState::Unreadable:
+      return "Read error";
+    case TextDocumentState::Changed:
+      return "File changed";
+    case TextDocumentState::Cancelled:
+      break;
+    }
+    return "";
+  }
+
+  std::string tableBadge(const formats::TableGrid& table) {
+    if (table.rowCount == 0 || table.columnCount == 0) {
+      return "Empty";
+    }
+    return table.rowsCut || table.columnsCut || table.truncated ? "Truncated" : "";
+  }
+
+  bool isProblemBadge(std::string_view badge) {
+    constexpr auto kProblems = std::array{"Read error"sv, "Damaged"sv, "No access"sv, "Missing part"sv};
+    return listed(kProblems, badge);
+  }
 } // namespace luciole

@@ -1,6 +1,7 @@
 #include "fs/archive_type.h"
 #include "fs/file_error.h"
 #include "fs/location.h"
+#include "imaging/text_document_loader.h"
 #include "operations/archive_service.h"
 #include "test_check.h"
 #include "ui/workbench/column_preview_content.h"
@@ -290,6 +291,57 @@ namespace {
         == "This archive is damaged, so its entries are not listed."
     );
   }
+
+  // The short label beside a refusal or a cut, in the words of the side preview's badge ("Truncated", "Empty").
+  void badges() {
+    using luciole::FileErrorKind;
+    const auto archive = [](FileErrorKind kind, std::string message) {
+      return luciole::archiveBadge({.kind = kind, .message = std::move(message)});
+    };
+    TEST_CHECK(archive(FileErrorKind::Unsupported, "Archive has too many entries.") == "Too large");
+    TEST_CHECK(archive(FileErrorKind::Unsupported, "Archive paths are too deep.") == "Too large");
+    TEST_CHECK(archive(FileErrorKind::Unavailable, "Encrypted 7z archives need the 7-Zip command.") == "Needs a tool");
+    TEST_CHECK(archive(FileErrorKind::Unsupported, "Multipart RAR archives are not supported yet.") == "Unsupported");
+    TEST_CHECK(archive(FileErrorKind::Unsupported, "Encrypted RAR archives are not supported.") == "Unsupported");
+    TEST_CHECK(archive(FileErrorKind::Other, "Input/output error") == "Read error");
+    TEST_CHECK(archive(FileErrorKind::Unsupported, "") == "Read error");
+    TEST_CHECK(archive(FileErrorKind::Missing, {}) == "Missing part");
+    TEST_CHECK(archive(FileErrorKind::Denied, {}) == "No access");
+    TEST_CHECK(archive(FileErrorKind::Changed, {}) == "File changed");
+    TEST_CHECK(archive(FileErrorKind::InvalidArgument, {}) == "Damaged");
+    TEST_CHECK(archive(FileErrorKind::NameTooLong, {}) == "Damaged");
+
+    using luciole::TextDocument;
+    using luciole::TextDocumentState;
+    const auto text = [](TextDocumentState state, std::uint64_t bytes = 10) {
+      TextDocument document;
+      document.state = state;
+      document.facts.bytes = bytes;
+      return luciole::textBadge(document);
+    };
+    TEST_CHECK(text(TextDocumentState::Shown).empty());
+    TEST_CHECK(text(TextDocumentState::Shown, 0) == "Empty");
+    TEST_CHECK(text(TextDocumentState::Cut) == "Truncated");
+    TEST_CHECK(text(TextDocumentState::NotText) == "Not UTF-8 text");
+    TEST_CHECK(text(TextDocumentState::PrivateKey) == "Private key");
+    TEST_CHECK(text(TextDocumentState::Container) == "Key container");
+    TEST_CHECK(text(TextDocumentState::Unreadable) == "Read error");
+    TEST_CHECK(text(TextDocumentState::Changed) == "File changed");
+    TEST_CHECK(text(TextDocumentState::Cancelled).empty());
+    luciole::formats::TableGrid grid;
+    grid.rowCount = 5;
+    grid.columnCount = 2;
+    TEST_CHECK(luciole::tableBadge(grid).empty());
+    grid.rowsCut = true;
+    TEST_CHECK(luciole::tableBadge(grid) == "Truncated");
+    grid.rowsCut = false;
+    grid.truncated = true;
+    TEST_CHECK(luciole::tableBadge(grid) == "Truncated");
+    grid.rowCount = 0;
+    TEST_CHECK(luciole::tableBadge(grid) == "Empty");
+    TEST_CHECK(luciole::isProblemBadge("Read error") && luciole::isProblemBadge("Damaged"));
+    TEST_CHECK(!luciole::isProblemBadge("Truncated") && !luciole::isProblemBadge("Empty"));
+  }
 } // namespace
 
 int main() {
@@ -300,6 +352,7 @@ int main() {
   factsLine();
   archiveListing();
   archiveRefusals();
+  badges();
   std::println("column-preview-kind: {} rows checked", kRows.size());
   return 0;
 }

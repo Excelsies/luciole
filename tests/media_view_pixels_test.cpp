@@ -5,6 +5,7 @@
 #include "render/scene/input_dispatcher.h"
 #include "scene_capture.h"
 #include "test_check.h"
+#include "ui/browser/preview_layout.h"
 #include "text_clear.h"
 #include "ui/controls/button.h"
 #include "ui/controls/flex.h"
@@ -151,10 +152,12 @@ namespace {
     );
   }
 
-  // The stage share where bar `index` of seven sits on a 4:3 frame fitted inside the stage.
+  // The stage share where bar `index` of seven sits on a 4:3 frame fitted inside the stage less the room kept around
+  // the picture for its shadow: 12 pixels, or a quarter of a small stage's shorter side.
   float barShare(const MediaView& view, int index) {
     const float stageW = view.stageArea().width();
-    const float shownW = view.stageArea().height() * 4.0F / 3.0F;
+    const float room = std::min(luciole::kPreviewImageInset, std::min(stageW, view.stageArea().height()) / 4);
+    const float shownW = std::min(stageW - (2 * room), (view.stageArea().height() - (2 * room)) * 4.0F / 3.0F);
     const float left = (stageW - shownW) / 2;
     return (left + shownW * (static_cast<float>(index) + 0.5F) / 7.0F) / stageW;
   }
@@ -324,7 +327,7 @@ int main(int argc, char** argv) {
     constexpr int kSmallW = 200;
     constexpr int kSmallH = 100;
     TEST_CHECK(scene.until(
-        *capture, [&] { return view.framePixels().second == static_cast<int>(std::lround(view.stageArea().height())); },
+        *capture, [&] { return view.framePixels().second == static_cast<int>(std::lround(view.stageArea().height() - (2 * std::min(luciole::kPreviewImageInset, std::min(view.stageArea().width(), view.stageArea().height()) / 4)))); },
         kSmallW, kSmallH
     ));
     const auto pixels = scene.frame(*capture, 1, kSmallW, kSmallH);

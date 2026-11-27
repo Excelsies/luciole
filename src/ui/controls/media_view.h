@@ -19,6 +19,9 @@
 class Button;
 class Flex;
 class ImageNode;
+namespace luciole {
+  class PreviewFrame;
+}
 class InputArea;
 class Label;
 class MediaPositionBar;
@@ -153,6 +156,8 @@ private:
   void uploadPoster();
   void showFrame(const luciole::MediaFrame& frame);
   void showPoster();
+  // Frames the picture in the stage less the room for its shadow, fitted by the texture's shape; returns the box.
+  std::pair<float, float> placePicture(Renderer& renderer, float width, float stage);
   void releaseFrame();
   void releasePoster();
 
@@ -163,6 +168,7 @@ private:
   std::unique_ptr<luciole::MediaPlayer> m_player;
   luciole::MediaProbe m_probe;
   luciole::MediaFacts m_facts;
+  luciole::PreviewFrame* m_frame = nullptr;
   ImageNode* m_picture = nullptr;
   AudioVisualView* m_visual = nullptr;
   InputArea* m_stageArea = nullptr;

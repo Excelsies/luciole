@@ -6,6 +6,7 @@
 #include "render/scene/input_dispatcher.h"
 #include "scene_capture.h"
 #include "test_check.h"
+#include "ui/browser/preview_layout.h"
 #include "ui/controls/button.h"
 #include "ui/controls/flex.h"
 #include "ui/controls/label.h"
@@ -256,9 +257,11 @@ namespace {
     rig.width = 80;
     rig.height = 60;
     rig.frame();
-    const auto stage = static_cast<int>(std::lround(rig.view->stageArea().height()));
+    // The picture is seen in the stage less room for its shadow on each side: 12 pixels, or a quarter of a small stage's shorter side.
+    const float room = std::min(luciole::kPreviewImageInset, std::min(rig.view->stageArea().width(), rig.view->stageArea().height()) / 4);
+    const auto stage = static_cast<int>(std::lround(rig.view->stageArea().height() - (2 * room)));
     TEST_CHECK(stage > 0 && stage < 48);
-    // The 4:3 frame now fills the stage's height.
+    // The 4:3 frame now fills that box's height.
     TEST_CHECK(rig.until([&] { return rig.view->framePixels().second == stage; }));
     TEST_CHECK(std::abs(rig.view->framePixels().first * 3 - stage * 4) <= 3);
     TEST_CHECK(rig.state() == MediaState::Paused);
