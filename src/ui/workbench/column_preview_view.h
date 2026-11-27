@@ -51,7 +51,9 @@ namespace luciole {
     void setStatus(std::string_view label, bool problem);
     // Ignores sizes that are not positive and finite.
     void setTextSize(float size);
-    // Shows `content` below the facts and frees what was there; null leaves the area empty.
+    // Shows `content` below the facts and frees what was there; null leaves the area empty. Text, a text tile view or
+    // the text editor, sits on a page card like the side preview's text page: inset by Style::spaceSm, on
+    // SurfaceContainerLow with an OutlineVariant outline and Style::radiusXl corners. content() is `content` itself.
     void setContent(std::unique_ptr<Node> content);
     // The preview size in percent the controls show; the smaller and larger controls are disabled at the ends of
     // kPreviewSizes. A size off the steps shows as kDefaultPreviewSize.
@@ -134,6 +136,7 @@ namespace luciole {
     Flex* m_body = nullptr;
     Label* m_messageLabel = nullptr;
     Node* m_content = nullptr;
+    Node* m_held = nullptr; // what the body holds for m_content: the content itself, or the page around it
     std::string m_message;
     float m_textSize;
     int m_previewSize;

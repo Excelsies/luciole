@@ -3,7 +3,9 @@
 #include "render/scene/input_area.h"
 #include "ui/builders.h"
 #include "ui/controls/button.h"
+#include "ui/controls/code_editor_view.h"
 #include "ui/controls/label.h"
+#include "ui/controls/text_tile_view.h"
 #include "ui/palette.h"
 #include "ui/style.h"
 #include "ui/workbench/column_preview_header.h"
@@ -56,6 +58,32 @@ namespace luciole {
     void show(Node& node, bool shown) {
       node.setVisible(shown);
       node.setParticipatesInLayout(shown);
+    }
+
+    bool readsAsPage(const Node& content) {
+      return dynamic_cast<const TextTileView*>(&content) != nullptr
+          || dynamic_cast<const CodeEditorView*>(&content) != nullptr;
+    }
+
+    // The side preview's text page: its card, inset from the pane. The card holds the vertical inset; the content
+    // draws its own margin at the sides.
+    std::unique_ptr<Flex> pageAround(std::unique_ptr<Node> content) {
+      content->setFlexGrow(1);
+      return ui::column(
+          {.align = FlexAlign::Stretch, .padding = Style::spaceSm, .flexGrow = 1},
+          ui::column(
+              {.align = FlexAlign::Stretch,
+               .clipChildren = true,
+               .flexGrow = 1,
+               .configure =
+                   [](Flex& page) {
+                     page.setCardStyle();
+                     page.setFill(colorSpecFromRole(ColorRole::SurfaceContainerLow));
+                     page.setPadding(Style::spaceSm, 0.0F);
+                   }},
+              std::move(content)
+          )
+      );
     }
   } // namespace
 
@@ -351,7 +379,8 @@ namespace luciole {
     show(*m_messageLabel->parent(), false);
     if (content) {
       content->setFlexGrow(1);
-      m_content = m_body->addChild(std::move(content));
+      m_content = content.get();
+      m_held = m_body->addChild(readsAsPage(*content) ? std::unique_ptr<Node>(pageAround(std::move(content))) : std::move(content));
     }
   }
 
@@ -409,8 +438,9 @@ namespace luciole {
   }
 
   void ColumnPreviewView::dropContent() {
-    if (m_content != nullptr) {
-      m_body->removeChild(std::exchange(m_content, nullptr)).reset();
+    if (m_held != nullptr) {
+      m_content = nullptr;
+      m_body->removeChild(std::exchange(m_held, nullptr)).reset();
     }
   }
 } // namespace luciole

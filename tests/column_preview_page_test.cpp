@@ -7,10 +7,12 @@
 #include "thumbnails/preview_service.h"
 #include "ui/browser/file_icon.h"
 #include "ui/controls/button.h"
+#include "ui/controls/file_preview_view.h"
 #include "ui/controls/flex.h"
 #include "ui/controls/label.h"
 #include "ui/style.h"
 #include "ui/workbench/column_preview_page.h"
+#include "ui/workbench/status_badge.h"
 #include "ui/workbench/list_rows.h"
 
 #include <cstdlib>
@@ -274,6 +276,55 @@ namespace {
       TEST_CHECK(bx + shown.badgePill->width() <= kWidth);
     }
   }
+
+  // The badge mirrors the one the side preview builds inline: this fails when that one is restyled.
+  void badgeMatchesTheSidePreview(::test::SceneCapture& capture, luciole::FileIconCache& icons) {
+    setPalette(luciole::test::tiles::testPalette());
+    FilePreviewView side(icons, false, [] {}, [] {}, [] {});
+    auto snapshot = pdfSnapshot();
+    snapshot.image = nullptr;
+    snapshot.message = "Truncated";
+    side.sync(snapshot, 300, 600);
+    const auto sidePixels = capture.capture(side, 300, 600, 1);
+    Shown sideShown;
+    sideShown.collect(side);
+    const auto* text = sideShown.find("Truncated");
+    TEST_CHECK(text != nullptr && text->parent() != nullptr);
+    const Node* pill = text->parent();
+    float x = 0;
+    float y = 0;
+    Node::absolutePosition(pill, x, y);
+    const int left = static_cast<int>(std::lround(x));
+    const int top = static_cast<int>(std::lround(y));
+    const int width = static_cast<int>(std::lround(pill->width()));
+    const int height = static_cast<int>(std::lround(pill->height()));
+    TEST_NEAR(pill->height(), luciole::kStatusBadgeHeight, 0.01F);
+    TEST_NEAR(text->fontSize(), Style::fontSizeCaption, 0.001F);
+
+    auto root = std::make_unique<Flex>();
+    root->setDirection(FlexDirection::Vertical);
+    root->setAlign(FlexAlign::Start);
+    root->setPadding(static_cast<float>(top), 0, 0, static_cast<float>(left));
+    root->setFill(colorSpecFromRole(ColorRole::SurfaceContainerLow));
+    luciole::StatusBadge badge;
+    root->addChild(luciole::makeStatusBadge(badge));
+    luciole::showStatusBadge(badge, "Truncated", false, Style::fontSizeCaption);
+    const auto mine = capture.capture(*root, 300, 600, 1);
+    TEST_NEAR(badge.pill->width(), static_cast<float>(width), 1.0F);
+    TEST_NEAR(badge.pill->height(), static_cast<float>(height), 0.5F);
+    int differing = 0;
+    for (int row = top; row < top + height; ++row) {
+      for (int column = left; column < left + width; ++column) {
+        const auto a = sidePixels.at(column, row);
+        const auto b = mine.at(column, row);
+        differing += std::abs(a[0] - b[0]) + std::abs(a[1] - b[1]) + std::abs(a[2] - b[2]) > 6 ? 1 : 0;
+      }
+    }
+    std::println("badge pixels differing from the side preview's: {}", differing);
+    TEST_CHECK(differing == 0);
+    keepForViewing(sidePixels, "badge-side-preview.png");
+    keepForViewing(mine, "badge-workbench.png");
+  }
 } // namespace
 
 int main() {
@@ -290,6 +341,7 @@ int main() {
   }
   followsTheTextSize(*capture, icons);
   statusBadges(*capture, icons);
+  badgeMatchesTheSidePreview(*capture, icons);
   manyFacts(*capture, icons);
   std::println("column-preview-page: all checks passed");
   return 0;
