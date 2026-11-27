@@ -181,6 +181,8 @@ test_table = [
     'env': gio_env + ['LUCIOLE_LIBRARY_ASSETS_DIR=' + (meson.project_source_root() / 'lib/assets')]},
   {'name': 'column-preview-kind', 'deps': [ui_dep], 'env': gio_env},
   {'name': 'column-preview-layout', 'deps': [ui_dep]},
+  {'name': 'preview-frame', 'deps': [ui_dep, dependency('zlib')], 'sources': files('scene_capture.cpp', 'png_writer.cpp'),
+    'env': gio_env + ['LUCIOLE_LIBRARY_ASSETS_DIR=' + (meson.project_source_root() / 'lib/assets')]},
   {'name': 'column-preview-page', 'deps': [ui_dep, dependency('zlib')], 'sources': files('scene_capture.cpp', 'png_writer.cpp'),
     'env': gio_env + ['LUCIOLE_LIBRARY_ASSETS_DIR=' + (meson.project_source_root() / 'lib/assets')]},
   {'name': 'column-preview-header-pixels', 'deps': [ui_dep, dependency('zlib')],

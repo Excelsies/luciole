@@ -5,6 +5,7 @@
 #include "render/scene/image_node.h"
 #include "render/scene/rect_node.h"
 #include "ui/browser/preview_layout.h"
+#include "ui/browser/preview_picture_style.h"
 #include "ui/builders.h"
 #include "ui/surface_shadow.h"
 
@@ -210,19 +211,8 @@ void luciole::FileIcon::doLayout(Renderer& renderer) {
     m_image->setPosition(0, 0);
     m_image->setSize(width(), height());
   }
-  m_image->setRadius(roundPreview ? Style::radiusMd : 0.0F);
-  m_image->setBorder(
-      roundPreview ? resolveColorSpec(colorSpecFromRole(ColorRole::OutlineVariant)) : Color{},
-      roundPreview ? Style::borderWidth : 0.0F
-  );
-  const bool shadow = roundPreview && Style::popupShadowsEnabled();
-  m_shadow->setVisible(shadow);
-  if (shadow) {
-    const auto offset = shadowDirectionOffset(kPreviewShadow.direction);
-    m_shadow->setStyle(surface_shadow::style(kPreviewShadow, 1.0F, {.radius = Radii(Style::radiusMd)}));
-    m_shadow->setPosition(left + static_cast<float>(offset.x), bottom - imageHeight + static_cast<float>(offset.y));
-    m_shadow->setFrameSize(imageWidth, imageHeight);
-  }
+  preview_picture::styleImage(*m_image, roundPreview);
+  preview_picture::styleShadow(*m_shadow, roundPreview, left, bottom - imageHeight, imageWidth, imageHeight);
   const float badgeSize = std::clamp(m_size * 0.3F, 12.0F, 22.0F);
   m_linkGlyph->setGlyphSize(badgeSize * 0.68F);
   m_readOnlyGlyph->setGlyphSize(badgeSize * 0.64F);
