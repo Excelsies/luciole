@@ -337,7 +337,6 @@ namespace {
       TEST_CHECK(rig.view->content() == nullptr); // the sentence stands in place of the content
       // The header's badge names it in the words of the side preview's badge.
       TEST_CHECK(rig.view->statusBadge().pill->visible());
-      std::println("{}: badge {}", name, rig.view->statusBadge().label->text());
       TEST_CHECK(rig.view->statusBadge().label->text() == "Read error");
       return text;
     };
