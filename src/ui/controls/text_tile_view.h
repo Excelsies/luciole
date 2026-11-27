@@ -29,7 +29,7 @@ class Scrollbar;
 // each way within a byte budget, and a hidden or destroyed view holds none but keeps its scroll position. A new width,
 // pixel scale, palette or text size lays the document out again after kRelayoutDelay, while the old tiles stay on
 // screen until the new ones cover the viewport; meanwhile only the new tiles near the viewport are kept. A hex dump
-// takes the most bytes per row, of 16, 12 and 8, whose rows fit the width: when the width or the text calls for
+// takes the most bytes per row, of 16, 12, 8 and 4, whose rows fit the width: when the width or the text calls for
 // others, after the same delay, its rows are made again on a worker and laid out the same way, keeping the same
 // bytes in view. Hovering a color swatch shows its value.
 // Loading, cut text and refusals are said in words.

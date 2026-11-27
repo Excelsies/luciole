@@ -81,7 +81,8 @@ namespace {
     TEST_CHECK(joinedText(cut.blocks[0].lines.back()).starts_with("0000fff0  78 78"));
   }
 
-  // Narrower rows keep the groups of eight; a count between the choices takes the widest choice below it.
+  // Narrower rows keep the groups of eight; a count between the choices takes the widest choice below it, and one
+  // below the narrowest takes it.
   void testNarrowRows() {
     const auto bytes = "Hello, world!\n\x00\x01\xFF\x7F"sv;
     const auto twelve = hexDump(bytes, 12);
@@ -93,7 +94,12 @@ namespace {
     TEST_CHECK(joinedText(line(eight, 0)) == "00000000  48 65 6c 6c 6f 2c 20 77  |Hello, w|");
     TEST_CHECK(joinedText(line(eight, 2)) == "00000010  ff 7f" + std::string(20, ' ') + "|..|");
     TEST_CHECK(joinedText(line(hexDump(bytes, 15), 0)) == joinedText(line(twelve, 0)));
-    TEST_CHECK(joinedText(line(hexDump(bytes, 0), 0)) == joinedText(line(eight, 0)));
+    const auto four = hexDump(bytes, 4);
+    TEST_CHECK(four.blocks[0].lines.size() == 5);
+    TEST_CHECK(joinedText(line(four, 0)) == "00000000  48 65 6c 6c  |Hell|");
+    TEST_CHECK(joinedText(line(four, 4)) == "00000010  ff 7f" + std::string(8, ' ') + "|..|");
+    TEST_CHECK(joinedText(line(hexDump(bytes, 7), 0)) == joinedText(line(four, 0)));
+    TEST_CHECK(joinedText(line(hexDump(bytes, 0), 0)) == joinedText(line(four, 0)));
     TEST_CHECK(joinedText(line(hexDump(bytes, 1000), 0)) == joinedText(line(hexDump(bytes), 0)));
   }
 
@@ -101,12 +107,14 @@ namespace {
   void testRowFitting() {
     using luciole::formats::hexDumpRowsFitting;
     using luciole::formats::hexDumpRowWidth;
-    TEST_CHECK(hexDumpRowWidth(16) == 78 && hexDumpRowWidth(12) == 62 && hexDumpRowWidth(8) == 45);
+    TEST_CHECK(hexDumpRowWidth(16) == 78 && hexDumpRowWidth(12) == 62 && hexDumpRowWidth(8) == 45 && hexDumpRowWidth(4) == 29);
     TEST_CHECK(joinedText(line(hexDump(std::string(16, 'a')), 0)).size() == hexDumpRowWidth(16));
     TEST_CHECK(hexDumpRowsFitting(78) == 16 && hexDumpRowsFitting(500) == 16);
     TEST_CHECK(hexDumpRowsFitting(77.9) == 12 && hexDumpRowsFitting(62) == 12);
-    TEST_CHECK(hexDumpRowsFitting(61.9) == 8 && hexDumpRowsFitting(10) == 8 && hexDumpRowsFitting(-1) == 8);
-    TEST_CHECK(hexDumpRowsFitting(std::numeric_limits<double>::quiet_NaN()) == 8);
+    TEST_CHECK(hexDumpRowsFitting(61.9) == 8 && hexDumpRowsFitting(45) == 8);
+    TEST_CHECK(hexDumpRowsFitting(44.9) == 4 && hexDumpRowsFitting(29) == 4);
+    TEST_CHECK(hexDumpRowsFitting(10) == 4 && hexDumpRowsFitting(-1) == 4);
+    TEST_CHECK(hexDumpRowsFitting(std::numeric_limits<double>::quiet_NaN()) == 4);
     TEST_CHECK(hexDumpRowsFitting(std::numeric_limits<double>::infinity()) == 16);
   }
 

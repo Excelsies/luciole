@@ -26,7 +26,7 @@ namespace {
     }
   }
 
-  // A hex dump takes the most bytes per row, of 16, 12 and 8, that fit the view, and lays its rows out again after
+  // A hex dump takes the most bytes per row, of 16, 12, 8 and 4, that fit the view, and lays its rows out again after
   // the width changes, keeping the old rows on screen meanwhile and the same bytes in view.
   void testHexRowsFitTheWidth(::test::SceneCapture& capture) {
     Rig rig(capture);

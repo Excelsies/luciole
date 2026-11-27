@@ -11,11 +11,11 @@ namespace luciole::formats {
   inline constexpr std::size_t kHexDumpBytes = 64U * 1024U;
   inline constexpr std::size_t kHexDumpRowBytes = 16;
   // Bytes per row a dump offers, widest first.
-  inline constexpr std::array<std::size_t, 3> kHexDumpRowChoices{16, 12, 8};
+  inline constexpr std::array<std::size_t, 4> kHexDumpRowChoices{16, 12, 8, 4};
 
   // Bytes as one code block of rows of `rowBytes`: an eight-digit hex offset, the bytes in lowercase hex in groups
   // of eight, and the bytes between bars with a dot for every byte outside printable ASCII. A count between the
-  // choices takes the widest choice below it, and one below 8 takes 8. Offsets are comments, bytes numbers with zero
+  // choices takes the widest choice below it, and one below 4 takes 4. Offsets are comments, bytes numbers with zero
   // bytes and the dots as punctuation. At most kHexDumpBytes are shown; bytesCapped says more were given.
   StyledDocument hexDump(std::string_view bytes, std::size_t rowBytes = kHexDumpRowBytes);
 
