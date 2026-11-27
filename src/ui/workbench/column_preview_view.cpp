@@ -72,6 +72,10 @@ namespace luciole {
       content->setFlexGrow(1);
       auto card = makePageCard(0.0F);
       card->setFlexGrow(1);
+      // Read text hugs its lines; an editor and a table take the whole pane.
+      if (auto* tiles = dynamic_cast<TextTileView*>(content.get())) {
+        card->setContentHeight([tiles](Renderer& renderer, float width) { return tiles->naturalHeight(renderer, width); });
+      }
       card->addChild(std::move(content));
       return ui::column({.align = FlexAlign::Stretch, .padding = Style::spaceSm, .flexGrow = 1}, std::move(card));
     }

@@ -444,18 +444,11 @@ void TextTileView::doLayout(Renderer& renderer) {
 }
 
 void TextTileView::layoutWords(Renderer& renderer, float width, float height) {
-  m_label->setVisible(!m_words.empty());
-  if (m_words.empty()) {
-    return;
-  }
   const float pad = Style::spaceSm;
-  const float room = std::max(0.0F, width - (2 * pad));
-  m_label->setText(m_words);
-  m_label->setFontSize(m_textSize);
-  m_label->setMaxLines(m_caption ? 1 : 0);
-  m_label->setMaxWidth(room);
-  const auto size = m_label->Node::measure(renderer, LayoutConstraints::available(room, height));
-  m_label->arrange(renderer, {pad, pad, size.width, size.height});
+  const auto size = fitWords(renderer, width, height);
+  if (!m_words.empty()) {
+    m_label->arrange(renderer, {pad, pad, size.width, size.height});
+  }
 }
 
 void TextTileView::layoutBars(Renderer& renderer, float width, float height) {

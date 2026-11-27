@@ -70,6 +70,9 @@ public:
   // shows only past 0.
   float maxScrollX() const noexcept;
   float maxScrollY() const noexcept;
+  // The height the words and the text laid out take, in logical pixels, at `width`: what a card around the view
+  // needs to show it whole. Text still being laid out counts as it stands on screen.
+  float naturalHeight(Renderer& renderer, float width);
   // The words shown: a state alone, or a caption above the text; empty for none.
   const std::string& message() const noexcept { return m_words; }
   std::size_t textureBytes() const noexcept;
@@ -139,6 +142,8 @@ private:
   void hover(float x, float y);
   void needFrame();
   void layoutWords(Renderer& renderer, float width, float height);
+  // Sets the words' label for `width` and measures it, within `height` when given.
+  LayoutSize fitWords(Renderer& renderer, float width, std::optional<float> height);
   void layoutBars(Renderer& renderer, float width, float height);
   std::size_t hexRowsWanted() const;
   // Starts making the dump again in rows of `rows` bytes, or stops making it when those are the rows of the
