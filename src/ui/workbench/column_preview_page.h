@@ -33,8 +33,8 @@ namespace luciole {
 
     // Ignores sizes that are not positive and finite.
     void setTextSize(float size);
-    // Shows `snapshot` in a slot `width` by `height` logical pixels, the picture sized by previewImageLayout as the
-    // page asks for its pixels. Only the facts meant for a preview show.
+    // Shows `snapshot` in a slot `width` by `height` logical pixels, the picture boxed by its own shape and the
+    // slot. Only the facts meant for a preview show.
     void sync(const PreviewSnapshot& snapshot, float width, float height);
     // Releases the picture's texture.
     void clear(Renderer& renderer);

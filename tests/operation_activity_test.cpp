@@ -3,6 +3,8 @@
 #include "fs/gio_interop.h"
 #include "fs/posix_fd.h"
 #include "operations/copy_receipt.h"
+#include "operations/transfer_pacing.h"
+#include "operations/transfer_writeback.h"
 #include "operations/trash_item.h"
 #include "temp_folder.h"
 #include "test_check.h"
@@ -14,6 +16,7 @@
 #include <filesystem>
 #include <fstream>
 #include <glib.h>
+#include <semaphore>
 #include <stdexcept>
 #include <string_view>
 #include <unistd.h>
@@ -40,6 +43,18 @@ namespace {
         std::vector<pollfd> fds;
         const auto first = m_source.addPollFds(fds);
         TEST_CHECK(::poll(fds.data(), fds.size(), 1) >= 0);
+        m_source.dispatch(fds, first);
+      }
+    }
+    void untilTimer(const std::function<bool()>& done) {
+      const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+      while (!done()) {
+        TEST_CHECK(std::chrono::steady_clock::now() < deadline);
+        std::vector<pollfd> fds;
+        const auto first = m_source.addPollFds(fds);
+        const int timeout = m_source.pollTimeoutMs();
+        TEST_CHECK(timeout >= 0);
+        TEST_CHECK(::poll(fds.data(), fds.size(), timeout) >= 0);
         m_source.dispatch(fds, first);
       }
     }
@@ -79,6 +94,127 @@ namespace {
     result.setDisplayName(*location.basename());
     result.setIdentity(luciole::readFileIdentity(info.get()));
     return result;
+  }
+  void removableFlushActivity(Pump& pump) {
+    Fixture fixture;
+    fixture.write("first");
+    fixture.write("second");
+    std::binary_semaphore release(0);
+    unsigned calls = 0;
+    Workspace workspace;
+    luciole::transfer::WritebackOps ops{
+        .removable = [](int, dev_t) { return true; },
+        .sync =
+            [&](int) {
+              ++calls;
+              TEST_CHECK(release.try_acquire_for(std::chrono::seconds(10)));
+            }
+    };
+    auto job = workspace.hub.create<luciole::TransferService>(workspace.page, JobScope::Follow, std::move(ops));
+    auto& service = job->service<luciole::TransferService>();
+    TEST_CHECK(service.start(
+        {{fixture.at("first"), fixture.at("second")}, fixture.at("destination"), luciole::TransferAction::Copy}
+    ));
+    pump.until([&] { return service.flushPhase() == luciole::TransferFlush::Final; });
+    TEST_CHECK(fs::exists(fixture.root / "destination/first") && fs::exists(fixture.root / "destination/second"));
+    const auto activity = workspace.hub.activities().front();
+    TEST_CHECK(service.busy() && activity.state == ActivityState::Working && activity.summary == "Writing to device…");
+    TEST_CHECK(!activity.canCancel && !workspace.hub.cancelActivity(job->id()));
+    // Direct non-shutdown cancel paths (e.g. job->cancel() on page close) must also be no-ops during Final.
+    job->cancel();
+    service.cancel();
+    release.release();
+    pump.until([&] { return !service.busy(); });
+    TEST_CHECK(calls == 1 && service.flushPhase() == luciole::TransferFlush::None);
+    TEST_CHECK(workspace.hub.activities().front().state == ActivityState::Succeeded && workspace.hub.canUndo());
+
+    // Mid-job TransferFlush::Device still shows "Writing to device…" while keeping Cancel enabled.
+    {
+      Fixture devFixture;
+      devFixture.write("incoming");
+      std::ofstream(devFixture.root / "destination/incoming") << "old";
+      std::binary_semaphore devRelease(0);
+      Workspace devWorkspace;
+      luciole::transfer::WritebackOps devOps{
+          .removable = [](int, dev_t) { return true; },
+          .sync = [&](int) { TEST_CHECK(devRelease.try_acquire_for(std::chrono::seconds(10))); }
+      };
+      auto devJob =
+          devWorkspace.hub.create<luciole::TransferService>(devWorkspace.page, JobScope::Follow, std::move(devOps));
+      auto& devService = devJob->service<luciole::TransferService>();
+      TEST_CHECK(
+          devService.start({{devFixture.at("incoming")}, devFixture.at("destination"), luciole::TransferAction::Copy})
+      );
+      pump.until([&] { return devService.conflict().has_value(); });
+      TEST_CHECK(devService.resolve(devService.conflict()->id, luciole::TransferConflictChoice::Replace));
+      pump.until([&] { return devService.flushPhase() == luciole::TransferFlush::Device; });
+      const auto devActivity = devWorkspace.hub.activities().front();
+      TEST_CHECK(devActivity.state == ActivityState::Working && devActivity.summary == "Writing to device…");
+      TEST_CHECK(devActivity.canCancel && devWorkspace.hub.cancelActivity(devJob->id()));
+      devRelease.release();
+      pump.until([&] { return !devService.busy(); });
+      TEST_CHECK(devService.results().front().outcome == luciole::TransferOutcome::Cancelled);
+      TEST_CHECK(devService.flushPhase() == luciole::TransferFlush::None);
+    }
+
+    // OperationHub::shutdown() cancels even during TransferFlush::Final so post-flush history capture aborts.
+    {
+      Fixture shutFixture;
+      shutFixture.write("item");
+      std::binary_semaphore shutRelease(0);
+      Workspace shutWorkspace;
+      luciole::transfer::WritebackOps shutOps{
+          .removable = [](int, dev_t) { return true; },
+          .sync = [&](int) { TEST_CHECK(shutRelease.try_acquire_for(std::chrono::seconds(10))); }
+      };
+      auto shutJob =
+          shutWorkspace.hub.create<luciole::TransferService>(shutWorkspace.page, JobScope::Follow, std::move(shutOps));
+      auto& shutService = shutJob->service<luciole::TransferService>();
+      TEST_CHECK(
+          shutService.start({{shutFixture.at("item")}, shutFixture.at("destination"), luciole::TransferAction::Copy})
+      );
+      pump.until([&] { return shutService.flushPhase() == luciole::TransferFlush::Final; });
+      TEST_CHECK(!shutWorkspace.hub.cancelActivity(shutJob->id()));
+      shutWorkspace.hub.shutdown();
+      shutRelease.release();
+      pump.until([&] { return !shutService.busy(); });
+      TEST_CHECK(shutService.flushPhase() == luciole::TransferFlush::None);
+      TEST_CHECK(!shutService.copyReceipt() && !shutWorkspace.hub.canUndo());
+    }
+
+    // ArchiveService publication onto removable media exposes "Writing to device…" and disables Cancel in Final.
+    {
+      Fixture archFixture;
+      archFixture.write("input");
+      std::binary_semaphore archRelease(0);
+      unsigned archCalls = 0;
+      Workspace archWorkspace;
+      luciole::transfer::WritebackOps archOps{
+          .removable = [](int, dev_t) { return true; },
+          .sync =
+              [&](int) {
+                ++archCalls;
+                TEST_CHECK(archRelease.try_acquire_for(std::chrono::seconds(10)));
+              }
+      };
+      auto archJob =
+          archWorkspace.hub.create<luciole::ArchiveService>(archWorkspace.page, JobScope::Follow, std::move(archOps));
+      auto& archive = archJob->service<luciole::ArchiveService>();
+      TEST_CHECK(archive.compress(
+          {archFixture.at("input")}, archFixture.at("destination/out.zip"), luciole::ArchiveFormat::Zip
+      ));
+      pump.until([&] { return archive.flushPhase() == luciole::TransferFlush::Final; });
+      const auto archActivity = archWorkspace.hub.activities().front();
+      TEST_CHECK(archActivity.state == ActivityState::Working);
+      TEST_CHECK(archActivity.summary.starts_with("Writing to device…"));
+      TEST_CHECK(!archActivity.canCancel && !archWorkspace.hub.cancelActivity(archJob->id()));
+      archJob->cancel();
+      archive.cancel();
+      archRelease.release();
+      pump.until([&] { return !archive.busy(); });
+      TEST_CHECK(archCalls == 1 && archive.flushPhase() == luciole::TransferFlush::None && !archive.error());
+      TEST_CHECK(archWorkspace.hub.activities().front().state == ActivityState::Succeeded);
+    }
   }
   void batchRenameHistory(Pump& pump) {
     Fixture fixture;
@@ -232,7 +368,7 @@ namespace {
     TEST_CHECK(workspace.hub.canRedo());
     TEST_CHECK(rename->service<luciole::RenameService>().rename("renamed"));
     TEST_CHECK(!workspace.hub.canRedo());
-    pump.until([&] { return !rename->running(); });
+    pump.until([&] { return !workspace.hub.busy(); });
     TEST_CHECK(workspace.hub.canUndo() && workspace.hub.historyLabel(false) == "Undo Rename");
     auto create = workspace.hub.create<luciole::CreateService>(workspace.page);
     TEST_CHECK(
@@ -241,7 +377,7 @@ namespace {
     pump.until([&] { return !create->running(); });
     TEST_CHECK(workspace.hub.canUndo());
     TEST_CHECK(create->service<luciole::CreateService>().create("last"));
-    pump.until([&] { return !create->running(); });
+    pump.until([&] { return !workspace.hub.busy(); });
     TEST_CHECK(workspace.hub.canUndo() && workspace.hub.historyLabel(false) == "Undo Create Folder");
     TEST_CHECK(workspace.hub.replayHistory(workspace.page, false));
     pump.until([&] { return !workspace.hub.busy(); });
@@ -324,13 +460,13 @@ namespace {
     TEST_CHECK(workspace.hub.canRedo());
     TEST_CHECK(create->service<luciole::CreateService>().create("newer"));
     TEST_CHECK(!workspace.hub.canRedo());
-    pump.until([&] { return !create->running(); });
+    pump.until([&] { return !workspace.hub.busy(); });
     TEST_CHECK(workspace.hub.historyLabel(false) == "Undo Create Folder");
     auto copy = workspace.hub.create<luciole::TransferService>(workspace.page);
     TEST_CHECK(copy->service<luciole::TransferService>().start(
         {{fixture.at("b")}, fixture.at("destination"), luciole::TransferAction::Copy}
     ));
-    pump.until([&] { return !copy->running(); });
+    pump.until([&] { return !workspace.hub.busy(); });
     TEST_CHECK(workspace.hub.canUndo() && workspace.hub.historyLabel(false) == "Undo Copy");
   }
 
@@ -369,8 +505,9 @@ namespace {
       auto* undo =
           workspace.hub.newest(other, [](const OperationJob& item) { return item.kind() == JobKind::Transfer; });
       TEST_CHECK(undo);
-      const fs::path retained = *undo->service<luciole::TransferService>().results()[0].destination->nativePath();
-      TEST_CHECK(fs::exists(retained));
+      TEST_CHECK(undo->service<luciole::TransferService>().results()[0].outcome == luciole::TransferOutcome::Deleted);
+      TEST_CHECK(!undo->service<luciole::TransferService>().results()[0].destination);
+      TEST_CHECK(fs::is_empty(fixture.root / "destination"));
       fixture.write("destination/a");
       TEST_CHECK(workspace.hub.replayHistory(other, true));
       pump.until([&] { return !workspace.hub.busy(); });
@@ -382,7 +519,7 @@ namespace {
       TEST_CHECK(workspace.hub.replayHistory(other, false));
       pump.until([&] { return !workspace.hub.busy(); });
       undo = workspace.hub.newest(other, [](const OperationJob& item) { return item.kind() == JobKind::Transfer; });
-      const fs::path discarded = *undo->service<luciole::TransferService>().results()[0].destination->nativePath();
+      TEST_CHECK(!undo->service<luciole::TransferService>().results()[0].destination);
       auto create = workspace.hub.create<luciole::CreateService>(other);
       TEST_CHECK(
           create->service<luciole::CreateService>().prepare(fixture.at("destination"), luciole::CreateKind::Folder)
@@ -391,7 +528,7 @@ namespace {
       TEST_CHECK(workspace.hub.canRedo());
       TEST_CHECK(create->service<luciole::CreateService>().create("newer"));
       pump.until([&] { return !workspace.hub.busy(); });
-      TEST_CHECK(!fs::exists(discarded.parent_path()) && fs::exists(fixture.root / "a"));
+      TEST_CHECK(fs::exists(fixture.root / "destination/newer") && fs::exists(fixture.root / "a"));
       TEST_CHECK(workspace.hub.historyLabel(false) == "Undo Create Folder");
       workspace.hub.shutdown();
       pump.until([&] { return !workspace.hub.busy(); });
@@ -824,15 +961,23 @@ namespace {
     pump.until([&] { return !workspace.hub.busy(); });
     const auto* undo =
         workspace.hub.newest(workspace.page, [](const OperationJob& item) { return item.kind() == JobKind::Transfer; });
-    const fs::path retained = *undo->service<luciole::TransferService>().results()[0].destination->nativePath();
-    std::ofstream(retained) << "changed retained data";
+    TEST_CHECK(!undo->service<luciole::TransferService>().results()[0].destination);
+    TEST_CHECK(fs::is_empty(fixture.root / "destination"));
+    std::ofstream(fixture.root / "a") << "changed original source";
+    TEST_CHECK(workspace.hub.replayHistory(workspace.page, true));
+    pump.until([&] { return !workspace.hub.busy(); });
+    std::string copied;
+    std::getline(std::ifstream(fixture.root / "destination/a"), copied);
+    TEST_CHECK(copied == "changed original source");
     workspace.hub.shutdown();
     pump.until([&] { return !workspace.hub.busy(); });
     workspace.hub.update(workspace.window);
     const auto activities = workspace.hub.activities();
-    TEST_CHECK(activities.front().title == "Discard undo data" && activities.front().state == ActivityState::Failed);
-    TEST_CHECK(activities.front().report && activities.front().report->contains(retained.native()));
-    TEST_CHECK(fs::exists(retained) && fs::exists(fixture.root / "a"));
+    TEST_CHECK(activities.front().state == ActivityState::Succeeded);
+    TEST_CHECK(fs::exists(fixture.root / "destination/a") && fs::exists(fixture.root / "a"));
+    for (const auto& entry : fs::recursive_directory_iterator(fixture.root)) {
+      TEST_CHECK(!entry.path().filename().native().starts_with(".luciole-"));
+    }
     TEST_CHECK(!activities.front().canCancel && !activities.front().canRetry);
   }
 
@@ -1062,6 +1207,67 @@ namespace {
     const auto results = workspace.hub.activities();
     TEST_CHECK(results.size() == 1 && results[0].finished && results[0].state == ActivityState::Cancelled);
   }
+  void cancelledPacedTransferCleanup(Pump& pump) {
+    Fixture fixture;
+    {
+      std::ofstream out(fixture.root / "big.bin", std::ios::binary);
+      const std::string block(1024 * 1024, 'P');
+      out << block << block << block;
+    }
+    std::binary_semaphore entered{0}, release{0};
+    Workspace workspace;
+    auto job = workspace.hub.create<luciole::TransferService>(
+        workspace.page, JobScope::Follow,
+        luciole::transfer::WritebackOps{
+            .removable = [](int, dev_t) { return true; },
+            .sync = [](int) {},
+            .syncRange =
+                [&](int, std::uint64_t, std::uint64_t) {
+                  entered.release();
+                  release.acquire();
+                  return 0;
+                },
+            .closeFd =
+                [](luciole::Fd& fd) {
+                  (void)fd.close();
+                  errno = EIO;
+                  return -1;
+                },
+            .allowClone = false,
+        }
+    );
+    auto& service = job->service<luciole::TransferService>();
+    TEST_CHECK(service.start({{fixture.at("big.bin")}, fixture.at("destination"), luciole::TransferAction::Copy}));
+    entered.acquire();
+    std::string stagePath;
+    for (const auto& entry : fs::directory_iterator(fixture.root / "destination")) {
+      if (entry.path().filename().native().starts_with(".luciole-transfer-")) {
+        stagePath = entry.path().native();
+      }
+    }
+    TEST_CHECK(!stagePath.empty());
+    TEST_CHECK(workspace.hub.cancelActivity(job->id()));
+    pump.until([&] { return !service.busy(); });
+    // App stays usable while detached cleanup runs; shutdown and removal of this mount wait, unrelated mounts do not.
+    TEST_CHECK(!workspace.hub.busy() && workspace.hub.shutdownPending());
+    TEST_CHECK(!workspace.hub.removalReady(fixture.at("destination")));
+    TEST_CHECK(workspace.hub.removalReady(luciole::Location::fromPath("/proc")));
+    // A hung cleanup must wake the GLib main loop and release shutdown once the shutdown timeout expires.
+    workspace.hub.shutdown(std::chrono::milliseconds(50));
+    pump.untilTimer([&] { return !workspace.hub.shutdownPending(); });
+    TEST_CHECK(luciole::transfer::cleanupPending());
+    workspace.hub.shutdown(std::chrono::milliseconds(50));
+    TEST_CHECK(!workspace.hub.shutdownPending());
+    release.release();
+    pump.until([] { return !luciole::transfer::cleanupPending(); });
+    TEST_CHECK(!workspace.hub.shutdownPending() && workspace.hub.removalReady(fixture.at("destination")));
+    workspace.hub.update(workspace.window);
+    const auto activities = workspace.hub.activities();
+    const auto found = std::ranges::find_if(activities, [](const auto& item) {
+      return item.title == "Clean up cancelled transfer" && item.state == ActivityState::Failed && item.report;
+    });
+    TEST_CHECK(found != activities.end() && found->report->contains(stagePath));
+  }
 } // namespace
 
 int main(int argc, char** argv) {
@@ -1075,6 +1281,7 @@ int main(int argc, char** argv) {
     return 0;
   }
   TEST_CHECK(argc == 1);
+  removableFlushActivity(pump);
   overwriteHistory(pump);
   trashMoveNotifications(pump, false);
   transferLifecycle(pump);
@@ -1097,5 +1304,6 @@ int main(int argc, char** argv) {
   ancestorTransferHistory(pump, luciole::TransferAction::Copy);
   ancestorTransferHistory(pump, luciole::TransferAction::Move);
   copyCleanupReport(pump);
-  pump.until([] { return !luciole::CopyReceipt::cleanupPending(); });
+  cancelledPacedTransferCleanup(pump);
+  pump.until([] { return !luciole::CopyReceipt::cleanupPending() && !luciole::transfer::cleanupPending(); });
 }

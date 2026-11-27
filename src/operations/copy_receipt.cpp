@@ -7,6 +7,7 @@
 #include "operations/creation_stage.h"
 #include "operations/history_mount.h"
 #include "operations/history_revisions.h"
+#include "operations/operation_history.h"
 #include "operations/provider_copy_receipt.h"
 #include "operations/transfer_copy.h"
 
@@ -30,6 +31,10 @@ namespace {
     }
   }
   std::optional<std::vector<std::string>> relativePath(const luciole::Location& ancestor, luciole::Location location) {
+    // Cheap rejection first: the walk below builds a GFile per level and callers run it pairwise.
+    if (location != ancestor && !location.isInside(ancestor)) {
+      return std::nullopt;
+    }
     std::vector<std::string> path;
     while (path.size() <= 64) {
       if (location == ancestor) {
@@ -858,7 +863,7 @@ std::vector<luciole::TransferResult> luciole::CopyReceipt::unconfirmed(const Fil
   return results;
 }
 bool luciole::CopyReceipt::cleanupPending() {
-  return pendingCleanup.load() != 0 || ProviderCopyReceipt::cleanupPending();
+  return pendingCleanup.load() != 0 || ProviderCopyReceipt::cleanupPending() || OperationHistory::cleanupPending();
 }
 std::vector<luciole::FileError> luciole::CopyReceipt::takeCleanupErrors() {
   const std::scoped_lock lock(cleanupMutex);

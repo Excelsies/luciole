@@ -6,6 +6,7 @@
 #include <atomic>
 #include <functional>
 #include <memory>
+#include <optional>
 
 namespace luciole {
   namespace transfer {
@@ -16,7 +17,7 @@ namespace luciole {
   // Worker-owned state for jobs involving a verified GIO remote provider.
   class ProviderTransfer {
   public:
-    explicit ProviderTransfer(TransferRequest request);
+    explicit ProviderTransfer(TransferRequest request, std::optional<Location> exactTarget = std::nullopt);
     ~ProviderTransfer();
     using Choose = std::function<TransferConflictChoice(TransferConflict)>;
     // Local copies can reuse native publication hooks; optional provider history also covers eligible Moves.
@@ -28,6 +29,7 @@ namespace luciole {
     // Counts committed copy/link leaves, excluding merges/skips, only when the whole selection completed.
     std::optional<std::size_t> completedCopies() const;
     std::size_t retryable() const;
+    bool hasRetryableSource(std::size_t index) const;
 
   private:
     struct State;

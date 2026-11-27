@@ -2,7 +2,6 @@
 
 #include "fs/file_icon_source.h"
 #include "ui/browser/file_icon.h"
-#include "ui/browser/preview_layout.h"
 #include "ui/builders.h"
 #include "ui/controls/label.h"
 #include "ui/controls/scroll_view.h"
@@ -22,6 +21,22 @@ namespace luciole {
     constexpr int kTextLines = 400;
     constexpr int kKeyLines = 2;
     constexpr int kValueLines = 3;
+
+    // The picture's box: the column's width, its height following the picture's shape within what the slot allows.
+    struct ImageBox {
+      float width, height;
+    };
+
+    ImageBox imageBox(int sourceWidth, int sourceHeight, float width, float height) {
+      const float budget = std::max(40.0F, width - Style::spaceMd * 2 - Style::scrollbarWidth - Style::scrollbarGap);
+      const float maximumHeight = std::max(80.0F, height - 250.0F);
+      const bool known = sourceWidth > 0 && sourceHeight > 0;
+      const float imageHeight = std::clamp(
+          known ? budget * static_cast<float>(sourceHeight) / static_cast<float>(sourceWidth) : 96.0F, 48.0F,
+          maximumHeight
+      );
+      return {budget, imageHeight};
+    }
 
     void show(Node& node, bool shown) {
       node.setVisible(shown);
@@ -110,7 +125,7 @@ namespace luciole {
     }
     const auto* pixels = snapshot.image && snapshot.image->pixels ? &*snapshot.image->pixels : nullptr;
     if (pixels != nullptr) {
-      const auto image = previewImageLayout(pixels->width, pixels->height, width, height, 1);
+      const auto image = imageBox(pixels->width, pixels->height, width, height);
       m_image->setIconSize(image.width);
       m_image->setPreviewHeight(image.height);
       m_image->setPreparedImage(snapshot.image);

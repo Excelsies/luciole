@@ -67,10 +67,10 @@ void PreviewController::sync() {
   const auto rect = target ? m_target->bounds : m_bounds.value_or(LayoutRect{});
   const auto size = quick ? quickPreviewSize() : std::pair{rect.width, rect.height};
   const auto& renderer = quick ? surface->renderTarget().renderer() : m_page.surface().renderTarget().renderer();
-  const auto layout = luciole::previewImageLayout(
+  const int pixelSide = luciole::previewImagePixels(
       pixels ? pixels->width : 0, pixels ? pixels->height : 0, size.first, size.second, renderer.renderScale(), quick
   );
-  m_preview.show(entry ? std::optional(*entry) : std::nullopt, layout.pixels, prepared);
+  m_preview.show(entry ? std::optional(*entry) : std::nullopt, pixelSide, prepared);
 }
 
 void PreviewController::setTarget(std::optional<PreviewTarget> target) {

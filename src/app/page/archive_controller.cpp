@@ -139,7 +139,8 @@ void ArchiveController::openDialog(
   auto root = std::make_unique<ArchiveDialog>(
       compress, name, luciole::locationEditText(compress ? base : destination(source)),
       [this, sources = std::move(sources), selected = std::move(selected), base, compress](
-          const std::string& name, const std::string& path, luciole::ArchiveFormat format, const std::string& password
+          const std::string& name, const std::string& path, luciole::ArchiveFormat format,
+          luciole::ArchiveCompressionLevel level, const std::string& password
       ) -> std::string {
         if (path.empty()) {
           return "Enter a destination folder.";
@@ -161,7 +162,7 @@ void ArchiveController::openDialog(
         }
         const bool started = compress
             ? m_page.jobs().create<luciole::ArchiveService>()->service<luciole::ArchiveService>().compress(
-                  sources, destination, format, password
+                  sources, destination, format, level, password
               )
             : extract(sources.front(), destination, selected);
         if (!started) {

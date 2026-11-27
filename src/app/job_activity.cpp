@@ -82,7 +82,7 @@ namespace {
     }
   }
   void transferResults(JobActivity& activity, const std::vector<luciole::TransferResult>& results, bool details) {
-    constexpr std::array names{"Moved", "Copied", "Skipped", "Failed", "Cancelled", "Partial", "Linked"};
+    constexpr std::array names{"Moved", "Copied", "Skipped", "Failed", "Cancelled", "Partial", "Linked", "Deleted"};
     Counts counts;
     Report report;
     for (const auto& result : results) {
@@ -90,6 +90,7 @@ namespace {
       case luciole::TransferOutcome::Moved:
       case luciole::TransferOutcome::Copied:
       case luciole::TransferOutcome::Linked:
+      case luciole::TransferOutcome::Deleted:
         ++counts.done;
         break;
       case luciole::TransferOutcome::Skipped:
@@ -156,6 +157,11 @@ namespace {
       activity.title = (job.historyReplay() == HistoryReplay::Undo ? "Undo: " : "Redo: ") + activity.title;
     }
     if (job.running()) {
+      if (service.flushPhase() != luciole::TransferFlush::None) {
+        activity.state = ActivityState::Working;
+        activity.summary = "Writing to device…";
+        return;
+      }
       activity.state = service.bytes() || service.completed() ? ActivityState::Working : ActivityState::Preparing;
       activity.summary = std::format(
           "{} transferred · {} of {} source items", sizeText(service.bytes()), service.completed(), service.total()
@@ -183,7 +189,8 @@ namespace {
         activity.summary = "Extracting…";
         break;
       case luciole::ArchivePhase::Transferring:
-        activity.summary = "Publishing output…";
+        activity.summary =
+            service.flushPhase() == luciole::TransferFlush::None ? "Publishing output…" : "Writing to device…";
         break;
       case luciole::ArchivePhase::Cleaning:
         activity.summary = "Cleaning up…";

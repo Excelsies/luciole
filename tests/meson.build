@@ -25,6 +25,7 @@ test_table = [
   {'name': 'close-gate', 'deps': [app_close_dep]},
   {'name': 'job-routing', 'deps': [browser_dep]},
   {'name': 'operation-activity', 'deps': [app_jobs_dep, event_loop_dep], 'env': gio_env},
+  {'name': 'operation-history', 'deps': [app_jobs_dep, event_loop_dep], 'timeout': 120, 'env': gio_env},
   {'name': 'drive-removal', 'deps': [app_jobs_dep, event_loop_dep], 'env': gio_env},
   {'name': 'device-mount', 'deps': [browser_dep], 'env': gio_env},
   {'name': 'archive-inspect-error', 'deps': [ui_dep, operations_dep, event_loop_dep], 'timeout': 60, 'env': gio_env},

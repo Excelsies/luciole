@@ -114,7 +114,7 @@ namespace {
   void theDocsListEveryType() {
     const char* source = std::getenv("LUCIOLE_SOURCE_DIR");
     TEST_CHECK(source != nullptr);
-    const auto docs = read(fs::path(source) / "docs/user/file-operations.md");
+    const auto docs = read(fs::path(source) / "docs/user/archives.md");
     TEST_CHECK(!docs.empty());
     for (const auto& type : luciole::kArchiveContainerTypes) {
       TEST_CHECK(docs.contains(type.label));

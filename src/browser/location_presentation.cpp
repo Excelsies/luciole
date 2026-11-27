@@ -46,13 +46,12 @@ std::vector<luciole::Breadcrumb> luciole::locationBreadcrumbs(const Location& lo
 }
 
 std::string luciole::locationTitle(const Location& location) {
-  if (location == Location::trash()) {
-    return "Trash";
+  if (location.parent()) {
+    if (auto name = location.displayName()) {
+      return *name;
+    }
   }
-  if (location == Location::network()) {
-    return "Network";
-  }
-  return location.displayName().value_or(location.uri());
+  return locationBreadcrumbs(location).back().label;
 }
 
 std::string luciole::locationEditText(const Location& location) {
